@@ -39,18 +39,18 @@ export default function PaymentPage() {
                   <button
                     type="button"
                     onClick={() => setAmountMode("deposit")}
-                    className={`rounded-[20px] border p-4 text-left transition ${
+                    className={`rounded-[20px] border p-4 text-left transition-all duration-200 ${
                       amountMode === "deposit" ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white"
                     }`}
                   >
-                    <span className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-bold">{t({ en: "Recommended", zh: "推荐" })}</span>
+                    <span className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-bold text-white">{t({ en: "Recommended", zh: "推荐" })}</span>
                     <h3 className="card-title mt-3">Pay Deposit 50%</h3>
                     <p className="muted-copy m-0">RM60 now · RM60 later</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmountMode("full")}
-                    className={`rounded-[20px] border p-4 text-left transition ${
+                    className={`rounded-[20px] border p-4 text-left transition-all duration-200 ${
                       amountMode === "full" ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white"
                     }`}
                   >
@@ -73,7 +73,7 @@ export default function PaymentPage() {
                     <div className="grid min-h-[190px] place-items-center rounded-[16px] border-2 border-dashed border-villa-primary bg-white p-4 text-center">
                       <div>
                         <div className="mx-auto grid h-28 w-28 place-items-center rounded-[18px] bg-[repeating-linear-gradient(45deg,#3d1f0d_0_6px,#ffffff_6px_12px)] shadow-sm" />
-                        <p className="body-copy mt-3">DuitNow QR 🇲🇾 · Scan & pay instantly</p>
+                        <p className="body-copy mt-3">DuitNow QR 🇲🇾 · Scan & pay</p>
                       </div>
                     </div>
                   ) : null}

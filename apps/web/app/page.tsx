@@ -32,7 +32,7 @@ export default function HomePage() {
       <AppNav />
 
       <main>
-        <section className="villa-section relative pt-8">
+        <section id="about" className="villa-section relative pt-8">
           <span className="paw-mark right-5 top-5" />
           <div className="villa-container grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
             <div>

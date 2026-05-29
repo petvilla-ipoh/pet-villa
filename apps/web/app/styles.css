@@ -21,11 +21,11 @@
 }
 
 h1 {
-  font-size: clamp(28px, 4vw, 40px) !important;
+  font-size: clamp(22px, 5vw, 32px) !important;
 }
 
 h2 {
-  font-size: clamp(20px, 3vw, 28px) !important;
+  font-size: clamp(18px, 4vw, 24px) !important;
 }
 
 h3 {
@@ -42,26 +42,10 @@ small,
 }
 
 .price-number {
-  font-size: 28px !important;
+  font-size: clamp(24px, 5vw, 32px) !important;
   font-weight: 800;
   line-height: 1;
   color: var(--primary);
-}
-
-@media (min-width: 640px) {
-  .price-number {
-    font-size: 36px !important;
-  }
-}
-
-@media (max-width: 639px) {
-  h1 {
-    font-size: 28px !important;
-  }
-
-  h2 {
-    font-size: 22px !important;
-  }
 }
 
 * {
@@ -136,19 +120,19 @@ textarea {
   }
 
   .villa-card {
-    @apply rounded-[20px] border border-villa-primary-light bg-villa-surface p-4 shadow-md transition duration-200 hover:-translate-y-px hover:shadow-lg sm:rounded-villa;
+    @apply rounded-[20px] border border-villa-primary-light bg-villa-surface p-4 shadow-md transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg;
   }
 
   .villa-button {
-    @apply inline-flex min-h-[48px] items-center justify-center rounded-pill bg-villa-primary px-5 text-sm font-bold text-villa-text-primary shadow-sm transition duration-200 ease-out hover:-translate-y-px hover:shadow-md;
+    @apply inline-flex min-h-[44px] items-center justify-center rounded-pill bg-villa-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition duration-200 ease-out hover:-translate-y-px hover:shadow-md;
   }
 
   .villa-button-dark {
-    @apply inline-flex min-h-[48px] items-center justify-center rounded-pill bg-villa-text-primary px-5 text-sm font-bold text-white shadow-sm transition duration-200 ease-out hover:-translate-y-px hover:shadow-md;
+    @apply inline-flex min-h-[44px] items-center justify-center rounded-pill bg-villa-text-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition duration-200 ease-out hover:-translate-y-px hover:shadow-md;
   }
 
   .villa-button-outline {
-    @apply inline-flex min-h-[48px] items-center justify-center rounded-pill border border-villa-primary bg-white px-5 text-sm font-bold text-villa-text-primary transition duration-200 ease-out hover:-translate-y-px hover:bg-villa-primary-bg;
+    @apply inline-flex min-h-[44px] items-center justify-center rounded-pill border-2 border-villa-primary bg-transparent px-6 py-2.5 text-sm font-bold text-villa-primary transition duration-200 ease-out hover:-translate-y-px hover:bg-villa-primary-bg;
   }
 
   .villa-input {
@@ -160,11 +144,11 @@ textarea {
   }
 
   .page-title {
-    @apply font-title text-[28px] font-black leading-tight tracking-normal text-villa-text-primary sm:text-[32px] lg:text-[40px];
+    @apply font-title font-black leading-tight tracking-normal text-villa-text-primary;
   }
 
   .section-title {
-    @apply font-title text-[20px] font-black leading-tight text-villa-text-primary sm:text-[24px] lg:text-[28px];
+    @apply font-title font-black leading-tight text-villa-text-primary;
   }
 
   .card-title {

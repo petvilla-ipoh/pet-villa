@@ -12,7 +12,7 @@ export default function ServicesPage() {
       <main className="villa-section">
         <div className="villa-container">
           <span className="rounded-pill bg-villa-peach px-4 py-2 text-xs font-black uppercase">{t({ en: "Services", zh: "服务" })}</span>
-          <h1 className="page-title mt-4 max-w-4xl">{t({ en: "Small-dog boarding with clear rules and warm care", zh: "小型犬专属寄宿，规则清晰，照护温暖" })}</h1>
+          <h1 className="section-title mt-4 max-w-4xl">{t({ en: "Small-dog boarding with clear rules and warm care", zh: "小型犬专属寄宿，规则清晰，照护温暖" })}</h1>
           <div className="mt-10 grid gap-5 lg:grid-cols-2">
             {[
               ["🌙", "Overnight Boarding", "过夜寄宿", "RM40/night", "No cages, same-room sleeping, 24h companionship.", "不关笼，同房休息，24小时陪伴。"],
