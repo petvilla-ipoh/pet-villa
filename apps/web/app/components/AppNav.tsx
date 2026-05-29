@@ -20,10 +20,10 @@ const privateNav = [
 ];
 
 const loginButtonClass =
-  "inline-flex min-h-[44px] items-center justify-center rounded-pill border-2 border-[#e8927c] bg-transparent px-6 py-2.5 text-sm font-bold text-[#e8927c] transition duration-200 ease-out hover:-translate-y-px hover:bg-villa-primary-bg";
+  "inline-flex items-center justify-center rounded-pill border-2 border-[#e8927c] bg-transparent px-[18px] py-2 text-sm font-bold text-[#e8927c] transition duration-200 ease-out hover:-translate-y-px hover:bg-villa-primary-bg";
 
 const registerButtonClass =
-  "inline-flex min-h-[44px] items-center justify-center rounded-pill border-0 bg-[#e8927c] px-6 py-2.5 text-sm font-bold text-white transition duration-200 ease-out hover:-translate-y-px hover:shadow-md";
+  "inline-flex items-center justify-center rounded-pill border-0 bg-[#e8927c] px-[18px] py-2 text-sm font-bold text-white transition duration-200 ease-out hover:-translate-y-px hover:shadow-md";
 
 export function AppNav({ host = false }: { host?: boolean }) {
   const { t } = useLanguage();
