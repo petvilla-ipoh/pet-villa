@@ -14,3 +14,5 @@ pet-villa-project-*.zip
 pet-villa-project-*/
 pet-villa-latest-*.zip
 pet-villa-latest-*/
+
+.vercel
