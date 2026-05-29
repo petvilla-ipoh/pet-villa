@@ -21,7 +21,7 @@ export default function ServicesPage() {
               <article key={en} className="villa-card p-7">
                 <div className="text-2xl">{icon}</div>
                 <h2 className="card-title mt-3">{t({ en, zh })}</h2>
-                <div className="mt-3 text-[36px] font-extrabold text-villa-primary">{price}</div>
+                <div className="price-number mt-3">{price}</div>
                 <p className="mt-4 font-bold text-villa-text/65">{t({ en: bodyEn, zh: bodyZh })}</p>
                 <a href="/booking" className="villa-button mt-6">{t({ en: "Book Now", zh: "立即预约" })}</a>
               </article>

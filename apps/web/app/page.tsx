@@ -39,7 +39,7 @@ export default function HomePage() {
               <span className="rounded-pill bg-villa-primary-light px-3 py-2 text-xs font-bold uppercase text-villa-text-primary">
                 The Pet Villa · Ipoh · Pet Boarding
               </span>
-              <h1 className="page-title mt-4 sm:text-[40px] lg:text-6xl">A Home Away From Home</h1>
+              <h1 className="page-title mt-4">A Home Away From Home</h1>
               <p className="body-copy mt-3 max-w-2xl">
                 {t({
                   en: "Premium small dog boarding in Ipoh · No cages · 24h companionship",
@@ -85,7 +85,7 @@ export default function HomePage() {
                 <span className="absolute right-4 top-4 rounded-pill bg-villa-primary px-3 py-1 text-xs font-bold">{t({ en: "Most Popular", zh: "最受欢迎" })}</span>
                 <div className="text-2xl">🌙</div>
                 <h3 className="card-title mt-3">Overnight Boarding</h3>
-                <div className="mt-3 text-[36px] font-extrabold leading-none text-villa-primary">RM40<span className="ml-1 text-sm text-villa-text-secondary">/night</span></div>
+                <div className="price-number mt-3">RM40<span className="ml-1 text-sm text-villa-text-secondary">/night</span></div>
                 <p className="body-copy mt-3">{t({ en: "No cages, same-room sleeping, 24h companionship.", zh: "不关笼，同房休息，24小时陪伴。" })}</p>
                 <div className="mt-4"><PaymentLogoStrip compact /></div>
                 <a className="villa-button mt-5 w-full" href="/booking">{t({ en: "Book Now", zh: "立即预约" })}</a>
@@ -93,7 +93,7 @@ export default function HomePage() {
               <article className="villa-card">
                 <div className="text-2xl">☀️</div>
                 <h3 className="card-title mt-3">Daycare</h3>
-                <div className="mt-3 text-[36px] font-extrabold leading-none text-villa-primary">RM5<span className="ml-1 text-sm text-villa-text-secondary">/hour</span></div>
+                <div className="price-number mt-3">RM5<span className="ml-1 text-sm text-villa-text-secondary">/hour</span></div>
                 <p className="body-copy mt-3">{t({ en: "Flexible daytime care from 9:00am to 8:00pm.", zh: "9:00am 至 8:00pm 灵活日托。" })}</p>
                 <div className="mt-4"><PaymentLogoStrip compact /></div>
                 <a className="villa-button mt-5 w-full" href="/booking">{t({ en: "Book Now", zh: "立即预约" })}</a>

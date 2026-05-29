@@ -23,6 +23,12 @@ const privateNav = [
   { href: "/diary", en: "Diary", zh: "日记" }
 ];
 
+const loginButtonClass =
+  "inline-flex min-h-[40px] items-center justify-center rounded-pill border-2 border-[#e8927c] bg-transparent px-[18px] py-2 text-sm font-bold text-[#e8927c] transition duration-200 ease-out hover:-translate-y-px";
+
+const registerButtonClass =
+  "inline-flex min-h-[40px] items-center justify-center rounded-pill border-0 bg-[#e8927c] px-[18px] py-2 text-sm font-bold text-white transition duration-200 ease-out hover:-translate-y-px hover:shadow-md";
+
 export function AppNav({ host = false }: { host?: boolean }) {
   const { t } = useLanguage();
   const [loggedIn, setLoggedIn] = useState(false);
@@ -47,7 +53,9 @@ export function AppNav({ host = false }: { host?: boolean }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <BrandMark dark host />
-            <span className="hidden rounded-pill bg-villa-primary-light/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-villa-primary-light sm:inline-flex">Host Panel</span>
+            <span className="hidden rounded-pill bg-villa-primary-light/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-villa-primary-light sm:inline-flex">
+              Host Panel
+            </span>
           </div>
           <LanguageToggle dark />
         </div>
@@ -63,11 +71,11 @@ export function AppNav({ host = false }: { host?: boolean }) {
         <BrandMark />
         <button
           type="button"
-          className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-xl font-black shadow-sm lg:hidden"
+          className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-sm lg:hidden"
           onClick={() => setOpen((value) => !value)}
           aria-label="Menu"
         >
-          ☰
+          <span className="h-0.5 w-5 rounded-full bg-villa-text-primary shadow-[0_6px_0_#3d1f0d,0_-6px_0_#3d1f0d]" />
         </button>
         <nav className="hidden items-center gap-3 lg:flex">
           {navItems.map((item) => (
@@ -79,11 +87,17 @@ export function AppNav({ host = false }: { host?: boolean }) {
             <span className="grid h-10 w-10 place-items-center rounded-full bg-villa-primary text-sm font-black text-villa-text-primary">PV</span>
           ) : (
             <>
-              <a className="villa-button-outline min-h-[42px] px-4" href="/auth?mode=login">{t({ en: "Login", zh: "登录" })}</a>
-              <a className="villa-button min-h-[42px] px-4" href="/auth?mode=register">{t({ en: "Register", zh: "注册" })}</a>
+              <a className={loginButtonClass} href="/auth?mode=login">
+                {t({ en: "Login", zh: "登录" })}
+              </a>
+              <a className={registerButtonClass} href="/auth?mode=register">
+                {t({ en: "Register", zh: "注册" })}
+              </a>
             </>
           )}
-          <a className="villa-button-dark min-h-[42px] px-4" href="/booking">{t({ en: "Book Now", zh: "立即预约" })}</a>
+          <a className="villa-button-dark min-h-[40px] px-[18px] py-2" href="/booking">
+            {t({ en: "Book Now", zh: "立即预约" })}
+          </a>
           <LanguageToggle />
         </nav>
       </div>
@@ -95,14 +109,22 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </a>
           ))}
           {loggedIn ? (
-            <div className="flex items-center gap-3 rounded-[14px] bg-villa-primary-bg px-3 py-3 text-sm font-bold">PV {t({ en: "Account", zh: "账号" })}</div>
+            <div className="flex items-center gap-3 rounded-[14px] bg-villa-primary-bg px-3 py-3 text-sm font-bold">
+              PV {t({ en: "Account", zh: "账号" })}
+            </div>
           ) : (
             <div className="grid gap-2">
-              <a className="villa-button-outline" href="/auth?mode=login">{t({ en: "Login", zh: "登录" })}</a>
-              <a className="villa-button" href="/auth?mode=register">{t({ en: "Register", zh: "注册" })}</a>
+              <a className={loginButtonClass} href="/auth?mode=login">
+                {t({ en: "Login", zh: "登录" })}
+              </a>
+              <a className={registerButtonClass} href="/auth?mode=register">
+                {t({ en: "Register", zh: "注册" })}
+              </a>
             </div>
           )}
-          <a className="villa-button-dark" href="/booking">{t({ en: "Book Now", zh: "立即预约" })}</a>
+          <a className="villa-button-dark min-h-[40px]" href="/booking">
+            {t({ en: "Book Now", zh: "立即预约" })}
+          </a>
           <LanguageToggle />
         </nav>
       ) : null}
