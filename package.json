@@ -1,0 +1,17 @@
+{
+  "name": "the-pet-villa-ipoh",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "test:rules": "node scripts/validate-rules.mjs",
+    "test:e2e-flow": "node scripts/e2e-flow.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
