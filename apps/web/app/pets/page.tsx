@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
+import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 
 const pets = [
-  { name: "Mochi", breed: "Toy Poodle", weight: "6.2kg", icon: "🐩" },
-  { name: "Boba", breed: "Maltese", weight: "4.8kg", icon: "🐶" }
+  { name: "Mochi", breed: "Toy Poodle", weight: "6.2kg" },
+  { name: "Boba", breed: "Maltese", weight: "4.8kg" }
 ];
 
 export default function PetsPage() {
@@ -16,90 +17,79 @@ export default function PetsPage() {
   const [neutered, setNeutered] = useState(false);
 
   return (
-    <OwnerSidebar>
-      <section className="p-5 sm:p-8 lg:p-10">
-        <div className="mb-8">
-          <span className="rounded-pill bg-villa-peach px-4 py-2 text-xs font-black uppercase">{t({ en: "Pet Profile", zh: "宠物档案" })}</span>
-          <h1 className="mt-4 font-title text-5xl font-black">{t({ en: "Tell us about your small dog", zh: "填写狗狗资料" })}</h1>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {pets.map((pet) => (
-            <button
-              key={pet.name}
-              type="button"
-              onClick={() => setSelected(pet.name)}
-              className={`rounded-villa border p-5 text-left shadow-villa transition ${selected === pet.name ? "border-villa-coral bg-villa-peach/40" : "border-villa-line bg-white/70"}`}
-            >
-              <div className="text-4xl">{pet.icon}</div>
-              <h2 className="mt-3 font-title text-3xl font-black">{pet.name}</h2>
-              <p className="m-0 font-bold text-villa-text/60">{pet.breed} · {pet.weight}</p>
+    <ProtectedPage>
+      <OwnerSidebar>
+        <section className="p-4 lg:p-8">
+          <h1 className="page-title">{t({ en: "Pet Profile", zh: "宠物档案" })}</h1>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {pets.map((pet) => (
+              <button key={pet.name} type="button" onClick={() => setSelected(pet.name)} className={`villa-card text-left ${selected === pet.name ? "border-villa-primary bg-villa-primary-bg" : ""}`}>
+                <div className="text-3xl">🐶</div>
+                <h2 className="card-title mt-2">{pet.name}</h2>
+                <p className="muted-copy m-0">{pet.breed} · {pet.weight}</p>
+              </button>
+            ))}
+            <button type="button" className="min-h-[140px] rounded-[20px] border-2 border-dashed border-villa-primary-light bg-white/50 p-4 text-sm font-bold text-villa-text-secondary">
+              + {t({ en: "Add Pet", zh: "添加宠物" })}
             </button>
-          ))}
-          <button type="button" className="min-h-[170px] rounded-villa border-2 border-dashed border-villa-coral/60 bg-white/35 p-5 text-center font-black text-villa-text/60">
-            + {t({ en: "Add another pet", zh: "添加宠物" })}
-          </button>
-        </div>
+          </div>
 
-        <form className="mt-8 grid gap-6">
-          <section className="villa-card p-6">
-            <h2 className="font-title text-3xl font-black">{t({ en: "Basic Details", zh: "基本资料" })}</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              {[
-                ["Name", "名字", "Mochi"],
-                ["Breed", "品种", "Toy Poodle"],
-                ["Age", "年龄", "3 years"],
-                ["Weight", "体重", "6.2kg"],
-                ["Gender", "性别", "Female"],
-                ["Coat color", "毛色", "Cream"]
-              ].map(([en, zh, placeholder]) => (
-                <label key={en} className="grid gap-2">
-                  <span className="villa-label">{t({ en, zh })}</span>
-                  <input className="villa-input" placeholder={placeholder} />
+          <form className="mt-6 grid gap-6">
+            <section className="villa-card">
+              <h2 className="section-title">{t({ en: "Basic Details", zh: "基本资料" })}</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  ["Name", "名字", "Mochi"],
+                  ["Breed", "品种", "Toy Poodle"],
+                  ["Age", "年龄", "3 years"],
+                  ["Weight", "体重", "6.2kg"],
+                  ["Gender", "性别", "Female"],
+                  ["Coat color", "毛色", "Cream"]
+                ].map(([en, zh, placeholder]) => (
+                  <label key={en} className="grid gap-2">
+                    <span className="villa-label">{t({ en, zh })}</span>
+                    <input className="villa-input" placeholder={placeholder} />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 sm:flex">
+                <button type="button" onClick={() => setVaccinated(!vaccinated)} className={vaccinated ? "villa-button" : "villa-button-outline"}>{t({ en: "Vaccinated", zh: "已接种疫苗" })}</button>
+                <button type="button" onClick={() => setNeutered(!neutered)} className={neutered ? "villa-button" : "villa-button-outline"}>{t({ en: "Neutered", zh: "已绝育" })}</button>
+              </div>
+            </section>
+
+            <section className="villa-card">
+              <h2 className="section-title">{t({ en: "Food & Care", zh: "饮食护理" })}</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Food brand", "狗粮品牌"],
+                  ["Meals per day", "喂食次数"],
+                  ["Allergies", "过敏"],
+                  ["Medication", "药物"]
+                ].map(([en, zh]) => (
+                  <label key={en} className="grid gap-2">
+                    <span className="villa-label">{t({ en, zh })}</span>
+                    <input className="villa-input" />
+                  </label>
+                ))}
+                <label className="grid gap-2 sm:col-span-2">
+                  <span className="villa-label">{t({ en: "Special notes", zh: "特别说明" })}</span>
+                  <textarea className="villa-input h-32 py-3" />
                 </label>
-              ))}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button type="button" onClick={() => setVaccinated(!vaccinated)} className={vaccinated ? "villa-button" : "villa-button-outline"}>
-                {t({ en: "Vaccinated", zh: "已接种疫苗" })}
-              </button>
-              <button type="button" onClick={() => setNeutered(!neutered)} className={neutered ? "villa-button" : "villa-button-outline"}>
-                {t({ en: "Neutered", zh: "已绝育" })}
-              </button>
-            </div>
-          </section>
+              </div>
+            </section>
 
-          <section className="villa-card p-6">
-            <h2 className="font-title text-3xl font-black">{t({ en: "Food & Care", zh: "饮食护理" })}</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              {[
-                ["Food brand", "狗粮品牌"],
-                ["Meals per day", "喂食次数"],
-                ["Allergies", "过敏"],
-                ["Medication", "药物"]
-              ].map(([en, zh]) => (
-                <label key={en} className="grid gap-2">
-                  <span className="villa-label">{t({ en, zh })}</span>
-                  <input className="villa-input" />
-                </label>
-              ))}
-              <label className="grid gap-2 md:col-span-2">
-                <span className="villa-label">{t({ en: "Special notes", zh: "特别说明" })}</span>
-                <textarea className="villa-input min-h-[130px] py-4" />
-              </label>
-            </div>
-          </section>
+            <section className="villa-card">
+              <h2 className="section-title">{t({ en: "Photo Upload", zh: "照片上传" })}</h2>
+              <div className="mt-4 grid min-h-[150px] place-items-center rounded-[20px] border-2 border-dashed border-villa-primary-light bg-white/60 text-center text-sm font-bold text-villa-text-secondary">
+                {t({ en: "Drop pet photos here or click to upload", zh: "拖放照片到这里，或点击上传" })}
+              </div>
+            </section>
 
-          <section className="villa-card p-6">
-            <h2 className="font-title text-3xl font-black">{t({ en: "Photo Upload", zh: "照片上传" })}</h2>
-            <div className="mt-5 grid min-h-[170px] place-items-center rounded-villa border-2 border-dashed border-villa-coral/50 bg-white/50 p-6 text-center font-black text-villa-text/55">
-              {t({ en: "Drop pet photos here or click to upload", zh: "拖放宠物照片到这里，或点击上传" })}
-            </div>
-          </section>
-
-          <button type="button" className="villa-button w-full sm:w-auto sm:px-10">{t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
-        </form>
-      </section>
-    </OwnerSidebar>
+            <button type="button" className="villa-button w-full sm:w-fit sm:px-8">{t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
+          </form>
+        </section>
+      </OwnerSidebar>
+    </ProtectedPage>
   );
 }

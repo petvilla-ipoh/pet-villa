@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
+import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 
 export default function ChatPage() {
@@ -19,9 +20,10 @@ export default function ChatPage() {
   }
 
   return (
+    <ProtectedPage>
     <OwnerSidebar>
       <section className="p-5 sm:p-8 lg:p-10">
-        <h1 className="font-title text-5xl font-black">{t({ en: "Chat with Host", zh: "联系寄宿主" })}</h1>
+        <h1 className="page-title">{t({ en: "Chat with Host", zh: "联系寄宿主" })}</h1>
         <div className="mt-8 villa-card overflow-hidden">
           <div className="border-b border-villa-line bg-villa-peach/35 p-5 font-black">Mochi · Overnight · Jun 4-7</div>
           <div className="grid min-h-[480px] content-end gap-4 p-5">
@@ -38,5 +40,6 @@ export default function ChatPage() {
         </div>
       </section>
     </OwnerSidebar>
+    </ProtectedPage>
   );
 }

@@ -7,12 +7,12 @@ import { useLanguage } from "./LanguageProvider";
 
 const items = [
   { href: "/", icon: "🏡", en: "Home", zh: "首页" },
-  { href: "/pets", icon: "🐶", en: "Pet Profile", zh: "宠物档案" },
-  { href: "/booking", icon: "📅", en: "Booking", zh: "预约" },
+  { href: "/pets", icon: "🐶", en: "My Pets", zh: "宠物" },
+  { href: "/booking", icon: "📅", en: "Bookings", zh: "预约" },
   { href: "/payment", icon: "💳", en: "Payment", zh: "付款" },
-  { href: "/orders", icon: "📦", en: "Orders", zh: "我的订单" },
-  { href: "/diary", icon: "📸", en: "Pet Diary", zh: "宠物日记" },
-  { href: "/auth", icon: "🔐", en: "Login", zh: "登录" }
+  { href: "/orders", icon: "📦", en: "Orders", zh: "订单" },
+  { href: "/diary", icon: "📸", en: "Diary", zh: "日记" },
+  { href: "/auth", icon: "🔐", en: "Account", zh: "账号" }
 ];
 
 export function OwnerSidebar({ children }: { children: React.ReactNode }) {
@@ -20,22 +20,24 @@ export function OwnerSidebar({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen bg-villa-bg text-villa-text lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="border-b border-villa-line bg-villa-cream/90 p-5 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
-        <div className="flex flex-wrap items-center justify-between gap-4 lg:block">
+    <div className="min-h-screen bg-villa-background text-villa-text-primary lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+      <aside className="border-b border-villa-primary-light bg-white/90 p-4 shadow-sm lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+        <div className="flex flex-wrap items-center justify-between gap-3 lg:block">
           <BrandMark />
-          <div className="lg:mt-6">
+          <div className="lg:mt-5">
             <LanguageToggle />
           </div>
         </div>
-        <nav className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-1">
+        <nav className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-1">
           {items.map((item) => {
             const active = pathname === item.href;
             return (
               <a
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-black transition ${active ? "bg-villa-coral text-villa-text shadow-soft" : "bg-white/60 text-villa-text/70 hover:bg-villa-peach/40"}`}
+                className={`flex items-center gap-2 rounded-[16px] px-3 py-3 text-sm font-bold transition duration-200 ${
+                  active ? "bg-villa-primary text-villa-text-primary shadow-sm" : "bg-villa-primary-bg text-villa-text-secondary hover:bg-villa-primary-light/40"
+                }`}
               >
                 <span>{item.icon}</span>
                 <span>{t({ en: item.en, zh: item.zh })}</span>
@@ -44,7 +46,7 @@ export function OwnerSidebar({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       </aside>
-      <main>{children}</main>
+      <main className="paw-bg min-h-screen">{children}</main>
     </div>
   );
 }

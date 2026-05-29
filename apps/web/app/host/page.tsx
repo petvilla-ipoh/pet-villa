@@ -12,10 +12,10 @@ export default function HostPage() {
   const [requestStatus, setRequestStatus] = useState<"pending" | "accepted" | "rejected">("pending");
 
   return (
-    <div className="min-h-screen bg-villa-brown text-villa-peach">
+    <div className="min-h-screen bg-[#3d1f0d] text-[#f5c4b3]">
       <AppNav host />
       <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="bg-villa-sidebar p-5 lg:min-h-[calc(100vh-81px)]">
+        <aside className="bg-[#2a1508] p-4 lg:min-h-[calc(100vh-81px)]">
           <nav className="grid grid-cols-2 gap-2 lg:grid-cols-1">
             {[
               ["Dashboard", "仪表盘"],
@@ -25,18 +25,18 @@ export default function HostPage() {
               ["Messages", "消息"],
               ["Income", "收入"]
             ].map(([en, zh], index) => (
-              <a key={en} href="#" className={`rounded-[18px] px-4 py-3 text-sm font-black ${index === 0 ? "bg-villa-coral text-villa-text" : "text-villa-peach/80 hover:bg-white/5"}`}>
+              <a key={en} href="#" className={`rounded-[16px] px-4 py-3 text-sm font-bold ${index === 0 ? "bg-[rgba(232,146,124,0.2)] text-[#f5c4b3]" : "text-[rgba(245,196,179,0.8)] hover:bg-white/5"}`}>
                 {t({ en, zh })}
               </a>
             ))}
           </nav>
         </aside>
 
-        <main className="bg-villa-bg p-5 text-villa-text sm:p-8 lg:p-10">
+        <main className="host-paw-bg p-4 text-villa-text-primary lg:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <span className="rounded-pill bg-villa-peach px-4 py-2 text-xs font-black uppercase">HOST PANEL</span>
-              <h1 className="mt-4 font-title text-5xl font-black">{t({ en: "Villa Dashboard", zh: "寄宿主后台" })}</h1>
+              <h1 className="page-title mt-4">{t({ en: "Villa Dashboard", zh: "寄宿主后台" })}</h1>
             </div>
             <button type="button" className="villa-button">{t({ en: "Manage Availability", zh: "管理档期" })}</button>
           </div>
@@ -50,7 +50,7 @@ export default function HostPage() {
             ].map(([en, zh, value]) => (
               <div key={en} className="villa-card p-5">
                 <p className="m-0 text-sm font-black text-villa-text/55">{t({ en, zh })}</p>
-                <div className="mt-2 font-title text-4xl font-black">{value}</div>
+                <div className="mt-2 text-[28px] font-extrabold">{value}</div>
               </div>
             ))}
           </div>
@@ -58,12 +58,12 @@ export default function HostPage() {
           <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="grid gap-6">
               <div className="villa-card p-6">
-                <h2 className="font-title text-3xl font-black">{t({ en: "Today's Dogs", zh: "今日狗狗" })}</h2>
+                <h2 className="section-title">{t({ en: "Today's Dogs", zh: "今日狗狗" })}</h2>
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
                   {dogs.map((dog) => (
                     <article key={dog} className="rounded-villa border border-villa-line bg-white/70 p-5">
-                      <div className="text-4xl">🐶</div>
-                      <h3 className="font-title text-3xl font-black">{dog}</h3>
+                      <div className="text-2xl">🐶</div>
+                      <h3 className="card-title">{dog}</h3>
                       <p className="font-bold text-villa-text/60">Overnight · happy</p>
                       <div className="mt-4 flex gap-2">
                         <button type="button" className="villa-button min-h-[42px] px-4">{t({ en: "Post Diary", zh: "发日记" })}</button>
@@ -78,11 +78,11 @@ export default function HostPage() {
               </div>
 
               <div className="villa-card p-6">
-                <h2 className="font-title text-3xl font-black">{t({ en: "New Booking Request", zh: "新预约申请" })}</h2>
+                <h2 className="section-title">{t({ en: "New Booking Request", zh: "新预约申请" })}</h2>
                 <div className="mt-5 rounded-villa border border-villa-line bg-white/70 p-5">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <h3 className="font-title text-3xl font-black">Lulu · 5.4kg</h3>
+                      <h3 className="card-title">Lulu · 5.4kg</h3>
                       <p className="m-0 font-bold text-villa-text/60">Vaccinated · calm · Jun 16-18</p>
                     </div>
                     <span className="rounded-pill bg-villa-bg px-4 py-2 text-sm font-black">{requestStatus}</span>
@@ -99,7 +99,7 @@ export default function HostPage() {
               </div>
 
               <div className="villa-card p-6">
-                <h2 className="font-title text-3xl font-black">{t({ en: "June Calendar", zh: "六月日历" })}</h2>
+                <h2 className="section-title">{t({ en: "June Calendar", zh: "六月日历" })}</h2>
                 <div className="mt-5 grid grid-cols-7 gap-2">
                   {calendarDays.map((day) => {
                     const booked = [4, 5, 6, 12, 13, 18, 19, 22].includes(day);
@@ -117,8 +117,8 @@ export default function HostPage() {
 
             <aside className="grid h-fit gap-6 xl:sticky xl:top-8">
               <div className="villa-card p-6">
-                <h2 className="font-title text-3xl font-black">{t({ en: "Income Summary", zh: "收入摘要" })}</h2>
-                <div className="mt-5 font-title text-5xl font-black">RM2,680</div>
+                <h2 className="section-title">{t({ en: "Income Summary", zh: "收入摘要" })}</h2>
+                <div className="mt-5 text-[28px] font-extrabold">RM2,680</div>
                 <p className="font-bold text-villa-text/60">{t({ en: "Estimated this month", zh: "本月预计收入" })}</p>
                 <div className="mt-5 h-4 overflow-hidden rounded-full bg-villa-bg">
                   <div className="h-full w-[72%] rounded-full bg-villa-green" />
