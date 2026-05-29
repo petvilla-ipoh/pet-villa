@@ -19,10 +19,10 @@ const privateNav = [
 ];
 
 const loginButtonClass =
-  "inline-flex items-center justify-center rounded-pill border-2 border-[#e8927c] bg-transparent px-[18px] py-2 text-sm font-bold text-[#e8927c] transition duration-200 ease-out hover:-translate-y-px hover:bg-villa-primary-bg";
+  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white";
 
 const registerButtonClass =
-  "inline-flex items-center justify-center rounded-pill border-0 bg-[#e8927c] px-[18px] py-2 text-sm font-bold text-white transition duration-200 ease-out hover:-translate-y-px hover:shadow-md";
+  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black transition hover:opacity-90";
 
 function NavLogo() {
   return (
@@ -143,13 +143,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <>
-              <a className={loginButtonClass} href="/auth?mode=login">
+              <a className={loginButtonClass} href="/auth">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={registerButtonClass} href="/auth?mode=register">
+              <a className={registerButtonClass} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
-              <a className="villa-button-dark min-h-[44px] px-6 py-2.5" href="/booking">
+              <a className="villa-button min-h-[44px] px-5" href="/booking">
                 {t({ en: "Book Now", zh: "立即预约" })}
               </a>
             </>
@@ -176,13 +176,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <div className="grid gap-2">
-              <a className={loginButtonClass} href="/auth?mode=login">
+              <a className={loginButtonClass} href="/auth">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={registerButtonClass} href="/auth?mode=register">
+              <a className={registerButtonClass} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
-              <a className="villa-button-dark min-h-[44px]" href="/booking">
+              <a className="villa-button min-h-[44px] px-5" href="/booking">
                 {t({ en: "Book Now", zh: "立即预约" })}
               </a>
             </div>
