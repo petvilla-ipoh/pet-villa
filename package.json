@@ -7,6 +7,8 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm run build --workspace @pet-villa/web",
+    "dev:web": "npm run dev --workspace @pet-villa/web",
     "typecheck": "npm run typecheck --workspaces",
     "test:rules": "node scripts/validate-rules.mjs",
     "test:e2e-flow": "node scripts/e2e-flow.mjs"
