@@ -12,7 +12,7 @@ export default function AuthPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requestedMode = params.get("mode");
+    const requestedMode = params.get("mode") || params.get("tab");
     const nextRedirect = params.get("redirect");
     if (requestedMode === "register") setMode("register");
     if (nextRedirect) setRedirect(nextRedirect);
@@ -29,19 +29,19 @@ export default function AuthPage() {
   return (
     <div className="villa-shell paw-bg">
       <AppNav />
-      <main className="px-4 py-10">
+      <main className="px-4 py-8 sm:py-10">
         <div className="mx-auto grid max-w-6xl overflow-hidden rounded-[24px] border border-villa-primary-light bg-white shadow-md lg:grid-cols-[0.95fr_1.05fr]">
           <section className="relative bg-[#f5e6dc] p-4 lg:p-8">
             <span className="paw-mark right-3 top-3" />
-            <DogIllustration label={t({ en: "Safe home care", zh: "安心家庭照护" })} />
+            <DogIllustration label={t({ en: "Safe home care", zh: "安心家庭照顾" })} />
             <div className="mt-4 grid gap-3">
               {[
-                { dot: "bg-[#4285F4]", en: "No cages, ever", zh: "绝不关笼" },
-                { dot: "bg-[#1877F2]", en: "Daily photo updates", zh: "每日照片更新" },
-                { dot: "bg-black", en: "24h air-conditioned", zh: "24小时冷气" }
+                { icon: "🐾", en: "No cages, ever", zh: "绝不关笼" },
+                { icon: "📸", en: "Daily photo updates", zh: "每日照片更新" },
+                { icon: "❄️", en: "24h air-conditioned", zh: "24小时冷气" }
               ].map((item) => (
-                <div key={item.en} className="flex items-center gap-3 rounded-[16px] bg-white/75 p-3 text-sm font-bold">
-                  <span className={`h-3 w-3 rounded-full ${item.dot}`} />
+                <div key={item.en} className="flex items-center gap-3 rounded-[16px] bg-white/80 p-3 text-sm font-bold shadow-sm">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-villa-primary-bg">{item.icon}</span>
                   <span>{t({ en: item.en, zh: item.zh })}</span>
                 </div>
               ))}
@@ -49,7 +49,13 @@ export default function AuthPage() {
           </section>
 
           <section className="p-4 lg:p-8">
-            <h1 className="page-title">{mode === "login" ? t({ en: "Welcome back", zh: "欢迎回来" }) : t({ en: "Create account", zh: "创建账号" })}</h1>
+            <h1 className="page-title">{mode === "login" ? t({ en: "Welcome back", zh: "欢迎回来" }) : t({ en: "Create Pet Owner Account", zh: "创建宠主账号" })}</h1>
+            <p className="body-copy mt-2">
+              {mode === "login"
+                ? t({ en: "Login to manage bookings, pets, messages, and diary updates.", zh: "登录后管理预约、宠物、消息和日记更新。" })
+                : t({ en: "Register as a pet owner to book small-dog boarding in Ipoh.", zh: "注册宠主账号，预约怡保小型犬寄宿服务。" })}
+            </p>
+
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={() => setMode("login")} className={mode === "login" ? "villa-button" : "villa-button-outline"}>
                 {t({ en: "Login", zh: "登录" })}
@@ -59,26 +65,32 @@ export default function AuthPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {[
-                ["Google", "bg-[#4285F4]"],
-                ["Facebook", "bg-[#1877F2]"],
-                ["Apple", "bg-black"]
-              ].map(([provider, color]) => (
-                <button key={provider} type="button" className="flex h-12 items-center justify-center gap-2 rounded-pill border border-villa-primary-light bg-white text-sm font-bold">
-                  <span className={`h-3 w-3 rounded-full ${color}`} />
-                  {provider}
-                </button>
-              ))}
-            </div>
+            {mode === "login" ? (
+              <>
+                <div className="mt-5 grid gap-3">
+                  <button type="button" className="flex h-12 items-center justify-center gap-3 rounded-pill border border-villa-primary-light bg-white px-4 text-sm font-black text-villa-text-primary shadow-sm transition hover:-translate-y-px">
+                    <span className="font-black text-[#4285F4]">G</span>
+                    Login with Google
+                  </button>
+                  <button type="button" className="flex h-12 items-center justify-center gap-3 rounded-pill bg-[#1877F2] px-4 text-sm font-black text-white shadow-sm transition hover:-translate-y-px">
+                    <span className="font-title text-xl font-black">f</span>
+                    Login with Facebook
+                  </button>
+                  <button type="button" className="flex h-12 items-center justify-center gap-3 rounded-pill bg-black px-4 text-sm font-black text-white shadow-sm transition hover:-translate-y-px">
+                    <span className="text-lg">●</span>
+                    Login with Apple
+                  </button>
+                </div>
 
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-villa-primary-light" />
-              <span className="text-xs font-bold text-villa-text-muted">{t({ en: "or sign in with email", zh: "或使用邮箱登录" })}</span>
-              <span className="h-px flex-1 bg-villa-primary-light" />
-            </div>
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-villa-primary-light" />
+                  <span className="text-xs font-bold text-villa-text-muted">{t({ en: "or sign in with email", zh: "或使用邮箱登录" })}</span>
+                  <span className="h-px flex-1 bg-villa-primary-light" />
+                </div>
+              </>
+            ) : null}
 
-            <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+            <form className="mt-5 grid gap-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
               {mode === "register" ? (
                 <>
                   <label className="grid gap-2">
@@ -100,9 +112,18 @@ export default function AuthPage() {
                 <input className="villa-input" type="password" placeholder="********" />
               </label>
               <button type="submit" className="villa-button mt-2 w-full">
-                {mode === "login" ? t({ en: "Login", zh: "登录" }) : t({ en: "Create Pet Owner Account", zh: "创建宠主账号" })}
+                {mode === "login" ? t({ en: "Login", zh: "登录" }) : t({ en: "Create Account", zh: "创建账号" })}
               </button>
             </form>
+
+            {mode === "register" ? (
+              <p className="mt-5 text-center text-sm font-bold text-villa-text-secondary">
+                {t({ en: "Already have an account?", zh: "已经有账号？" })}{" "}
+                <button type="button" className="font-black text-villa-primary underline" onClick={() => setMode("login")}>
+                  {t({ en: "Login", zh: "登录" })}
+                </button>
+              </p>
+            ) : null}
 
             <p className="mt-5 text-xs font-semibold leading-relaxed text-villa-text-secondary">
               {t({ en: "By continuing, you agree to our", zh: "继续即代表你同意我们的" })}{" "}

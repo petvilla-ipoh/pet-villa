@@ -9,8 +9,6 @@ function hasSession() {
   return Boolean(window.localStorage.getItem("pet-villa-session"));
 }
 
-const publicNav = [{ href: "/#about", en: "About", zh: "关于" }];
-
 const privateNav = [
   { href: "/pets", en: "My Pets", zh: "我的宠物" },
   { href: "/booking", en: "Bookings", zh: "预约" },
@@ -19,14 +17,14 @@ const privateNav = [
 ];
 
 const loginButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white";
+  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white hover:-translate-y-px";
 
 const registerButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black transition hover:opacity-90";
+  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black transition hover:opacity-90 hover:-translate-y-px";
 
 function NavLogo() {
   return (
-    <a href="/" className="inline-flex items-center">
+    <a href="/" className="inline-flex items-center gap-3">
       <img
         src="/logo.png"
         alt="The Pet Villa"
@@ -35,6 +33,7 @@ function NavLogo() {
           e.currentTarget.style.display = "none";
         }}
       />
+      <span className="sr-only">The Pet Villa</span>
     </a>
   );
 }
@@ -96,13 +95,14 @@ export function AppNav({ host = false }: { host?: boolean }) {
         <NavLogo />
         <button
           type="button"
-          className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-sm lg:hidden"
+          className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-md lg:hidden"
           onClick={() => setOpen((value) => !value)}
           aria-label="Menu"
           aria-expanded={open}
         >
           <span className="h-0.5 w-5 rounded-full bg-villa-text-primary shadow-[0_6px_0_#3d1f0d,0_-6px_0_#3d1f0d]" />
         </button>
+
         <nav className="hidden items-center gap-3 lg:flex">
           {loggedIn
             ? privateNav.map((item) => (
@@ -110,11 +110,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
                   {t({ en: item.en, zh: item.zh })}
                 </a>
               ))
-            : publicNav.map((item) => (
-                <a key={item.href} className="px-1 py-2 text-sm font-bold text-villa-text-secondary transition hover:text-villa-text-primary" href={item.href}>
-                  {t({ en: item.en, zh: item.zh })}
-                </a>
-              ))}
+            : null}
 
           {loggedIn ? (
             <div className="relative" ref={accountRef}>
@@ -149,7 +145,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
               <a className={registerButtonClass} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
-              <a className="villa-button min-h-[44px] px-5" href="/booking">
+              <a className="villa-button-dark min-h-[44px] px-5" href="/booking">
                 {t({ en: "Book Now", zh: "立即预约" })}
               </a>
             </>
@@ -159,12 +155,14 @@ export function AppNav({ host = false }: { host?: boolean }) {
       </div>
 
       {open ? (
-        <nav className="mx-auto mt-3 grid max-w-7xl gap-2 rounded-[20px] border border-villa-primary-light bg-white p-3 shadow-md lg:hidden">
-          {(loggedIn ? privateNav : publicNav).map((item) => (
-            <a key={item.href} className="rounded-[14px] px-3 py-3 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href={item.href}>
-              {t({ en: item.en, zh: item.zh })}
-            </a>
-          ))}
+        <nav className="mx-auto mt-3 grid max-w-7xl gap-3 rounded-[22px] border border-villa-primary-light bg-white/95 p-4 shadow-lg backdrop-blur lg:hidden">
+          {loggedIn
+            ? privateNav.map((item) => (
+                <a key={item.href} className="rounded-[14px] px-3 py-3 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href={item.href}>
+                  {t({ en: item.en, zh: item.zh })}
+                </a>
+              ))
+            : null}
           {loggedIn ? (
             <div className="grid gap-2">
               <a className="rounded-[14px] px-3 py-3 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href="/auth">
@@ -176,18 +174,20 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <div className="grid gap-2">
-              <a className={loginButtonClass} href="/auth">
+              <a className={`${loginButtonClass} flex items-center justify-center`} href="/auth">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={registerButtonClass} href="/auth?tab=register">
+              <a className={`${registerButtonClass} flex items-center justify-center`} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
-              <a className="villa-button min-h-[44px] px-5" href="/booking">
+              <a className="villa-button-dark min-h-[44px] px-5" href="/booking">
                 {t({ en: "Book Now", zh: "立即预约" })}
               </a>
             </div>
           )}
-          <LanguageToggle />
+          <div className="rounded-[14px] bg-villa-primary-bg p-2">
+            <LanguageToggle />
+          </div>
         </nav>
       ) : null}
     </header>

@@ -34,9 +34,9 @@ const config: Config = {
       },
       boxShadow: {
         sm: "0 2px 8px rgba(61,31,13,0.06)",
-        md: "0 4px 16px rgba(61,31,13,0.10)",
+        md: "0 4px 16px rgba(61,31,13,0.08)",
         lg: "0 8px 32px rgba(61,31,13,0.14)",
-        villa: "0 4px 16px rgba(61,31,13,0.10)",
+        villa: "0 4px 16px rgba(61,31,13,0.08)",
         soft: "0 12px 30px rgba(232,146,124,0.18)"
       },
       fontFamily: {
