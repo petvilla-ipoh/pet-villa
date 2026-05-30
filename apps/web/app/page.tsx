@@ -1,13 +1,14 @@
 "use client";
 
 import { AppNav } from "./components/AppNav";
-import { DogIllustration } from "./components/DogIllustration";
 import { useLanguage } from "./components/LanguageProvider";
 
-const features = [
-  { icon: "🐾", title: { en: "No Cages", zh: "不关笼" }, body: { en: "Your dog roams freely and rests near us in a calm home.", zh: "狗狗可在安静家中自由活动，安心陪伴休息。" } },
-  { icon: "📸", title: { en: "Daily Updates", zh: "每日照片更新" }, body: { en: "Receive 3-5 photos or videos every day during the stay.", zh: "入住期间每天收到 3-5 次照片或视频更新。" } },
-  { icon: "❄️", title: { en: "24h Air-Conditioned", zh: "24小时冷气" }, body: { en: "Comfortable indoor care through warm Ipoh days and nights.", zh: "无论白天夜晚，都在舒适冷气空间中照顾。" } }
+const heroFeatures = [
+  { icon: "🏠", title: { en: "Cage Free Home Environment", zh: "不关笼家庭环境" } },
+  { icon: "🤗", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
+  { icon: "📸", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
+  { icon: "🐾", title: { en: "Small Group Max 3 Dogs", zh: "小群照顾最多3只狗" } },
+  { icon: "🛡️", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
 ];
 
 const notices = [
@@ -64,21 +65,46 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-            <div className="rounded-[24px] bg-white p-3 shadow-lg">
-              <DogIllustration label={t({ en: "Protected & loved", zh: "被爱护与保护" })} />
+            <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-lg">
+              <img
+                src="/hero-dogs.png"
+                alt="Toy poodle and French bulldog resting in a warm home living room"
+                className="absolute inset-0 h-full w-full object-cover object-[center_68%]"
+              />
+              <div className="absolute left-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-sm font-black text-villa-accent-green shadow-md backdrop-blur">
+                🏡 Cage Free
+              </div>
+              <div className="absolute right-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-sm font-black text-villa-primary shadow-md backdrop-blur">
+                ❤️ 24h Care
+              </div>
+              <div className="absolute inset-x-0 bottom-4 flex justify-center px-4">
+                <div className="rounded-pill bg-white/95 px-5 py-3 text-sm font-black text-villa-primary shadow-lg backdrop-blur">
+                  📸 3-5 Daily Photo Updates
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="services" className="villa-section">
-          <div className="villa-container grid gap-3 md:grid-cols-3">
-            {features.map((feature) => (
-              <article key={feature.title.en} className="villa-card">
-                <div className="grid h-14 w-14 place-items-center rounded-full bg-[#fff0ec] text-[30px]">{feature.icon}</div>
-                <h2 className="card-title mt-4">{t(feature.title)}</h2>
-                <p className="body-copy mt-2">{t(feature.body)}</p>
-              </article>
-            ))}
+        <section id="services" className="villa-section pt-0">
+          <div className="villa-container">
+            <div className="grid overflow-hidden rounded-[24px] border border-villa-primary-light bg-white shadow-lg sm:grid-cols-5">
+              {heroFeatures.map((feature, index) => (
+                <article
+                  key={feature.title.en}
+                  className={`flex items-center gap-3 p-4 text-left sm:block sm:text-center ${
+                    index > 0 ? "border-t border-villa-primary-light/60 sm:border-l sm:border-t-0" : ""
+                  }`}
+                >
+                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-villa-primary-bg text-2xl sm:mx-auto">
+                    {feature.icon}
+                  </div>
+                  <h2 className="text-sm font-black leading-tight text-villa-text-primary sm:mt-3">
+                    {t(feature.title)}
+                  </h2>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
