@@ -46,10 +46,26 @@ export default function BookingPage() {
       setEndDay(day);
       return;
     }
-    if (day <= startDay || startDay === endDay) {
+
+    if (startDay === endDay) {
+      if (day > startDay) {
+        setEndDay(day);
+      } else {
+        setStartDay(day);
+      }
+      return;
+    }
+
+    if (day > endDay) {
+      setEndDay(day);
+      return;
+    }
+
+    if (day < startDay) {
       setStartDay(day);
       setEndDay(day);
     } else {
+      setStartDay(day);
       setEndDay(day);
     }
   }
@@ -112,6 +128,19 @@ export default function BookingPage() {
 
               <section className="villa-card">
                 <h2 className="section-title">{t({ en: "Choose Date / Time", zh: "选择日期 / 时间" })}</h2>
+                {service === "overnight" ? (
+                  <div className="mt-3 rounded-[16px] bg-villa-primary-bg p-3">
+                    <p className="m-0 text-sm font-bold text-villa-text-secondary">
+                      {t({
+                        en: "Tap your check-in date, then tap any later check-out date. You can select as many nights as needed.",
+                        zh: "先点入住日期，再点之后任何离店日期；可选择任意多晚。"
+                      })}
+                    </p>
+                    <p className="m-0 mt-2 text-sm font-black text-villa-primary">
+                      {dateLabel} · {overnightNights} {t({ en: "night(s)", zh: "晚" })} · RM{unitTotal} / {t({ en: "dog", zh: "只狗" })}
+                    </p>
+                  </div>
+                ) : null}
                 {service === "daycare" ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <label className="grid gap-2">

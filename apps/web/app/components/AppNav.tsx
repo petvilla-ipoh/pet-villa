@@ -93,15 +93,33 @@ export function AppNav({ host = false }: { host?: boolean }) {
     <header className="sticky top-0 z-40 border-b border-villa-primary-light bg-villa-background/95 px-4 py-3 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <NavLogo />
-        <button
-          type="button"
-          className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-md lg:hidden"
-          onClick={() => setOpen((value) => !value)}
-          aria-label="Menu"
-          aria-expanded={open}
-        >
-          <span className="h-0.5 w-5 rounded-full bg-villa-text-primary shadow-[0_6px_0_#3d1f0d,0_-6px_0_#3d1f0d]" />
-        </button>
+        <div className="flex items-center gap-1.5 lg:hidden">
+          {!loggedIn ? (
+            <>
+              <a
+                className="inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
+                href="/auth"
+              >
+                {t({ en: "Login", zh: "登录" })}
+              </a>
+              <a
+                className="inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm"
+                href="/auth?tab=register"
+              >
+                {t({ en: "Register", zh: "注册" })}
+              </a>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-md"
+            onClick={() => setOpen((value) => !value)}
+            aria-label="Menu"
+            aria-expanded={open}
+          >
+            <span className="h-0.5 w-5 rounded-full bg-villa-text-primary shadow-[0_6px_0_#3d1f0d,0_-6px_0_#3d1f0d]" />
+          </button>
+        </div>
 
         <nav className="hidden items-center gap-3 lg:flex">
           {loggedIn
