@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { LanguageToggle } from "./LanguageToggle";
 import { useLanguage } from "./LanguageProvider";
 
@@ -112,6 +112,15 @@ export function AppNav({ host = false }: { host?: boolean }) {
       ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
       : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm";
 
+  function selectAuthTab(event: ReactMouseEvent<HTMLAnchorElement>, tab: "login" | "register") {
+    if (!isAuthPage) return;
+    event.preventDefault();
+    window.history.replaceState(null, "", `/auth?tab=${tab}`);
+    setLocationState(getLocationState());
+    setOpen(false);
+    window.dispatchEvent(new Event("pet-villa-route"));
+  }
+
   if (host) {
     return (
       <header className="sticky top-0 z-40 border-b border-villa-primary-light/10 bg-villa-host-dark px-4 py-3 text-villa-primary-light">
@@ -135,10 +144,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
         <div className="flex items-center gap-1.5 lg:hidden">
           {!loggedIn ? (
             <>
-              <a className={mobileLoginClass} href="/auth?tab=login">
+              <a className={mobileLoginClass} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={mobileRegisterClass} href="/auth?tab=register">
+              <a className={mobileRegisterClass} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
                 {t({ en: "Register", zh: "注册" })}
               </a>
             </>
@@ -190,10 +199,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <>
-              <a className={desktopLoginClass} href="/auth?tab=login">
+              <a className={desktopLoginClass} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={desktopRegisterClass} href="/auth?tab=register">
+              <a className={desktopRegisterClass} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
                 {t({ en: "Register", zh: "注册" })}
               </a>
               <a className="villa-button-dark min-h-[44px] px-5" href="/booking">
@@ -225,10 +234,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <div className="grid gap-2">
-              <a className={`${isLoginActive ? activeAuthButtonClass : loginButtonClass} flex items-center justify-center`} href="/auth?tab=login">
+              <a className={`${isLoginActive ? activeAuthButtonClass : loginButtonClass} flex items-center justify-center`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={`${isRegisterActive ? activeAuthButtonClass : registerButtonClass} flex items-center justify-center`} href="/auth?tab=register">
+              <a className={`${isRegisterActive ? activeAuthButtonClass : registerButtonClass} flex items-center justify-center`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
                 {t({ en: "Register", zh: "注册" })}
               </a>
               <a className="villa-button-dark min-h-[44px] px-5" href="/booking">

@@ -13,11 +13,21 @@ export default function AuthPage() {
   const [redirect, setRedirect] = useState("/");
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const requestedMode = params.get("mode") || params.get("tab");
-    const nextRedirect = params.get("redirect");
-    if (requestedMode === "register") setMode("register");
-    if (nextRedirect) setRedirect(nextRedirect);
+    function syncFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const requestedMode = params.get("mode") || params.get("tab");
+      const nextRedirect = params.get("redirect");
+      setMode(requestedMode === "register" ? "register" : "login");
+      if (nextRedirect) setRedirect(nextRedirect);
+    }
+
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    window.addEventListener("pet-villa-route", syncFromUrl);
+    return () => {
+      window.removeEventListener("popstate", syncFromUrl);
+      window.removeEventListener("pet-villa-route", syncFromUrl);
+    };
   }, []);
 
   function switchMode(nextMode: AuthMode) {
