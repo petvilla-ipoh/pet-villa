@@ -35,7 +35,7 @@ const inactiveAuthButtonClass =
   "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary bg-transparent text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white hover:-translate-y-px";
 
 const activeAuthButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full bg-villa-text-primary text-white text-sm font-black shadow-md transition hover:-translate-y-px";
+  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black shadow-md transition hover:-translate-y-px";
 
 function NavLogo() {
   return (
@@ -77,11 +77,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
     window.addEventListener("storage", sync);
     window.addEventListener("popstate", sync);
     window.addEventListener("pet-villa-auth", sync);
+    window.addEventListener("pet-villa-route", sync);
     document.addEventListener("click", closeAccount);
     return () => {
       window.removeEventListener("storage", sync);
       window.removeEventListener("popstate", sync);
       window.removeEventListener("pet-villa-auth", sync);
+      window.removeEventListener("pet-villa-route", sync);
       document.removeEventListener("click", closeAccount);
     };
   }, []);
@@ -94,7 +96,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
     window.location.href = "/";
   }
 
-  const isAuthPage = locationState.pathname === "/auth";
+  const isAuthPage = locationState.pathname === "/auth" || locationState.pathname.startsWith("/auth/");
   const isLoginActive = isAuthPage && locationState.tab !== "register";
   const isRegisterActive = isAuthPage && locationState.tab === "register";
   const desktopLoginClass = isLoginActive ? activeAuthButtonClass : loginButtonClass;
@@ -102,10 +104,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
     ? isRegisterActive ? activeAuthButtonClass : inactiveAuthButtonClass
     : registerButtonClass;
   const mobileLoginClass = isLoginActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-text-primary px-3 text-xs font-black text-white shadow-md"
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
     : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm";
   const mobileRegisterClass = isRegisterActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-text-primary px-3 text-xs font-black text-white shadow-md"
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
     : isAuthPage
       ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
       : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm";

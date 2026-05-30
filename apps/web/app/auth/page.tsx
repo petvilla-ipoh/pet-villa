@@ -26,6 +26,7 @@ export default function AuthPage() {
     params.set("tab", nextMode);
     if (redirect && redirect !== "/") params.set("redirect", redirect);
     window.history.replaceState(null, "", `/auth?${params.toString()}`);
+    window.dispatchEvent(new Event("pet-villa-route"));
   }
 
   function tabClass(active: boolean) {
