@@ -5,9 +5,11 @@ import { AppNav } from "../components/AppNav";
 import { DogIllustration } from "../components/DogIllustration";
 import { useLanguage } from "../components/LanguageProvider";
 
+type AuthMode = "login" | "register";
+
 export default function AuthPage() {
   const { t } = useLanguage();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [redirect, setRedirect] = useState("/");
 
   useEffect(() => {
@@ -17,6 +19,20 @@ export default function AuthPage() {
     if (requestedMode === "register") setMode("register");
     if (nextRedirect) setRedirect(nextRedirect);
   }, []);
+
+  function switchMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", nextMode);
+    if (redirect && redirect !== "/") params.set("redirect", redirect);
+    window.history.replaceState(null, "", `/auth?${params.toString()}`);
+  }
+
+  function tabClass(active: boolean) {
+    return active
+      ? "inline-flex min-h-[48px] items-center justify-center rounded-pill bg-villa-text-primary px-6 py-2.5 text-sm font-black text-white shadow-md transition hover:-translate-y-px"
+      : "inline-flex min-h-[48px] items-center justify-center rounded-pill border-2 border-villa-primary bg-white px-6 py-2.5 text-sm font-black text-villa-primary transition hover:-translate-y-px hover:bg-villa-primary-bg";
+  }
 
   function submit() {
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
@@ -57,10 +73,10 @@ export default function AuthPage() {
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <button type="button" onClick={() => setMode("login")} className={mode === "login" ? "villa-button" : "villa-button-outline"}>
+              <button type="button" onClick={() => switchMode("login")} className={tabClass(mode === "login")} aria-pressed={mode === "login"}>
                 {t({ en: "Login", zh: "登录" })}
               </button>
-              <button type="button" onClick={() => setMode("register")} className={mode === "register" ? "villa-button" : "villa-button-outline"}>
+              <button type="button" onClick={() => switchMode("register")} className={tabClass(mode === "register")} aria-pressed={mode === "register"}>
                 {t({ en: "Register", zh: "注册" })}
               </button>
             </div>
@@ -119,7 +135,7 @@ export default function AuthPage() {
             {mode === "register" ? (
               <p className="mt-5 text-center text-sm font-bold text-villa-text-secondary">
                 {t({ en: "Already have an account?", zh: "已经有账号？" })}{" "}
-                <button type="button" className="font-black text-villa-primary underline" onClick={() => setMode("login")}>
+                <button type="button" className="font-black text-villa-primary underline" onClick={() => switchMode("login")}>
                   {t({ en: "Login", zh: "登录" })}
                 </button>
               </p>
