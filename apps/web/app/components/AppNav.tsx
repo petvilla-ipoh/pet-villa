@@ -9,6 +9,15 @@ function hasSession() {
   return Boolean(window.localStorage.getItem("pet-villa-session"));
 }
 
+function getLocationState() {
+  if (typeof window === "undefined") return { pathname: "", tab: "login" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    pathname: window.location.pathname,
+    tab: params.get("tab") || params.get("mode") || "login"
+  };
+}
+
 const privateNav = [
   { href: "/pets", en: "My Pets", zh: "我的宠物" },
   { href: "/booking", en: "Bookings", zh: "预约" },
@@ -22,13 +31,19 @@ const loginButtonClass =
 const registerButtonClass =
   "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black transition hover:opacity-90 hover:-translate-y-px";
 
+const inactiveAuthButtonClass =
+  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary bg-transparent text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white hover:-translate-y-px";
+
+const activeAuthButtonClass =
+  "min-h-[44px] px-5 py-2 rounded-full bg-villa-text-primary text-white text-sm font-black shadow-md transition hover:-translate-y-px";
+
 function NavLogo() {
   return (
-    <a href="/" className="inline-flex items-center gap-3">
+    <a href="/" className="inline-flex min-w-0 items-center">
       <img
         src="/logo.png"
         alt="The Pet Villa"
-        style={{ height: "48px", width: "auto" }}
+        className="h-14 w-[84px] rounded-[10px] object-contain sm:w-[112px]"
         onError={(e: any) => {
           e.currentTarget.style.display = "none";
         }}
@@ -41,14 +56,18 @@ function NavLogo() {
 export function AppNav({ host = false }: { host?: boolean }) {
   const { t } = useLanguage();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [locationState, setLocationState] = useState(() => getLocationState());
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLoggedIn(hasSession());
+    setLocationState(getLocationState());
+
     function sync() {
       setLoggedIn(hasSession());
+      setLocationState(getLocationState());
     }
     function closeAccount(event: MouseEvent) {
       if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
@@ -56,10 +75,12 @@ export function AppNav({ host = false }: { host?: boolean }) {
       }
     }
     window.addEventListener("storage", sync);
+    window.addEventListener("popstate", sync);
     window.addEventListener("pet-villa-auth", sync);
     document.addEventListener("click", closeAccount);
     return () => {
       window.removeEventListener("storage", sync);
+      window.removeEventListener("popstate", sync);
       window.removeEventListener("pet-villa-auth", sync);
       document.removeEventListener("click", closeAccount);
     };
@@ -72,6 +93,22 @@ export function AppNav({ host = false }: { host?: boolean }) {
     setAccountOpen(false);
     window.location.href = "/";
   }
+
+  const isAuthPage = locationState.pathname === "/auth";
+  const isLoginActive = isAuthPage && locationState.tab !== "register";
+  const isRegisterActive = isAuthPage && locationState.tab === "register";
+  const desktopLoginClass = isLoginActive ? activeAuthButtonClass : loginButtonClass;
+  const desktopRegisterClass = isAuthPage
+    ? isRegisterActive ? activeAuthButtonClass : inactiveAuthButtonClass
+    : registerButtonClass;
+  const mobileLoginClass = isLoginActive
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-text-primary px-3 text-xs font-black text-white shadow-md"
+    : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm";
+  const mobileRegisterClass = isRegisterActive
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-text-primary px-3 text-xs font-black text-white shadow-md"
+    : isAuthPage
+      ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
+      : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm";
 
   if (host) {
     return (
@@ -91,21 +128,15 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-villa-primary-light bg-villa-background/95 px-4 py-3 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
         <NavLogo />
         <div className="flex items-center gap-1.5 lg:hidden">
           {!loggedIn ? (
             <>
-              <a
-                className="inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
-                href="/auth"
-              >
+              <a className={mobileLoginClass} href="/auth?tab=login">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a
-                className="inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm"
-                href="/auth?tab=register"
-              >
+              <a className={mobileRegisterClass} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
             </>
@@ -157,10 +188,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <>
-              <a className={loginButtonClass} href="/auth">
+              <a className={desktopLoginClass} href="/auth?tab=login">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={registerButtonClass} href="/auth?tab=register">
+              <a className={desktopRegisterClass} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
               <a className="villa-button-dark min-h-[44px] px-5" href="/booking">
@@ -192,10 +223,10 @@ export function AppNav({ host = false }: { host?: boolean }) {
             </div>
           ) : (
             <div className="grid gap-2">
-              <a className={`${loginButtonClass} flex items-center justify-center`} href="/auth">
+              <a className={`${isLoginActive ? activeAuthButtonClass : loginButtonClass} flex items-center justify-center`} href="/auth?tab=login">
                 {t({ en: "Login", zh: "登录" })}
               </a>
-              <a className={`${registerButtonClass} flex items-center justify-center`} href="/auth?tab=register">
+              <a className={`${isRegisterActive ? activeAuthButtonClass : registerButtonClass} flex items-center justify-center`} href="/auth?tab=register">
                 {t({ en: "Register", zh: "注册" })}
               </a>
               <a className="villa-button-dark min-h-[44px] px-5" href="/booking">

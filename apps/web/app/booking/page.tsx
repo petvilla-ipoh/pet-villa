@@ -132,8 +132,8 @@ export default function BookingPage() {
                   <div className="mt-3 rounded-[16px] bg-villa-primary-bg p-3">
                     <p className="m-0 text-sm font-bold text-villa-text-secondary">
                       {t({
-                        en: "Tap your check-in date, then tap any later check-out date. You can select as many nights as needed.",
-                        zh: "先点入住日期，再点之后任何离店日期；可选择任意多晚。"
+                        en: "Choose the dates your dog will stay. For 1 day, select 1 date. For 2 days, select 2 dates.",
+                        zh: "选择狗狗需要寄宿的日期。寄宿 1 天就选 1 个日期，寄宿 2 天就选 2 个日期。"
                       })}
                     </p>
                     <p className="m-0 mt-2 text-sm font-black text-villa-primary">
