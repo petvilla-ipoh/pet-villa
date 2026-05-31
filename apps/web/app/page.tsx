@@ -376,9 +376,9 @@ export default function HomePage() {
 
       <main className="overflow-hidden">
         <section id="about" className="relative min-h-[455px] overflow-hidden px-4 pb-7 pt-7 sm:px-6 lg:min-h-[520px] lg:px-16">
-          <div className="absolute right-[-50px] top-[78px] h-[318px] w-[112%] overflow-hidden opacity-86 sm:right-[-24px] sm:w-[96%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
-            <DogPhoto position="48% 60%" className="object-cover" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.9)_38%,rgba(250,246,242,0.24)_68%,rgba(250,246,242,0.02)_100%)]" />
+          <div className="absolute right-[-48px] top-[70px] h-[318px] w-[112%] overflow-hidden opacity-88 sm:right-[-24px] sm:w-[96%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
+            <DogPhoto position="44% 60%" className="object-cover" />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.88)_30%,rgba(250,246,242,0.42)_54%,rgba(250,246,242,0.06)_82%)]" />
             <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-villa-background to-transparent" />
           </div>
 
