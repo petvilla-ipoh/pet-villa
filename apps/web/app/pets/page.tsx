@@ -99,12 +99,20 @@ export default function PetsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setPets(readPetProfiles());
+    const storedPets = readPetProfiles();
+    setPets(storedPets);
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "add") {
       setFormPet(createEmptyPet());
       setMode("form");
       setOpenSection("basic");
+    } else if (params.get("petId")) {
+      const pet = storedPets.find((item) => item.id === params.get("petId"));
+      if (pet) {
+        setFormPet({ ...pet });
+        setMode("form");
+        setOpenSection("basic");
+      }
     }
     function syncPets() {
       setPets(readPetProfiles());
@@ -126,7 +134,7 @@ export default function PetsPage() {
   }
 
   function editPet(pet: PetProfile) {
-    setFormPet(pet);
+    setFormPet({ ...pet });
     setOpenSection("basic");
     setError("");
     setMode("form");
@@ -139,7 +147,7 @@ export default function PetsPage() {
       setOpenSection("basic");
       return;
     }
-    const next = upsertPetProfile(formPet);
+    const next = upsertPetProfile({ ...formPet });
     setPets(next);
     setMode("list");
     setError("");
@@ -150,7 +158,10 @@ export default function PetsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => update("photoDataUrl", String(reader.result || ""));
+    reader.onload = () => {
+      update("photoDataUrl", String(reader.result || ""));
+      event.target.value = "";
+    };
     reader.readAsDataURL(file);
   }
 
@@ -169,7 +180,7 @@ export default function PetsPage() {
 
             {error ? <div className="mb-3 rounded-[16px] bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
 
-            <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); savePet(); }}>
+            <form key={formPet.id} className="grid gap-3" onSubmit={(event) => { event.preventDefault(); savePet(); }}>
               <AccordionSection title={t({ en: "Basic Details", zh: "基本资料" })} open={openSection === "basic"} onToggle={() => setOpenSection(openSection === "basic" ? null : "basic")}>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="grid gap-2">

@@ -7,6 +7,8 @@ export type BookingDraft = {
   service: "overnight" | "daycare";
   serviceLabel: string;
   dateLabel: string;
+  startDateISO?: string;
+  endDateISO?: string;
   nights: number;
   hours: number;
   pets: Array<Pick<PetProfile, "id" | "name" | "breed" | "weight" | "photoDataUrl">>;
@@ -21,6 +23,7 @@ export type VillaOrder = BookingDraft & {
   orderId: string;
   paid: number;
   status: "balance" | "active" | "confirmed" | "completed" | "cancelled";
+  cancelledAt?: string;
   photosAvailable: number;
   review?: {
     stars: number;

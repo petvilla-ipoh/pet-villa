@@ -1,8 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 96" role="img" aria-label="Visa Mastercard">
-  <rect width="190" height="96" rx="22" fill="#fff"/>
-  <text x="24" y="43" font-family="Arial, Helvetica, sans-serif" font-size="25" font-style="italic" font-weight="900" fill="#1A1F71">VISA</text>
-  <circle cx="117" cy="47" r="22" fill="#EB001B"/>
-  <circle cx="144" cy="47" r="22" fill="#F79E1B" opacity=".92"/>
-  <path d="M130 29a22 22 0 0 1 0 36 22 22 0 0 1 0-36Z" fill="#FF5F00" opacity=".82"/>
-  <text x="103" y="78" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800" fill="#3d1f0d">Mastercard</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 120" role="img" aria-label="Visa Mastercard">
+  <rect width="260" height="120" rx="18" fill="#fff"/>
+  <text x="20" y="72" font-family="Arial, Helvetica, sans-serif" font-size="48" font-style="italic" font-weight="900" fill="#1A1F71">VISA</text>
+  <circle cx="182" cy="60" r="30" fill="#EB001B"/>
+  <circle cx="216" cy="60" r="30" fill="#F79E1B" opacity=".95"/>
+  <path d="M199 36a30 30 0 0 1 0 48 30 30 0 0 1 0-48Z" fill="#FF5F00"/>
 </svg>

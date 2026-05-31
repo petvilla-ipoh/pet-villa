@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { readOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
+import { daysInclusive, formatDateRange, getOrderDateRange, startOfLocalDay } from "../lib/bookingCapacity";
 
 type Filter = "all" | "active" | "balance" | "completed" | "cancelled";
 
@@ -29,16 +30,8 @@ function DogIcon() {
 }
 
 function detailLabel(order: VillaOrder) {
-  if (order.service === "overnight") return `${order.serviceLabel} · ${order.dateLabel}`;
-  return `${order.serviceLabel} · ${order.dateLabel}`;
-}
-
-function timeStatus(order: VillaOrder) {
-  if (order.status === "balance") return "Upcoming · Check-in in 2 Days";
-  if (order.status === "active") return `Currently Staying · Day 2 of ${Math.max(1, order.nights || 1)}`;
-  if (order.status === "completed") return "Completed 12 Days Ago";
-  if (order.status === "cancelled") return "Cancelled on Jun 2";
-  return "Upcoming";
+  if (order.service === "overnight") return `${order.serviceLabel} Â· ${order.dateLabel}`;
+  return `${order.serviceLabel} Â· ${order.dateLabel}`;
 }
 
 export default function OrdersPage() {
@@ -47,6 +40,7 @@ export default function OrdersPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewStars, setReviewStars] = useState(0);
   const [reviewBody, setReviewBody] = useState("");
   const [message, setMessage] = useState("");
 
@@ -76,38 +70,83 @@ export default function OrdersPage() {
       status: "completed"
     }));
     setOrders(nextOrders);
-    setMessage(t({ en: "Demo Payment Success. Balance paid successfully.", zh: "测试付款成功。尾款已成功支付。" }));
+    setMessage(t({ en: "Demo Payment Success. Balance paid successfully.", zh: "æµ‹è¯•ä»˜æ¬¾æˆåŠŸã€‚å°¾æ¬¾å·²æˆåŠŸæ”¯ä»˜ã€‚" }));
   }
 
   function cancelOrder(order: VillaOrder) {
-    const nextOrders = updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled" }));
+    const nextOrders = updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled", cancelledAt: new Date().toISOString() }));
     setOrders(nextOrders);
-    setMessage(t({ en: "Booking cancelled.", zh: "预约已取消。" }));
+    setMessage(t({ en: "Booking cancelled.", zh: "é¢„çº¦å·²å–æ¶ˆã€‚" }));
+  }
+
+  function openReview(order: VillaOrder) {
+    setReviewing(order.orderId);
+    setReviewStars(order.review?.stars || 0);
+    setReviewBody(order.review?.body || "");
+  }
+
+  function closeReview() {
+    setReviewing(null);
+    setReviewStars(0);
+    setReviewBody("");
   }
 
   function saveReview(order: VillaOrder) {
+    if (reviewStars < 1) {
+      setMessage(t({ en: "Please choose a star rating first.", zh: "è¯·å…ˆé€‰æ‹©æ˜Ÿçº§è¯„åˆ†ã€‚" }));
+      return;
+    }
     const nextOrders = updateOrder(order.orderId, (current) => ({
       ...current,
-      review: { stars: 5, body: reviewBody || "Loved by Pet Villa.", createdAt: new Date().toISOString() }
+      review: { stars: reviewStars, body: reviewBody || "Loved by Pet Villa.", createdAt: new Date().toISOString() }
     }));
     setOrders(nextOrders);
-    setReviewing(null);
-    setReviewBody("");
-    setMessage(t({ en: "Review saved. Thank you!", zh: "评价已保存，谢谢你！" }));
+    closeReview();
+    setMessage(t({ en: "Review saved. Thank you!", zh: "è¯„ä»·å·²ä¿å­˜ï¼Œè°¢è°¢ä½ ï¼" }));
+  }
+
+  function getTimeStatus(order: VillaOrder) {
+    const today = startOfLocalDay(new Date());
+    const range = getOrderDateRange(order);
+    if (order.status === "cancelled") {
+      const cancelled = order.cancelledAt ? new Date(order.cancelledAt) : null;
+      return cancelled && !Number.isNaN(cancelled.getTime())
+        ? t({ en: `Cancelled on ${formatDateRange(cancelled, cancelled)}`, zh: `已于 ${formatDateRange(cancelled, cancelled)} 取消` })
+        : t({ en: "Cancelled", zh: "已取消" });
+    }
+    if (!range) return t({ en: "Date pending", zh: "日期待确认" });
+    const checkIn = startOfLocalDay(range.start);
+    const checkOut = startOfLocalDay(range.end);
+    if (order.status === "completed") {
+      if (today <= checkOut) return t({ en: "Completed status needs checkout confirmation", zh: "完成状态需确认退房日期" });
+      const daysAgo = Math.max(1, daysInclusive(checkOut, today) - 1);
+      return t({ en: `Completed ${daysAgo} Day${daysAgo === 1 ? "" : "s"} Ago`, zh: `已完成 ${daysAgo} 天` });
+    }
+    if (today < checkIn) {
+      const daysToGo = Math.max(1, daysInclusive(today, checkIn) - 1);
+      return t({ en: `Upcoming · Check-in in ${daysToGo} Day${daysToGo === 1 ? "" : "s"}`, zh: `即将入住 · ${daysToGo} 天后入住` });
+    }
+    if (today >= checkIn && today <= checkOut) {
+      const dayNumber = Math.max(1, daysInclusive(checkIn, today));
+      const totalDays = Math.max(1, daysInclusive(checkIn, checkOut));
+      return t({ en: `Currently Staying · Day ${dayNumber} of ${totalDays}`, zh: `寄宿中 · 第 ${dayNumber}/${totalDays} 天` });
+    }
+    const daysAgo = Math.max(1, daysInclusive(checkOut, today) - 1);
+    return t({ en: `Completed ${daysAgo} Day${daysAgo === 1 ? "" : "s"} Ago`, zh: `已完成 ${daysAgo} 天` });
   }
 
   return (
     <ProtectedPage>
       <OwnerSidebar>
         <section className="p-4 lg:p-8">
-          <h1 className="page-title">{t({ en: "My Orders", zh: "我的订单" })}</h1>
+          <h1 className="page-title">{t({ en: "My Orders", zh: "æˆ‘çš„è®¢å•" })}</h1>
           <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
             {[
-              ["all", "All", "全部"],
-              ["active", "Active", "进行中"],
-              ["balance", "Balance Due", "待付尾款"],
-              ["completed", "Completed", "已完成"],
-              ["cancelled", "Cancelled", "已取消"]
+              ["all", "All", "å…¨éƒ¨"],
+              ["active", "Active", "è¿›è¡Œä¸­"],
+              ["balance", "Balance Due", "å¾…ä»˜å°¾æ¬¾"],
+              ["completed", "Completed", "å·²å®Œæˆ"],
+              ["cancelled", "Cancelled", "å·²å–æ¶ˆ"]
             ].map(([id, en, zh]) => (
               <button key={id} type="button" onClick={() => setFilter(id as Filter)} className={`${filter === id ? "villa-button" : "villa-button-outline"} min-h-[38px] min-w-fit px-4 py-2 text-xs`}>
                 {t({ en, zh })}
@@ -119,9 +158,9 @@ export default function OrdersPage() {
 
           {orders.length === 0 ? (
             <div className="villa-card mt-5 text-center">
-              <h2 className="card-title">{t({ en: "No orders yet", zh: "还没有订单" })}</h2>
-              <p className="body-copy mt-2">{t({ en: "Create a booking and pay the deposit to see it here.", zh: "创建预约并支付订金后，订单会显示在这里。" })}</p>
-              <a href="/booking" className="villa-button mt-4 w-full">{t({ en: "Book a Stay", zh: "立即预约" })}</a>
+              <h2 className="card-title">{t({ en: "No orders yet", zh: "è¿˜æ²¡æœ‰è®¢å•" })}</h2>
+              <p className="body-copy mt-2">{t({ en: "Create a booking and pay the deposit to see it here.", zh: "åˆ›å»ºé¢„çº¦å¹¶æ”¯ä»˜è®¢é‡‘åŽï¼Œè®¢å•ä¼šæ˜¾ç¤ºåœ¨è¿™é‡Œã€‚" })}</p>
+              <a href="/booking" className="villa-button mt-4 w-full">{t({ en: "Book a Stay", zh: "ç«‹å³é¢„çº¦" })}</a>
             </div>
           ) : null}
 
@@ -147,49 +186,58 @@ export default function OrdersPage() {
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusStyles[order.status]}`}>{statusLabel}</span>
                         </div>
-                        <p className="mt-2 text-[11px] font-black text-villa-primary">{timeStatus(order)}</p>
+                        <p className="mt-2 text-[11px] font-black text-villa-primary">{getTimeStatus(order)}</p>
                       </div>
                     </div>
                   </button>
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black text-villa-text-secondary">
-                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Paid", zh: "已付" })}<br /><span className="text-lg text-villa-text-primary">RM{order.paid}</span></div>
-                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Balance", zh: "尾款" })}<br /><span className="text-lg text-villa-text-primary">RM{order.balance}</span></div>
+                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Paid", zh: "å·²ä»˜" })}<br /><span className="text-lg text-villa-text-primary">RM{order.paid}</span></div>
+                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Balance", zh: "å°¾æ¬¾" })}<br /><span className="text-lg text-villa-text-primary">RM{order.balance}</span></div>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {order.status === "balance" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "付尾款" })}</button> : null}
-                    {order.status === "active" ? <button type="button" onClick={() => payBalance(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Early", zh: "提前付款" })}</button> : null}
-                    {order.status === "confirmed" ? <button type="button" onClick={() => cancelOrder(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "取消" })}</button> : null}
-                    {order.status === "completed" ? <button type="button" onClick={() => setReviewing(order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">★★★★★ {t({ en: "Leave Review", zh: "留下评价" })}</button> : null}
-                    <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "收起详情" }) : t({ en: "Order Details", zh: "订单详情" })}</button>
+                    {order.status === "balance" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "ä»˜å°¾æ¬¾" })}</button> : null}
+                    {order.status === "active" ? <button type="button" onClick={() => payBalance(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Early", zh: "æå‰ä»˜æ¬¾" })}</button> : null}
+                    {order.status === "confirmed" ? <button type="button" onClick={() => cancelOrder(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "å–æ¶ˆ" })}</button> : null}
+                    {order.status === "completed" ? <button type="button" onClick={() => openReview(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{order.review ? t({ en: "Reviewed", zh: "å·²è¯„ä»·" }) : `â˜…â˜…â˜…â˜…â˜… ${t({ en: "Leave Review", zh: "ç•™ä¸‹è¯„ä»·" })}`}</button> : null}
+                    <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "æ”¶èµ·è¯¦æƒ…" }) : t({ en: "Order Details", zh: "è®¢å•è¯¦æƒ…" })}</button>
                   </div>
 
                   {reviewing === order.orderId ? (
                     <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
-                      <div className="text-lg text-villa-primary">★★★★★</div>
-                      <textarea className="villa-input mt-2 h-20 py-3" value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} placeholder={t({ en: "Share your review...", zh: "写下你的评价..." })} />
-                      <button type="button" onClick={() => saveReview(order)} className="villa-button mt-3 w-full">{t({ en: "Save Review", zh: "保存评价" })}</button>
+                      <div className="flex gap-1 text-2xl text-villa-primary">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button key={star} type="button" aria-label={`${star} stars`} onClick={() => setReviewStars(star)} className="leading-none">
+                            {star <= reviewStars ? "â˜…" : "â˜†"}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea className="villa-input mt-2 h-20 py-3" value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} placeholder={t({ en: "Share your review...", zh: "å†™ä¸‹ä½ çš„è¯„ä»·..." })} />
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button type="button" onClick={closeReview} className="villa-button-outline w-full">{t({ en: "Cancel", zh: "å–æ¶ˆ" })}</button>
+                        <button type="button" onClick={() => saveReview(order)} className="villa-button w-full">{t({ en: "Save Review", zh: "ä¿å­˜è¯„ä»·" })}</button>
+                      </div>
                     </div>
                   ) : null}
 
                   {open ? (
                     <div className="mt-3 grid gap-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
                       <button type="button" onClick={() => window.location.href = "/diary"} className="flex items-center justify-between rounded-[14px] bg-white p-3 text-left text-sm font-black text-villa-text-primary">
-                        <span>{order.photosAvailable ? `${order.photosAvailable} ${t({ en: "Photos Available", zh: "张照片可查看" })}` : t({ en: "No diary photos yet", zh: "还没有日记照片" })}</span>
-                        <span>›</span>
+                        <span>{order.photosAvailable ? `${order.photosAvailable} ${t({ en: "Photos Available", zh: "å¼ ç…§ç‰‡å¯æŸ¥çœ‹" })}` : t({ en: "No diary photos yet", zh: "è¿˜æ²¡æœ‰æ—¥è®°ç…§ç‰‡" })}</span>
+                        <span>â€º</span>
                       </button>
                       <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
-                        <div className="flex justify-between"><span>{t({ en: "Booking Total", zh: "预约总额" })}</span><strong>RM{order.total}</strong></div>
-                        <div className="mt-2 flex justify-between"><span>{t({ en: "Paid", zh: "已付" })}</span><strong>RM{order.paid}</strong></div>
-                        <div className="mt-2 flex justify-between"><span>{t({ en: "Balance", zh: "尾款" })}</span><strong>RM{order.balance}</strong></div>
+                        <div className="flex justify-between"><span>{t({ en: "Booking Total", zh: "é¢„çº¦æ€»é¢" })}</span><strong>RM{order.total}</strong></div>
+                        <div className="mt-2 flex justify-between"><span>{t({ en: "Paid", zh: "å·²ä»˜" })}</span><strong>RM{order.paid}</strong></div>
+                        <div className="mt-2 flex justify-between"><span>{t({ en: "Balance", zh: "å°¾æ¬¾" })}</span><strong>RM{order.balance}</strong></div>
                       </div>
                       <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
                         <p className="m-0">{order.serviceLabel}</p>
                         <p className="m-0 mt-1">{order.dateLabel}</p>
-                        <p className="m-0 mt-1">{order.specialRequest || t({ en: "No special request.", zh: "没有特别要求。" })}</p>
+                        <p className="m-0 mt-1">{order.specialRequest || t({ en: "No special request.", zh: "æ²¡æœ‰ç‰¹åˆ«è¦æ±‚ã€‚" })}</p>
                       </div>
-                      {order.review ? <p className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">★★★★★ {order.review.body}</p> : null}
+                      {order.review ? <p className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">{"â˜…".repeat(order.review.stars)}{"â˜†".repeat(5 - order.review.stars)} {order.review.body}</p> : null}
                     </div>
                   ) : null}
                 </article>

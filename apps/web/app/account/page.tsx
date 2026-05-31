@@ -152,13 +152,20 @@ export default function AccountPage() {
           <div className="mt-5 grid gap-3">
             <section className="villa-card">
               <div className="flex items-center gap-4">
-                <button type="button" onClick={() => setAvatarOpen(true)} className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-[24px] bg-villa-primary-bg shadow-sm">
+                <button type="button" onClick={() => setAvatarOpen(true)} className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-[24px] bg-villa-primary-bg shadow-sm" aria-label="Change Avatar">
                   <img src={avatarSrc} alt={t({ en: "Profile avatar", zh: "头像" })} className="h-full w-full object-cover" />
+                  <span className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-villa-primary text-white shadow-md">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path d="M8 7h8l1.5 2H20v9H4V9h2.5L8 7Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                      <circle cx="12" cy="13.5" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+                    </svg>
+                  </span>
                 </button>
                 <div className="min-w-0 flex-1">
                   <h2 className="font-title text-2xl font-black text-villa-text-primary">{user.name || t({ en: "Pet Owner", zh: "宠主" })}</h2>
                   <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{user.email || "you@example.com"}</p>
                   <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{user.phone || "+60"}</p>
+                  <button type="button" onClick={() => setAvatarOpen(true)} className="mt-2 text-xs font-black text-villa-primary">{t({ en: "Change Avatar", zh: "更换头像" })}</button>
                 </div>
               </div>
             </section>
@@ -211,15 +218,21 @@ export default function AccountPage() {
               <h2 className="card-title">{t({ en: "Verification", zh: "验证状态" })}</h2>
               <div className="mt-3 grid gap-2 text-sm font-black">
                 {[
-                  { key: "phone" as const, label: t({ en: "Phone", zh: "电话" }), verified: Boolean(user.phoneVerified) },
-                  { key: "email" as const, label: t({ en: "Email", zh: "邮箱" }), verified: Boolean(user.emailVerified) }
+                  { key: "phone" as const, label: t({ en: "Phone", zh: "电话" }), value: user.phone || "+60", verified: Boolean(user.phoneVerified) },
+                  { key: "email" as const, label: t({ en: "Email", zh: "邮箱" }), value: user.email || "you@example.com", verified: Boolean(user.emailVerified) }
                 ].map((item) => (
-                  <button key={item.key} type="button" onClick={() => !item.verified && beginVerification(item.key)} className="flex justify-between rounded-[16px] bg-villa-primary-bg p-3 text-left">
-                    <span>{item.label}</span>
-                    <span className={`rounded-full px-3 py-1 text-xs ${item.verified ? "bg-[#eef5eb] text-villa-accent-green" : "bg-red-50 text-villa-primary"}`}>
-                      {item.verified ? t({ en: "Verified", zh: "已验证" }) : t({ en: "Not Verified", zh: "未验证" })}
+                  <div key={item.key} className="flex items-center justify-between gap-3 rounded-[16px] bg-villa-primary-bg p-3 text-left">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black text-villa-text-primary">{item.label}</span>
+                      <span className="mt-1 block truncate text-xs font-bold text-villa-text-secondary">{item.value}</span>
                     </span>
-                  </button>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className={`rounded-full px-3 py-1 text-xs ${item.verified ? "bg-[#eef5eb] text-villa-accent-green" : "bg-red-50 text-villa-primary"}`}>
+                        {item.verified ? t({ en: "Verified", zh: "已验证" }) : t({ en: "Not Verified", zh: "未验证" })}
+                      </span>
+                      {!item.verified ? <button type="button" onClick={() => beginVerification(item.key)} className="villa-button-outline min-h-[30px] px-3 py-1 text-[11px]">{t({ en: "Verify", zh: "验证" })}</button> : null}
+                    </span>
+                  </div>
                 ))}
               </div>
               {verifyTarget ? (

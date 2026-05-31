@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" role="img" aria-label="DuitNow QR">
-  <rect width="160" height="96" rx="22" fill="#fff"/>
-  <circle cx="48" cy="42" r="25" fill="#ED2B5F"/>
-  <path d="M39 26h14c13 0 22 8 22 19s-9 19-22 19H39V26Zm12 11v16h3c6 0 9-3 9-8s-3-8-9-8h-3Z" fill="#fff"/>
-  <text x="80" y="41" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#3d1f0d">DuitNow</text>
-  <text x="80" y="61" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#e8927c">QR</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="DuitNow">
+  <rect width="240" height="120" rx="18" fill="#fff"/>
+  <path d="M70 17c31 0 50 19 50 48 0 31-22 49-53 49H30V17h40Z" fill="#ec1f65"/>
+  <path d="M66 43c13 0 22 8 22 22s-9 23-23 23H56V43h10Z" fill="#fff"/>
+  <text x="126" y="58" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#1d1d1d">Duit</text>
+  <text x="126" y="91" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#ec1f65">Now</text>
 </svg>

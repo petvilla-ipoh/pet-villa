@@ -6,13 +6,38 @@ import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { saveBookingDraft } from "../lib/orderFlow";
+import {
+  availableSlotsForDate,
+  buildCapacityMap,
+  daysInclusive,
+  firstCapacityIssue,
+  formatDateRange,
+  startOfLocalDay,
+  toDateKey
+} from "../lib/bookingCapacity";
 
-const days = Array.from({ length: 30 }, (_, index) => index + 1);
-const fullDays = new Set([8, 14, 15, 22]);
 const timeOptions = ["9:00am", "10:00am", "11:00am", "12:00pm", "1:00pm", "2:00pm", "3:00pm", "4:00pm", "5:00pm", "6:00pm", "7:00pm", "8:00pm"];
 
 function hourIndex(value: string) {
   return timeOptions.indexOf(value) + 9;
+}
+
+function createLocalDate(year: number, month: number, day: number) {
+  return new Date(year, month, day);
+}
+
+function monthLabel(date: Date) {
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function monthCells(month: Date) {
+  const first = createLocalDate(month.getFullYear(), month.getMonth(), 1);
+  const blankCount = (first.getDay() + 6) % 7;
+  const totalDays = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  return [
+    ...Array.from({ length: blankCount }, () => null),
+    ...Array.from({ length: totalDays }, (_, index) => createLocalDate(month.getFullYear(), month.getMonth(), index + 1))
+  ];
 }
 
 function ServiceIcon({ type }: { type: "overnight" | "daycare" }) {
@@ -71,12 +96,14 @@ function CheckMark({ active }: { active: boolean }) {
 
 export default function BookingPage() {
   const { t } = useLanguage();
+  const today = startOfLocalDay(new Date());
   const [pets, setPets] = useState<PetProfile[]>([]);
   const [service, setService] = useState<"overnight" | "daycare">("overnight");
   const [dateTouched, setDateTouched] = useState(false);
   const [selectedPets, setSelectedPets] = useState<string[]>([]);
-  const [startDay, setStartDay] = useState(4);
-  const [endDay, setEndDay] = useState(6);
+  const [visibleMonth, setVisibleMonth] = useState(() => createLocalDate(today.getFullYear(), today.getMonth(), 1));
+  const [startDate, setStartDate] = useState(() => createLocalDate(today.getFullYear(), today.getMonth(), today.getDate()));
+  const [endDate, setEndDate] = useState(() => createLocalDate(today.getFullYear(), today.getMonth(), today.getDate()));
   const [startTime, setStartTime] = useState("10:00am");
   const [endTime, setEndTime] = useState("2:00pm");
   const [specialRequest, setSpecialRequest] = useState("");
@@ -96,52 +123,54 @@ export default function BookingPage() {
   const petCount = Math.max(1, selectedPets.length);
   const selectedPetNames = selectedPetObjects.map((pet) => pet.name);
   const daycareHours = Math.max(1, hourIndex(endTime) - hourIndex(startTime));
-  const overnightNights = Math.max(1, endDay - startDay + 1);
+  const overnightNights = daysInclusive(startDate, endDate);
   const unitTotal = service === "overnight" ? overnightNights * 40 : daycareHours * 5;
   const total = selectedPets.length > 0 ? unitTotal * petCount : 0;
+  const capacityUsage = useMemo(() => buildCapacityMap(), [dateTouched, selectedPets.length]);
+  const capacityIssue = selectedPets.length > 0 ? firstCapacityIssue(startDate, endDate, selectedPets.length, capacityUsage) : null;
 
   const dateLabel = useMemo(() => {
-    if (service === "daycare") return `Jun ${startDay}, ${startTime} - ${endTime}`;
-    return startDay === endDay ? `Jun ${startDay}` : `Jun ${startDay} - Jun ${endDay}`;
-  }, [endDay, endTime, service, startDay, startTime]);
+    if (service === "daycare") return `${formatDateRange(startDate, startDate)}, ${startTime} - ${endTime}`;
+    return formatDateRange(startDate, endDate);
+  }, [endDate, endTime, service, startDate, startTime]);
 
   const serviceCompleted = Boolean(service);
   const dateCompleted = serviceCompleted && dateTouched;
   const petCompleted = dateCompleted && selectedPets.length > 0;
-  const confirmCompleted = petCompleted && total > 0;
+  const confirmCompleted = petCompleted && total > 0 && !capacityIssue;
   const currentStep = !serviceCompleted ? 0 : !dateCompleted ? 1 : !petCompleted ? 2 : 3;
 
   function chooseService(nextService: "overnight" | "daycare") {
     setService(nextService);
-    if (nextService === "daycare") setEndDay(startDay);
+    if (nextService === "daycare") setEndDate(startDate);
   }
 
-  function chooseDate(day: number) {
-    if (fullDays.has(day)) return;
+  function chooseDate(date: Date) {
+    if (date < today || availableSlotsForDate(date, capacityUsage) <= 0) return;
     setDateTouched(true);
     if (service === "daycare") {
-      setStartDay(day);
-      setEndDay(day);
+      setStartDate(date);
+      setEndDate(date);
       return;
     }
-    if (startDay === endDay) {
-      if (day > startDay) {
-        setEndDay(day);
+    if (toDateKey(startDate) === toDateKey(endDate)) {
+      if (date > startDate) {
+        setEndDate(date);
       } else {
-        setStartDay(day);
+        setStartDate(date);
       }
       return;
     }
-    if (day > endDay) {
-      setEndDay(day);
+    if (date > endDate) {
+      setEndDate(date);
       return;
     }
-    if (day < startDay) {
-      setStartDay(day);
-      setEndDay(day);
+    if (date < startDate) {
+      setStartDate(date);
+      setEndDate(date);
     } else {
-      setStartDay(day);
-      setEndDay(day);
+      setStartDate(date);
+      setEndDate(date);
     }
   }
 
@@ -167,6 +196,8 @@ export default function BookingPage() {
       service,
       serviceLabel: service === "overnight" ? "Overnight Boarding" : "Daycare",
       dateLabel,
+      startDateISO: toDateKey(startDate),
+      endDateISO: toDateKey(endDate),
       nights: service === "overnight" ? overnightNights : 0,
       hours: service === "daycare" ? daycareHours : 0,
       pets: selectedPetObjects.map((pet) => ({
@@ -284,31 +315,41 @@ export default function BookingPage() {
 
                 <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/40 p-3">
                   <div className="mb-3 flex items-center justify-between">
-                    <strong className="text-sm">June 2026</strong>
-                    <span className="text-xs font-bold text-villa-text-muted">{t({ en: "Full dates are disabled", zh: "已满日期不可选" })}</span>
+                    <button type="button" className="rounded-full px-2 text-lg font-black text-villa-text-primary" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>‹</button>
+                    <strong className="text-sm">{monthLabel(visibleMonth)}</strong>
+                    <button type="button" className="rounded-full px-2 text-lg font-black text-villa-text-primary" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>›</button>
                   </div>
+                  <p className="mb-3 text-center text-[11px] font-bold text-villa-text-muted">{t({ en: "Past dates are disabled. Full dates only appear after real capacity is reached.", zh: "过去日期不可选；只有真实满位后才会显示 Full。" })}</p>
                   <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-villa-text-muted">
                     {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
                   </div>
                   <div className="mt-2 grid grid-cols-7 gap-1.5">
-                    {days.map((day) => {
-                      const disabled = fullDays.has(day);
-                      const active = day >= startDay && day <= endDay;
+                    {monthCells(visibleMonth).map((date, index) => {
+                      if (!date) return <span key={`blank-${index}`} />;
+                      const past = date < today;
+                      const slots = availableSlotsForDate(date, capacityUsage);
+                      const full = slots <= 0;
+                      const disabled = past || full;
+                      const active = date >= startOfLocalDay(startDate) && date <= startOfLocalDay(endDate);
+                      const isToday = toDateKey(date) === toDateKey(today);
                       return (
                         <button
-                          key={day}
+                          key={toDateKey(date)}
                           type="button"
                           disabled={disabled}
-                          onClick={() => chooseDate(day)}
+                          onClick={() => chooseDate(date)}
+                          title={full ? "Full" : past ? "Past date" : `${slots} slots left`}
                           className={`min-h-[40px] rounded-[12px] border text-xs font-black transition ${
                             disabled
                               ? "cursor-not-allowed border-[#eaded7] bg-[#eee6e1] text-villa-text-muted"
                               : active
                                 ? "border-villa-primary bg-villa-primary text-white shadow-sm"
-                                : "border-villa-primary-light bg-white text-villa-text-secondary hover:border-villa-primary"
+                                : isToday
+                                  ? "border-villa-primary bg-white text-villa-primary hover:bg-villa-primary-bg"
+                                  : "border-villa-primary-light bg-white text-villa-text-secondary hover:border-villa-primary"
                           }`}
                         >
-                          {day}
+                          {date.getDate()}
                         </button>
                       );
                     })}
@@ -403,6 +444,14 @@ export default function BookingPage() {
                 </div>
               </div>
               <div className="my-4 h-px bg-villa-primary-light" />
+              {capacityIssue ? (
+                <p className="mb-3 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-700">
+                  {t({
+                    en: `Only ${capacityIssue.available} slot${capacityIssue.available === 1 ? "" : "s"} left on ${formatDateRange(capacityIssue.date, capacityIssue.date)}.`,
+                    zh: `${formatDateRange(capacityIssue.date, capacityIssue.date)} 只剩 ${capacityIssue.available} 个位置。`
+                  })}
+                </p>
+              ) : null}
               {pets.length === 0 ? (
                 <a href="/pets?mode=add" className="villa-button w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
               ) : (
