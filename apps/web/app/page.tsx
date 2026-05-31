@@ -28,16 +28,9 @@ type IconName =
   | "flea"
   | "vet";
 
-const heroTags = [
-  { icon: "no", label: "No Cages" },
-  { icon: "heart", label: "24h Care" },
-  { icon: "dog", label: "1-12kg Only" },
-  { icon: "camera", label: "3-5 Daily Photo Updates" }
-] satisfies { icon: IconName; label: string }[];
-
 const featureCards = [
   {
-    icon: "home",
+    icon: "no",
     title: { en: "Cage Free Home", zh: "不关笼家庭" },
     body: { en: "Your dog stays in a safe, comfortable home.", zh: "狗狗住在安全舒适的家庭环境。" }
   },
@@ -55,6 +48,29 @@ const featureCards = [
     icon: "shield",
     title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" },
     body: { en: "A clean, secure and loving space for your furry friend.", zh: "干净安全又有爱的寄宿空间。" }
+  }
+] satisfies { icon: IconName; title: { en: string; zh: string }; body: { en: string; zh: string } }[];
+
+const serviceCards = [
+  {
+    icon: "no",
+    title: { en: "No Cages", zh: "不关笼" },
+    body: { en: "Your dog stays free in a calm home space.", zh: "狗狗在放松的家庭空间自由活动。" }
+  },
+  {
+    icon: "heart",
+    title: { en: "24h Care", zh: "24小时照顾" },
+    body: { en: "Owner-supervised care, day and night.", zh: "白天晚上都有人看顾陪伴。" }
+  },
+  {
+    icon: "dog",
+    title: { en: "1-12kg Only", zh: "仅接1-12kg" },
+    body: { en: "Small dogs only, with a gentle group setting.", zh: "只接小型犬，环境更安心。" }
+  },
+  {
+    icon: "camera",
+    title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" },
+    body: { en: "Daily photos and videos so you can feel at ease.", zh: "每天收到照片视频，让你安心看到狗狗状态。" }
   }
 ] satisfies { icon: IconName; title: { en: string; zh: string }; body: { en: string; zh: string } }[];
 
@@ -397,32 +413,24 @@ export default function HomePage() {
                 </a>
               </div>
             </div>
-
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {heroTags.map((tag) => (
-                <div key={tag.label} className="flex min-h-[74px] items-center justify-center gap-3 rounded-[22px] bg-white/92 px-3 py-4 shadow-[0_10px_30px_rgba(61,31,13,0.10)] backdrop-blur">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-villa-primary-bg">
-                    <Icon name={tag.icon} className="h-8 w-8" />
-                  </span>
-                  <strong className="text-sm font-black leading-tight text-villa-text-primary">{tag.label}</strong>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 
         <section id="services" className="px-4 pb-8 sm:px-6 lg:px-16">
-          <div className="villa-container grid gap-4 md:grid-cols-2">
-            {featureCards.map((feature, index) => (
-              <article key={feature.title.en} className="relative overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/92 p-4 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-                <div className="grid grid-cols-[96px_1fr] items-center gap-4 sm:grid-cols-[120px_1fr]">
-                  <div className="grid h-24 place-items-center overflow-hidden rounded-[20px] bg-villa-primary-bg">
-                    {index === 0 ? <MiniDogArt /> : <Icon name={feature.icon} className="h-20 w-20" />}
-                  </div>
-                  <div>
-                    <h2 className="font-title text-[18px] font-black leading-tight text-villa-text-primary">{t(feature.title)}</h2>
-                    <p className="mt-2 text-xs font-semibold leading-relaxed text-villa-text-secondary">{t(feature.body)}</p>
-                  </div>
+          <div className="villa-container grid grid-cols-2 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/88 shadow-[0_12px_36px_rgba(61,31,13,0.10)] lg:grid-cols-4">
+            {serviceCards.map((feature, index) => (
+              <article
+                key={feature.title.en}
+                className={`grid min-h-[168px] place-items-center border-b border-villa-primary-light/75 p-4 text-center lg:border-b-0 lg:border-r ${
+                  index % 2 === 0 ? "border-r" : ""
+                } ${index > 1 ? "border-b-0" : ""} ${index === serviceCards.length - 1 ? "lg:border-r-0" : ""}`}
+              >
+                <div className="grid h-16 w-16 place-items-center rounded-[18px] bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.08)]">
+                  <Icon name={feature.icon} className="h-11 w-11" />
+                </div>
+                <div>
+                  <h2 className="mt-3 font-title text-[16px] font-black leading-tight text-villa-text-primary">{t(feature.title)}</h2>
+                  <p className="mt-2 text-[11px] font-semibold leading-relaxed text-villa-text-secondary">{t(feature.body)}</p>
                 </div>
               </article>
             ))}
@@ -438,15 +446,10 @@ export default function HomePage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <article className="relative overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
                 <span className="absolute right-4 top-4 rounded-pill bg-villa-primary px-4 py-2 text-xs font-black text-white">Most Popular</span>
-                <div className="grid gap-4 sm:grid-cols-[150px_1fr]">
+                <div className="grid gap-4">
                   <div>
                     <Icon name="moon" className="h-12 w-12" />
-                    <div className="mt-3 h-32 overflow-hidden rounded-[22px] bg-villa-primary-bg">
-                      <CartoonPetArt variant="boarding" />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="card-title">Overnight Boarding</h3>
+                    <h3 className="card-title mt-3">Overnight Boarding</h3>
                     <div className="price-number mt-3">RM40<span className="ml-1 text-sm text-villa-text-primary">/night</span></div>
                     <ul className="mt-4 grid gap-2 text-xs font-bold text-villa-text-primary">
                       {["No cages", "Same-room sleeping", "24h companionship", "Daily photo updates"].map((item) => (
