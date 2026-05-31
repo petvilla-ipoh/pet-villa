@@ -105,7 +105,7 @@ function MenuItemIcon({ name }: { name: string }) {
   const coral = "#e8927c";
   if (name === "pets") {
     return (
-      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <ellipse cx="24" cy="31" rx="9" ry="7" fill={coral} />
         <ellipse cx="13" cy="21" rx="4" ry="5.5" fill={coral} />
         <ellipse cx="20" cy="14" rx="4" ry="5.5" fill={coral} />
@@ -116,7 +116,7 @@ function MenuItemIcon({ name }: { name: string }) {
   }
   if (name === "booking") {
     return (
-      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <rect x="10" y="12" width="28" height="28" rx="6" fill="#fff8f5" stroke={coral} strokeWidth="3" />
         <path d="M10 21h28M17 8v9M31 8v9" stroke={coral} strokeWidth="3.2" strokeLinecap="round" />
         <path d="M18 28h4M27 28h4M18 34h4M27 34h4" stroke="#7a9e7e" strokeWidth="2.5" strokeLinecap="round" />
@@ -125,7 +125,7 @@ function MenuItemIcon({ name }: { name: string }) {
   }
   if (name === "orders") {
     return (
-      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <path d="m24 6 16 9v18l-16 9-16-9V15L24 6Z" fill="#f2a46d" />
         <path d="m16 19 8 5 8-5M24 24v12" fill="none" stroke="#fff8f5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -133,7 +133,7 @@ function MenuItemIcon({ name }: { name: string }) {
   }
   if (name === "diary") {
     return (
-      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <path d="M11 18h7l3-5h7l3 5h6a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V23a5 5 0 0 1 5-5Z" fill="#fff8f5" stroke={stroke} strokeWidth="3" />
         <circle cx="24" cy="30" r="8" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
       </svg>
@@ -141,14 +141,14 @@ function MenuItemIcon({ name }: { name: string }) {
   }
   if (name === "account") {
     return (
-      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <circle cx="24" cy="16" r="8" fill={coral} />
         <path d="M9 41c3-12 27-12 30 0" fill={coral} />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+    <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
       <circle cx="24" cy="24" r="16" fill="#fff8f5" stroke={stroke} strokeWidth="3" />
     </svg>
   );
@@ -208,13 +208,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
     ? isRegisterActive ? activeAuthButtonClass : inactiveAuthButtonClass
     : registerButtonClass;
   const mobileLoginClass = isLoginActive
-    ? "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-md"
-    : "inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-villa-primary px-4 text-sm font-black text-villa-primary shadow-sm";
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
+    : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm";
   const mobileRegisterClass = isRegisterActive
-    ? "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-md"
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
     : isAuthPage
-      ? "inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-villa-primary px-4 text-sm font-black text-villa-primary shadow-sm"
-      : "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-[0_8px_20px_rgba(232,146,124,0.22)]";
+      ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
+      : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-[0_8px_20px_rgba(232,146,124,0.18)]";
 
   function selectAuthTab(event: ReactMouseEvent<HTMLAnchorElement>, tab: "login" | "register") {
     if (!isAuthPage) return;
@@ -242,14 +242,14 @@ export function AppNav({ host = false }: { host?: boolean }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 rounded-b-[26px] border-b border-villa-primary-light bg-villa-background/96 px-4 py-5 shadow-[0_8px_26px_rgba(61,31,13,0.06)] backdrop-blur-xl lg:rounded-none lg:px-4 lg:py-3">
+    <header className="sticky top-0 z-40 rounded-b-[22px] border-b border-villa-primary-light bg-villa-background/96 px-4 py-3 shadow-[0_8px_26px_rgba(61,31,13,0.06)] backdrop-blur-xl lg:rounded-none lg:px-4 lg:py-3">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <NavLogo />
         <div className="flex items-center gap-2 lg:hidden">
-          <a className={`${mobileLoginClass} min-w-[72px]`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
+          <a className={`${mobileLoginClass} min-w-[68px]`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
             {t({ en: "Login", zh: "登录" })}
           </a>
-          <a className={`${mobileRegisterClass} min-w-[88px]`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
+          <a className={`${mobileRegisterClass} min-w-[82px]`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
             {t({ en: "Register", zh: "注册" })}
           </a>
           {false ? (
@@ -264,7 +264,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
           ) : null}
           <button
             type="button"
-            className="grid h-[52px] w-[52px] place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-[0_8px_22px_rgba(61,31,13,0.10)] transition hover:-translate-y-px"
+            className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-[0_8px_22px_rgba(61,31,13,0.10)] transition hover:-translate-y-px"
             onClick={() => setOpen((value) => !value)}
             aria-label="Menu"
             aria-expanded={open}
@@ -326,58 +326,58 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
       {open ? (
         loggedIn ? (
-          <nav className="mx-auto mt-4 max-w-[430px] rounded-[28px] border border-villa-primary-light bg-white/96 p-5 shadow-[0_18px_48px_rgba(61,31,13,0.14)] backdrop-blur lg:hidden">
-            <div className="mb-4 flex items-center gap-4">
-              <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
+          <nav className="mx-auto mt-3 max-w-[390px] rounded-[22px] border border-villa-primary-light bg-white/96 p-4 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur lg:hidden">
+            <div className="mb-2 flex items-center gap-3 px-1">
+              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
                 <img src="/hero-dogs.png" alt="" className="h-full w-full object-cover" style={{ objectPosition: "34% 76%" }} />
               </div>
               <div>
-                <p className="m-0 text-sm font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
-                <h2 className="m-0 font-title text-2xl font-black leading-tight text-villa-text-primary">{userName}</h2>
+                <p className="m-0 text-xs font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
+                <h2 className="m-0 font-title text-xl font-black leading-tight text-villa-text-primary">{userName}</h2>
               </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {privateMenu.map((item) => (
-                <a key={item.href} className="flex items-center gap-3 rounded-[18px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-4 py-3 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-white">
+                <a key={item.href} className="flex items-center gap-3 rounded-[16px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-3 py-2.5 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-white">
                     <MenuItemIcon name={item.icon} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block text-base font-black leading-tight text-villa-text-primary">{t({ en: item.en, zh: item.zh })}</strong>
-                    <span className="block text-xs font-bold leading-tight text-villa-text-muted">{t({ en: item.descEn, zh: item.descZh })}</span>
+                    <strong className="block text-sm font-black leading-tight text-villa-text-primary">{t({ en: item.en, zh: item.zh })}</strong>
+                    <span className="block text-[11px] font-bold leading-tight text-villa-text-muted">{t({ en: item.descEn, zh: item.descZh })}</span>
                   </span>
                   <span className="text-villa-text-muted"><ChevronIcon /></span>
                 </a>
               ))}
             </div>
 
-            <div className="mt-3 rounded-[18px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-3">
-              <div className="mb-3 flex items-center gap-3 px-1">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-villa-text-primary">
+            <div className="mt-2 rounded-[16px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-2.5">
+              <div className="mb-2 flex items-center gap-3 px-1">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-villa-text-primary">
                   <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden="true">
                     <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" strokeWidth="2.5" />
                     <path d="M4 16h24M16 4c4 4 6 8 6 12s-2 8-6 12M16 4c-4 4-6 8-6 12s2 8 6 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
                   </svg>
                 </span>
-                <strong className="text-base font-black text-villa-text-primary">{t({ en: "Language", zh: "语言" })}</strong>
+                <strong className="text-sm font-black text-villa-text-primary">{t({ en: "Language", zh: "语言" })}</strong>
               </div>
               <div className="grid grid-cols-2 gap-2 rounded-full bg-white/80 p-1">
-                <button type="button" className={`min-h-[42px] rounded-full text-sm font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("en")}>EN</button>
-                <button type="button" className={`min-h-[42px] rounded-full text-sm font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("zh")}>中文</button>
+                <button type="button" className={`min-h-[34px] rounded-full text-xs font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("en")}>EN</button>
+                <button type="button" className={`min-h-[34px] rounded-full text-xs font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("zh")}>中文</button>
               </div>
             </div>
 
-            <button type="button" className="mt-3 flex min-h-[54px] w-full items-center gap-3 rounded-[18px] border border-villa-primary-light bg-white px-5 text-left text-base font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
+            <button type="button" className="mt-2 flex min-h-[44px] w-full items-center gap-3 rounded-[16px] border border-villa-primary-light bg-white px-4 text-left text-sm font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
               <LogoutIcon />
               {t({ en: "Logout", zh: "退出登录" })}
             </button>
           </nav>
         ) : (
-          <nav className="mx-auto mt-4 max-w-[430px] rounded-[28px] border border-villa-primary-light bg-white/96 p-5 shadow-[0_18px_48px_rgba(61,31,13,0.14)] backdrop-blur lg:hidden">
-            <a className="villa-button min-h-[64px] w-full justify-between px-6 text-xl" href="/booking">
+          <nav className="mx-auto mt-3 max-w-[390px] rounded-[22px] border border-villa-primary-light bg-white/96 p-4 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur lg:hidden">
+            <a className="villa-button min-h-[52px] w-full justify-between px-5 text-base" href="/booking">
               <span className="inline-flex items-center gap-3">
-                <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
+                <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
                   <rect x="10" y="12" width="28" height="28" rx="6" fill="#fff8f5" stroke="currentColor" strokeWidth="3" />
                   <path d="M10 21h28M17 8v9M31 8v9" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
                 </svg>
@@ -385,17 +385,17 @@ export function AppNav({ host = false }: { host?: boolean }) {
               </span>
               <ChevronIcon />
             </a>
-            <div className="my-5 h-px bg-villa-primary-light" />
-            <div className="grid gap-3">
-              <button type="button" className="flex min-h-[56px] items-center gap-4 rounded-[18px] px-4 text-left" onClick={() => setLang("en")}>
-                <span className={`grid h-12 w-12 place-items-center rounded-full text-sm font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>EN</span>
-                <strong className="flex-1 text-lg font-black text-villa-text-primary">English</strong>
-                {lang === "en" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
+            <div className="my-3 h-px bg-villa-primary-light" />
+            <div className="grid gap-2">
+              <button type="button" className="flex min-h-[46px] items-center gap-3 rounded-[16px] px-3 text-left" onClick={() => setLang("en")}>
+                <span className={`grid h-10 w-10 place-items-center rounded-full text-xs font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>EN</span>
+                <strong className="flex-1 text-sm font-black text-villa-text-primary">English</strong>
+                {lang === "en" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
               </button>
-              <button type="button" className="flex min-h-[56px] items-center gap-4 rounded-[18px] px-4 text-left" onClick={() => setLang("zh")}>
-                <span className={`grid h-12 w-12 place-items-center rounded-full text-lg font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>中</span>
-                <strong className="flex-1 text-lg font-black text-villa-text-primary">中文</strong>
-                {lang === "zh" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
+              <button type="button" className="flex min-h-[46px] items-center gap-3 rounded-[16px] px-3 text-left" onClick={() => setLang("zh")}>
+                <span className={`grid h-10 w-10 place-items-center rounded-full text-base font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>中</span>
+                <strong className="flex-1 text-sm font-black text-villa-text-primary">中文</strong>
+                {lang === "zh" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
               </button>
             </div>
           </nav>
@@ -441,3 +441,4 @@ export function AppNav({ host = false }: { host?: boolean }) {
     </header>
   );
 }
+

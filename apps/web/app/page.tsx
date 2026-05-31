@@ -375,10 +375,10 @@ export default function HomePage() {
       <AppNav />
 
       <main className="overflow-hidden">
-        <section id="about" className="relative min-h-[548px] overflow-hidden px-4 pb-7 pt-7 sm:px-6 lg:min-h-[520px] lg:px-16">
-          <div className="absolute right-[-86px] top-[170px] h-[330px] w-[108%] overflow-hidden opacity-90 sm:right-[-40px] sm:w-[92%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
-            <DogPhoto position="50% 58%" className="object-contain lg:object-cover" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.92)_35%,rgba(250,246,242,0.34)_66%,rgba(250,246,242,0.04)_100%)]" />
+        <section id="about" className="relative min-h-[455px] overflow-hidden px-4 pb-7 pt-7 sm:px-6 lg:min-h-[520px] lg:px-16">
+          <div className="absolute right-[-50px] top-[78px] h-[318px] w-[112%] overflow-hidden opacity-86 sm:right-[-24px] sm:w-[96%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
+            <DogPhoto position="48% 60%" className="object-cover" />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.9)_38%,rgba(250,246,242,0.24)_68%,rgba(250,246,242,0.02)_100%)]" />
             <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-villa-background to-transparent" />
           </div>
 
