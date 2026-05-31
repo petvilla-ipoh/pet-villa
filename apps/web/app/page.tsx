@@ -4,10 +4,10 @@ import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
 
 const heroFeatures = [
-  { icon: "🏡", title: { en: "Cage Free Home", zh: "不关笼家庭" } },
-  { icon: "🤗", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
-  { icon: "📸", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
-  { icon: "🛡️", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
+  { icon: "home", title: { en: "Cage Free Home", zh: "不关笼家庭" } },
+  { icon: "care", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
+  { icon: "camera", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
+  { icon: "shield", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
 ];
 
 const heroTags = [
@@ -16,6 +16,60 @@ const heroTags = [
   { icon: "👜", label: "1-12kg only" },
   { icon: "📸", label: "24h updates" }
 ];
+
+function FeatureIcon({ type }: { type: string }) {
+  const stroke = "#7a4a24";
+  const coral = "#e8927c";
+  const soft = "#f5c4b3";
+  const green = "#7a9e7e";
+
+  if (type === "home") {
+    return (
+      <svg viewBox="0 0 64 64" className="h-full w-full" aria-hidden="true">
+        <path d="M12 31 32 14l20 17" fill="none" stroke={stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M18 29v21h28V29" fill="#fff8f5" stroke={stroke} strokeWidth="3" strokeLinejoin="round" />
+        <path d="M24 39c0-4 3-7 8-7s8 3 8 7c0 7-8 11-8 11s-8-4-8-11Z" fill={coral} opacity="0.9" />
+        <path d="M9 45c5-1 8-4 10-9M55 45c-5-1-8-4-10-9" fill="none" stroke={green} strokeWidth="3" strokeLinecap="round" />
+        <circle cx="32" cy="39" r="3" fill="#fff" opacity="0.85" />
+      </svg>
+    );
+  }
+
+  if (type === "care") {
+    return (
+      <svg viewBox="0 0 64 64" className="h-full w-full" aria-hidden="true">
+        <circle cx="29" cy="22" r="9" fill="#f2b27f" stroke={stroke} strokeWidth="2.5" />
+        <path d="M16 55c1-14 25-14 27 0" fill="#fff0ec" stroke={stroke} strokeWidth="3" strokeLinecap="round" />
+        <circle cx="43" cy="37" r="9" fill="#d99864" stroke={stroke} strokeWidth="2.5" />
+        <path d="M34 39c3 8 14 8 18 0" fill="none" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M18 35c5 8 15 10 25 6" fill="none" stroke={coral} strokeWidth="4" strokeLinecap="round" />
+        <path d="M49 15c3-5 10-2 8 4-1 4-8 8-8 8s-7-4-8-8c-2-6 5-9 8-4Z" fill={coral} opacity="0.9" />
+        <circle cx="39" cy="35" r="1.8" fill={stroke} />
+        <circle cx="47" cy="35" r="1.8" fill={stroke} />
+      </svg>
+    );
+  }
+
+  if (type === "camera") {
+    return (
+      <svg viewBox="0 0 64 64" className="h-full w-full" aria-hidden="true">
+        <path d="M17 24h9l3-5h9l3 5h6a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H17a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z" fill="#fff8f5" stroke={stroke} strokeWidth="3" strokeLinejoin="round" />
+        <circle cx="32" cy="38" r="9" fill={soft} stroke={coral} strokeWidth="3" />
+        <circle cx="46" cy="30" r="2.5" fill={coral} />
+        <path d="M14 16c3-4 8-1 6 4-1 3-6 6-6 6s-5-3-6-6c-2-5 3-8 6-4ZM51 13c3-4 8-1 6 4-1 3-6 6-6 6s-5-3-6-6c-2-5 3-8 6-4Z" fill={coral} opacity="0.85" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 64 64" className="h-full w-full" aria-hidden="true">
+      <path d="M32 9 50 16v14c0 14-8 22-18 27-10-5-18-13-18-27V16l18-7Z" fill="#fff8f5" stroke={stroke} strokeWidth="3.5" strokeLinejoin="round" />
+      <path d="m23 32 6 6 13-15" fill="none" stroke={coral} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 47c5-1 8-4 10-9M53 47c-5-1-8-4-10-9" fill="none" stroke={green} strokeWidth="3" strokeLinecap="round" />
+      <circle cx="32" cy="16" r="2" fill={soft} />
+    </svg>
+  );
+}
 
 const notices = [
   { en: "Only 1-12kg small dogs are accepted.", zh: "只接收 1-12kg 小型犬。" },
@@ -106,16 +160,16 @@ export default function HomePage() {
 
         <section id="services" className="villa-section pt-0">
           <div className="villa-container">
-            <div className="grid grid-cols-4 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/95 shadow-[0_12px_36px_rgba(61,31,13,0.10)] backdrop-blur">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {heroFeatures.map((feature) => (
                 <article
                   key={feature.title.en}
-                  className="border-r border-villa-primary-light/60 px-2 py-3 text-center last:border-r-0 sm:px-4 sm:py-4"
+                  className="rounded-[22px] border border-villa-primary-light bg-white/95 px-3 py-4 text-center shadow-[0_10px_28px_rgba(61,31,13,0.09)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:px-4"
                 >
-                  <div className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-villa-primary-bg text-lg shadow-sm sm:h-12 sm:w-12 sm:text-2xl">
-                    {feature.icon}
+                  <div className="mx-auto h-14 w-14 sm:h-16 sm:w-16">
+                    <FeatureIcon type={feature.icon} />
                   </div>
-                  <h2 className="mt-2 text-[9px] font-black leading-[1.12] text-villa-text-primary min-[390px]:text-[10px] sm:mt-3 sm:text-sm">
+                  <h2 className="mx-auto mt-2 max-w-[104px] text-[13px] font-black leading-[1.08] text-villa-text-primary sm:mt-3 sm:text-sm">
                     {t(feature.title)}
                   </h2>
                 </article>
