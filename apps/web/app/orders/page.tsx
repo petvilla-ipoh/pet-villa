@@ -76,7 +76,7 @@ export default function OrdersPage() {
       status: "completed"
     }));
     setOrders(nextOrders);
-    setMessage(t({ en: "Balance paid successfully.", zh: "尾款已成功支付。" }));
+    setMessage(t({ en: "Demo Payment Success. Balance paid successfully.", zh: "测试付款成功。尾款已成功支付。" }));
   }
 
   function cancelOrder(order: VillaOrder) {

@@ -196,7 +196,8 @@ export default function PaymentPage() {
                       </div>
                       <h3 className="card-title">{t({ en: "Scan To Pay", zh: "扫码付款" })}</h3>
                       <p className="mt-1 text-xs font-bold text-villa-text-secondary">DuitNow QR · Scan & Pay</p>
-                      <div className="mx-auto mt-4 grid h-52 w-52 max-w-full place-items-center rounded-[20px] bg-[#e91e63] p-4 shadow-md">
+                      <div className="mx-auto mt-4 flex h-56 w-52 max-w-full flex-col items-center justify-center rounded-[20px] bg-[#e91e63] p-4 shadow-md">
+                        <img src="/assets/payment/duitnow.svg" alt="DuitNow QR" className="mb-2 h-10 w-28 object-contain rounded-[10px] bg-white px-2" />
                         <div className="grid h-full w-full place-items-center rounded-[12px] bg-white">
                           <div className="h-32 w-32 bg-[repeating-linear-gradient(45deg,#e91e63_0_6px,#ffffff_6px_12px)]" />
                         </div>

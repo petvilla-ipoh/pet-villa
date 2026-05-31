@@ -19,8 +19,8 @@ export const paymentMethods: PaymentMethod[] = [
 
 function PaymentMark({ method, compact = false }: { method: PaymentMethod; compact?: boolean }) {
   return (
-    <span className={`grid shrink-0 place-items-center overflow-hidden rounded-[12px] border border-villa-primary-light bg-white ${compact ? "h-7 w-12" : "h-12 w-16"}`}>
-      <img src={method.logo} alt={`${method.name} logo`} className="h-full w-full object-contain p-1.5" />
+    <span className={`grid shrink-0 place-items-center overflow-hidden rounded-[16px] border border-villa-primary-light bg-white ${compact ? "h-9 w-12" : "h-[72px] w-[72px]"}`}>
+      <img src={method.logo} alt={`${method.name} logo`} className={`${compact ? "h-7" : "h-11"} w-full object-contain px-2`} />
     </span>
   );
 }
@@ -45,7 +45,7 @@ export function PaymentLogo({
     );
   }
 
-  const classes = `flex w-full items-center gap-[14px] rounded-[14px] border-[1.5px] px-4 py-[14px] text-left transition-all duration-200 ${
+  const classes = `flex w-full items-center gap-[14px] rounded-[18px] border-[1.5px] px-4 py-3 text-left transition-all duration-200 ${
     selected
       ? "border-villa-primary bg-villa-primary-bg shadow-[0_0_0_3px_rgba(232,146,124,0.15)]"
       : "border-villa-primary-light bg-white hover:border-villa-primary hover:bg-villa-primary-bg"

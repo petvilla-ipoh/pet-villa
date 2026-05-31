@@ -3,6 +3,7 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { LanguageToggle } from "./LanguageToggle";
 import { useLanguage } from "./LanguageProvider";
+import { avatarToImageSrc, readProfileAvatar } from "../lib/profileAvatar";
 
 function hasSession() {
   if (typeof window === "undefined") return false;
@@ -18,6 +19,21 @@ function getSessionName() {
   } catch {
     return "";
   }
+}
+
+function getSessionUser() {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}")?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+function getSessionAvatar() {
+  const user = getSessionUser();
+  if (!user?.id) return avatarToImageSrc();
+  return avatarToImageSrc(readProfileAvatar(user.id, user.profileAvatar));
 }
 
 function getLocationState() {
@@ -159,6 +175,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
   const { lang, setLang, t } = useLanguage();
   const [loggedIn, setLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userAvatar, setUserAvatar] = useState(avatarToImageSrc());
   const [locationState, setLocationState] = useState(() => getLocationState());
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -167,11 +184,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
   useEffect(() => {
     setLoggedIn(hasSession());
     setUserName(getSessionName());
+    setUserAvatar(getSessionAvatar());
     setLocationState(getLocationState());
 
     function sync() {
       setLoggedIn(hasSession());
       setUserName(getSessionName());
+      setUserAvatar(getSessionAvatar());
       setLocationState(getLocationState());
     }
     function closeAccount(event: MouseEvent) {
@@ -341,7 +360,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
           <nav className="mx-auto mt-3 max-w-[390px] rounded-[22px] border border-villa-primary-light bg-white/96 p-4 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur lg:hidden">
             <div className="mb-2 flex items-center gap-3 px-1">
               <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
-                <img src="/hero-dogs.png" alt="" className="h-full w-full object-cover" style={{ objectPosition: "34% 76%" }} />
+                <img src={userAvatar} alt="" className="h-full w-full object-cover" />
               </div>
               <div>
                 <p className="m-0 text-xs font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
