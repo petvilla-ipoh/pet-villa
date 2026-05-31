@@ -101,8 +101,8 @@ export default function HomePage() {
       <AppNav />
 
       <main>
-        <section id="about" className="villa-section relative overflow-hidden pb-7 pt-8 sm:pb-10 sm:pt-10">
-          <div className="pointer-events-none absolute inset-y-0 right-0 top-0 h-[540px] w-[72%] opacity-95 lg:h-full lg:w-[50%]">
+        <section id="about" className="villa-section relative overflow-hidden pb-6 pt-6 sm:pb-10 sm:pt-10">
+          <div className="pointer-events-none absolute inset-y-0 right-0 top-0 h-[420px] w-[70%] opacity-95 lg:h-full lg:w-[50%]">
             <img
               src="/hero-dogs.png"
               alt=""
@@ -112,32 +112,32 @@ export default function HomePage() {
             <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-villa-background to-transparent" />
           </div>
           <span className="paw-mark right-5 top-5" />
-          <div className="villa-container relative z-10 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
-            <div className="max-w-[560px]">
-              <span className="rounded-pill bg-villa-primary-light px-3 py-2 text-xs font-bold uppercase text-villa-text-primary">
+          <div className="villa-container relative z-10">
+            <div className="max-w-[310px] min-[390px]:max-w-[340px] lg:max-w-[560px]">
+              <span className="rounded-pill bg-villa-primary-light px-3 py-2 text-[11px] font-bold uppercase text-villa-text-primary sm:text-xs">
                 The Pet Villa · Ipoh · Pet Boarding
               </span>
-              <h1 className="page-title mt-5 max-w-[360px] lg:max-w-none">A Home Away From Home <span className="text-villa-primary">♡</span></h1>
-              <p className="body-copy mt-3 max-w-2xl">
+              <h1 className="page-title mt-4 max-w-[300px] lg:max-w-none">A Home Away From Home <span className="text-villa-primary">♡</span></h1>
+              <p className="body-copy mt-3 max-w-[285px] lg:max-w-2xl">
                 {t({
                   en: "Premium small dog boarding in Ipoh · No cages · 24h companionship · thoughtful daily updates",
                   zh: "怡保精品小型犬寄宿 · 不关笼 · 24小时陪伴 · 每日温馨更新"
                 })}
               </p>
-              <div className="mt-5 grid gap-3 sm:flex">
-                <a className="villa-button" href="/booking">{t({ en: "Book a Stay", zh: "预约寄宿" })}</a>
-                <a className="villa-button-outline" href="#how-it-works">{t({ en: "Learn More", zh: "了解更多" })}</a>
+              <div className="mt-5 grid max-w-[250px] gap-3">
+                <a className="villa-button min-h-[46px] w-full" href="/booking">{t({ en: "Book a Stay", zh: "预约寄宿" })}</a>
+                <a className="villa-button-outline min-h-[46px] w-full bg-white/45 backdrop-blur" href="#how-it-works">{t({ en: "Learn More", zh: "了解更多" })}</a>
               </div>
-              <div className="mt-5 grid grid-cols-2 gap-2 min-[390px]:grid-cols-4">
+              <div className="mt-5 grid w-[calc(100vw-32px)] max-w-[480px] grid-cols-4 gap-2">
                 {heroTags.map((tag) => (
-                  <span key={tag.label} className="inline-flex items-center justify-center gap-1.5 rounded-pill bg-white/95 px-3 py-2 text-xs font-bold text-villa-text-secondary shadow-md backdrop-blur">
+                  <span key={tag.label} className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-pill bg-white/95 px-2 py-2 text-[10px] font-bold text-villa-text-secondary shadow-md backdrop-blur min-[390px]:gap-1.5 min-[390px]:text-xs">
                     <span className="text-villa-primary">{tag.icon}</span>
                     {tag.label}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="relative mt-1 h-[330px] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-[0_14px_44px_rgba(61,31,13,0.16)] sm:h-[420px] lg:mt-0 lg:aspect-[4/3] lg:h-auto">
+            <div className="relative mt-5 h-[280px] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-[0_14px_44px_rgba(61,31,13,0.16)] sm:h-[420px] lg:aspect-[4/3] lg:h-auto">
               <img
                 src="/hero-dogs.png"
                 alt="Toy poodle and French bulldog resting in a warm home living room"
