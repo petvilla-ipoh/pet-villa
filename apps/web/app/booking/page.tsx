@@ -5,6 +5,7 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
+import { saveBookingDraft } from "../lib/orderFlow";
 
 const days = Array.from({ length: 30 }, (_, index) => index + 1);
 const fullDays = new Set([8, 14, 15, 22]);
@@ -79,6 +80,7 @@ export default function BookingPage() {
   const [endDay, setEndDay] = useState(6);
   const [startTime, setStartTime] = useState("10:00am");
   const [endTime, setEndTime] = useState("2:00pm");
+  const [specialRequest, setSpecialRequest] = useState("");
 
   useEffect(() => {
     setPets(readPetProfiles());
@@ -158,6 +160,30 @@ export default function BookingPage() {
     if (confirmCompleted || index < currentStep) return "done";
     if (index === currentStep) return "current";
     return "upcoming";
+  }
+
+  function saveDraftForPayment() {
+    if (!confirmCompleted) return;
+    saveBookingDraft({
+      id: `draft-${Date.now()}`,
+      service,
+      serviceLabel: service === "overnight" ? "Overnight Boarding" : "Daycare",
+      dateLabel,
+      nights: service === "overnight" ? overnightNights : 0,
+      hours: service === "daycare" ? daycareHours : 0,
+      pets: selectedPetObjects.map((pet) => ({
+        id: pet.id,
+        name: pet.name,
+        breed: pet.breed,
+        weight: pet.weight,
+        photoDataUrl: pet.photoDataUrl
+      })),
+      total,
+      deposit: total / 2,
+      balance: total / 2,
+      specialRequest,
+      createdAt: new Date().toISOString()
+    });
   }
 
   const steps = [
@@ -333,7 +359,12 @@ export default function BookingPage() {
 
                 <label className="mt-3 grid gap-2">
                   <span className="villa-label">{t({ en: "Special Request (Optional)", zh: "特别要求（选填）" })}</span>
-                  <textarea className="villa-input h-16 py-3" placeholder={t({ en: "Tell us anything important for your dog's comfort.", zh: "告诉我们狗狗照顾上需要注意的事项。" })} />
+                  <textarea
+                    className="villa-input h-16 py-3"
+                    value={specialRequest}
+                    onChange={(event) => setSpecialRequest(event.target.value)}
+                    placeholder={t({ en: "Tell us anything important for your dog's comfort.", zh: "告诉我们狗狗照顾上需要注意的事项。" })}
+                  />
                 </label>
               </section>
             </div>
@@ -377,7 +408,7 @@ export default function BookingPage() {
               {pets.length === 0 ? (
                 <a href="/pets?mode=add" className="villa-button w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
               ) : (
-                <a href={confirmCompleted ? "/payment" : "#"} className={`villa-button w-full ${confirmCompleted ? "" : "pointer-events-none opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</a>
+                <a href={confirmCompleted ? "/payment" : "#"} onClick={saveDraftForPayment} className={`villa-button w-full ${confirmCompleted ? "" : "pointer-events-none opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</a>
               )}
               <p className="mt-3 text-center text-[11px] font-bold leading-relaxed text-villa-text-muted">{t({ en: "Your booking is only confirmed after deposit payment.", zh: "付款订金后，预约才会确认。" })}</p>
             </aside>

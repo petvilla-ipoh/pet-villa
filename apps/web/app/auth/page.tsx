@@ -5,6 +5,17 @@ import { useLanguage } from "../components/LanguageProvider";
 
 type AuthMode = "login" | "register";
 type FieldIconType = "mail" | "lock" | "user" | "phone" | "eye";
+type AuthStage = "form" | "otp" | "forgot-phone" | "forgot-otp";
+type PendingUser = {
+  fullName: string;
+  phone: string;
+  email: string;
+  password: string;
+  otp: string;
+  expiresAt: number;
+};
+
+const DEMO_OTP = "123456";
 
 function BackIcon() {
   return (
@@ -152,7 +163,15 @@ function AuthInput({
 export default function AuthPage() {
   const { t, lang, toggleLang } = useLanguage();
   const [mode, setMode] = useState<AuthMode>("login");
+  const [stage, setStage] = useState<AuthStage>("form");
   const [redirect, setRedirect] = useState("/");
+  const [pendingUser, setPendingUser] = useState<PendingUser | null>(null);
+  const [otpValue, setOtpValue] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [forgotPhone, setForgotPhone] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     function syncFromUrl() {
@@ -160,6 +179,7 @@ export default function AuthPage() {
       const requestedMode = params.get("mode") || params.get("tab");
       const nextRedirect = params.get("redirect");
       setMode(requestedMode === "register" ? "register" : "login");
+      setStage("form");
       if (nextRedirect) setRedirect(nextRedirect);
     }
 
@@ -172,8 +192,17 @@ export default function AuthPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
+    setStage("form");
+    setErrorMessage("");
+    setStatusMessage("");
     const params = new URLSearchParams(window.location.search);
     params.set("tab", nextMode);
     if (redirect && redirect !== "/") params.set("redirect", redirect);
@@ -185,14 +214,147 @@ export default function AuthPage() {
     const form = new FormData(event.currentTarget);
     const fullName = String(form.get("fullName") || "").trim();
     const emailOrPhone = String(form.get("emailOrPhone") || form.get("email") || "").trim();
+    const phone = String(form.get("phone") || "").trim();
+    const email = String(form.get("email") || "").trim();
+    const password = String(form.get("password") || "").trim();
+    const confirmPassword = String(form.get("confirmPassword") || "").trim();
+    setErrorMessage("");
+    setStatusMessage("");
+
+    if (mode === "register") {
+      if (!fullName || !phone || !email || !password || !confirmPassword) {
+        setErrorMessage(t({ en: "Please complete all required fields.", zh: "请填写所有必填资料。" }));
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage(t({ en: "Passwords do not match.", zh: "两次输入的密码不一致。" }));
+        return;
+      }
+      const nextUser: PendingUser = {
+        fullName,
+        phone,
+        email,
+        password,
+        otp: DEMO_OTP,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      };
+      setPendingUser(nextUser);
+      setOtpValue("");
+      setCooldown(60);
+      setStage("otp");
+      setStatusMessage(t({ en: "Demo OTP sent. Use 123456 to verify.", zh: "测试 OTP 已发送，请输入 123456 验证。" }));
+      return;
+    }
+
+    if (!emailOrPhone || !password) {
+      setErrorMessage(t({ en: "Please enter email or phone number and password.", zh: "请输入邮箱或电话号码和密码。" }));
+      return;
+    }
+    const registered = readRegisteredUser();
     const storedName = window.localStorage.getItem("pet-villa-last-full-name") || "";
-    const nextName = mode === "register" ? fullName : storedName;
-    if (fullName) window.localStorage.setItem("pet-villa-last-full-name", fullName);
+    const nextName = registered && (registered.email === emailOrPhone || registered.phone === emailOrPhone) ? registered.fullName : storedName;
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
-      user: { id: "demo-owner", role: "owner", name: nextName, email: emailOrPhone || "owner@example.com" }
+      user: {
+        id: "demo-owner",
+        role: "owner",
+        name: nextName,
+        email: registered?.email || emailOrPhone || "owner@example.com",
+        phone: registered?.phone || "",
+        phoneVerified: Boolean(registered?.phoneVerified),
+        emailVerified: false
+      }
     }));
     window.dispatchEvent(new Event("pet-villa-auth"));
     window.location.href = redirect || "/";
+  }
+
+  function readRegisteredUser(): { fullName: string; phone: string; email: string; phoneVerified: boolean } | null {
+    try {
+      return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
+    } catch {
+      return null;
+    }
+  }
+
+  function completeOtpVerification() {
+    if (!pendingUser) return;
+    setErrorMessage("");
+    if (Date.now() > pendingUser.expiresAt) {
+      setErrorMessage(t({ en: "OTP expired. Please resend a new code.", zh: "OTP 已过期，请重新发送验证码。" }));
+      return;
+    }
+    if (otpValue !== pendingUser.otp) {
+      setErrorMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
+      return;
+    }
+    const registeredUser = {
+      fullName: pendingUser.fullName,
+      phone: pendingUser.phone,
+      email: pendingUser.email,
+      phoneVerified: true
+    };
+    window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
+    window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
+    window.localStorage.setItem("pet-villa-session", JSON.stringify({
+      user: {
+        id: "demo-owner",
+        role: "owner",
+        name: pendingUser.fullName,
+        email: pendingUser.email,
+        phone: pendingUser.phone,
+        phoneVerified: true,
+        emailVerified: false
+      }
+    }));
+    window.dispatchEvent(new Event("pet-villa-auth"));
+    setStatusMessage(t({ en: "Phone verified. Welcome to Pet Villa!", zh: "电话号码已验证，欢迎来到 Pet Villa！" }));
+    window.setTimeout(() => {
+      window.location.href = redirect || "/";
+    }, 600);
+  }
+
+  function resendOtp() {
+    if (!pendingUser || cooldown > 0) return;
+    setPendingUser({ ...pendingUser, otp: DEMO_OTP, expiresAt: Date.now() + 5 * 60 * 1000 });
+    setCooldown(60);
+    setStatusMessage(t({ en: "A new demo OTP was sent. Use 123456.", zh: "新的测试 OTP 已发送，请输入 123456。" }));
+    setErrorMessage("");
+  }
+
+  function startForgotPassword() {
+    setStage("forgot-phone");
+    setMode("login");
+    setOtpValue("");
+    setNewPassword("");
+    setErrorMessage("");
+    setStatusMessage("");
+  }
+
+  function sendForgotOtp() {
+    if (!forgotPhone.trim()) {
+      setErrorMessage(t({ en: "Please enter your phone number.", zh: "请输入电话号码。" }));
+      return;
+    }
+    setStage("forgot-otp");
+    setCooldown(60);
+    setStatusMessage(t({ en: "Demo reset OTP sent. Use 123456.", zh: "测试重设 OTP 已发送，请输入 123456。" }));
+    setErrorMessage("");
+  }
+
+  function resetPassword() {
+    if (otpValue !== DEMO_OTP) {
+      setErrorMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
+      return;
+    }
+    if (!newPassword.trim()) {
+      setErrorMessage(t({ en: "Please enter a new password.", zh: "请输入新密码。" }));
+      return;
+    }
+    setStage("form");
+    setOtpValue("");
+    setNewPassword("");
+    setStatusMessage(t({ en: "Password reset saved for this demo. Please login again.", zh: "测试版密码已重设，请重新登录。" }));
+    setErrorMessage("");
   }
 
   function goBack() {
@@ -204,6 +366,85 @@ export default function AuthPage() {
   }
 
   const isLogin = mode === "login";
+
+  if (stage === "otp" && pendingUser) {
+    return (
+      <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary">
+        <main className="mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[30px] bg-white/70 px-7 py-7 shadow-[0_24px_70px_rgba(61,31,13,0.12)]">
+          <header className="flex items-start justify-between">
+            <a href="/" aria-label="The Pet Villa home"><img src="/logo.png" alt="The Pet Villa" className="h-[118px] w-[150px] object-contain" /></a>
+            <button type="button" onClick={goBack} className="grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Go back"><BackIcon /></button>
+          </header>
+          <section className="mt-10">
+            <h1 className="font-title text-[30px] font-black leading-tight">{t({ en: "Verify Your Phone", zh: "验证电话号码" })} <HeartMark /></h1>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">
+              {t({ en: `We sent a 6-digit code to ${pendingUser.phone}.`, zh: `我们已发送 6 位数验证码到 ${pendingUser.phone}。` })}
+            </p>
+            <label className="mt-8 grid gap-2">
+              <span className="text-sm font-black">{t({ en: "OTP Code", zh: "验证码" })}</span>
+              <input
+                className="villa-input text-center text-2xl tracking-[0.45em]"
+                inputMode="numeric"
+                maxLength={6}
+                value={otpValue}
+                onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="_ _ _ _ _ _"
+              />
+            </label>
+            {statusMessage ? <p className="mt-4 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
+            {errorMessage ? <p className="mt-4 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
+            <button type="button" onClick={completeOtpVerification} className="villa-button mt-5 w-full">{t({ en: "Verify OTP", zh: "验证 OTP" })}</button>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={resendOtp} disabled={cooldown > 0} className="villa-button-outline w-full disabled:opacity-50">
+                {cooldown > 0 ? t({ en: `Resend in ${cooldown}s`, zh: `${cooldown} 秒后重发` }) : t({ en: "Resend OTP", zh: "重新发送 OTP" })}
+              </button>
+              <button type="button" onClick={() => setStage("form")} className="villa-button-outline w-full">{t({ en: "Change Phone Number", zh: "更改电话号码" })}</button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (stage === "forgot-phone" || stage === "forgot-otp") {
+    return (
+      <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary">
+        <main className="mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[30px] bg-white/70 px-7 py-7 shadow-[0_24px_70px_rgba(61,31,13,0.12)]">
+          <header className="flex items-start justify-between">
+            <a href="/" aria-label="The Pet Villa home"><img src="/logo.png" alt="The Pet Villa" className="h-[118px] w-[150px] object-contain" /></a>
+            <button type="button" onClick={() => setStage("form")} className="grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Go back"><BackIcon /></button>
+          </header>
+          <section className="mt-10">
+            <h1 className="font-title text-[30px] font-black leading-tight">{t({ en: "Reset Password", zh: "重设密码" })} <HeartMark /></h1>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Use phone OTP to reset your password.", zh: "使用手机 OTP 重设你的密码。" })}</p>
+            {stage === "forgot-phone" ? (
+              <div className="mt-8 grid gap-4">
+                <label className="grid gap-2">
+                  <span className="text-sm font-black">{t({ en: "Phone Number", zh: "电话号码" })}</span>
+                  <input className="villa-input" value={forgotPhone} onChange={(event) => setForgotPhone(event.target.value)} placeholder="+60..." />
+                </label>
+                <button type="button" onClick={sendForgotOtp} className="villa-button w-full">{t({ en: "Send OTP", zh: "发送 OTP" })}</button>
+              </div>
+            ) : (
+              <div className="mt-8 grid gap-4">
+                <label className="grid gap-2">
+                  <span className="text-sm font-black">{t({ en: "OTP Code", zh: "验证码" })}</span>
+                  <input className="villa-input text-center text-2xl tracking-[0.45em]" inputMode="numeric" maxLength={6} value={otpValue} onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="_ _ _ _ _ _" />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-sm font-black">{t({ en: "New Password", zh: "新密码" })}</span>
+                  <input className="villa-input" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={t({ en: "Enter new password", zh: "输入新密码" })} />
+                </label>
+                <button type="button" onClick={resetPassword} className="villa-button w-full">{t({ en: "Save New Password", zh: "保存新密码" })}</button>
+              </div>
+            )}
+            {statusMessage ? <p className="mt-4 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
+            {errorMessage ? <p className="mt-4 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary sm:py-8">
@@ -266,7 +507,7 @@ export default function AuthPage() {
                       type="password"
                       trailingIcon="eye"
                     />
-                    <button type="button" className="justify-self-end text-sm font-bold text-villa-primary" onClick={() => alert(t({ en: "Password reset is coming soon. Please WhatsApp Pet Villa for help.", zh: "密码重置即将开放。请先 WhatsApp Pet Villa 协助处理。" }))}>
+                    <button type="button" className="justify-self-end text-sm font-bold text-villa-primary" onClick={startForgotPassword}>
                       {t({ en: "Forgot password?", zh: "忘记密码？" })}
                     </button>
                   </>
@@ -291,27 +532,34 @@ export default function AuthPage() {
                   </>
                 )}
 
+                {statusMessage ? <p className="rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
+                {errorMessage ? <p className="rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
+
                 <button type="submit" className="mt-2 h-16 rounded-pill bg-villa-primary text-lg font-black text-white shadow-[0_12px_28px_rgba(232,146,124,0.28)] transition hover:-translate-y-px">
                   {isLogin ? t({ en: "Login", zh: "登录" }) : t({ en: "Create Account", zh: "创建账号" })}
                 </button>
               </form>
 
-              <div className="my-9 flex items-center gap-5">
-                <span className="h-px flex-1 bg-villa-primary-light/70" />
-                <span className="text-sm font-semibold text-villa-text-secondary">{t({ en: "or continue with", zh: "或继续使用" })}</span>
-                <span className="h-px flex-1 bg-villa-primary-light/70" />
-              </div>
+              {isLogin ? (
+                <>
+                  <div className="my-9 flex items-center gap-5">
+                    <span className="h-px flex-1 bg-villa-primary-light/70" />
+                    <span className="text-sm font-semibold text-villa-text-secondary">{t({ en: "or continue with", zh: "或继续使用" })}</span>
+                    <span className="h-px flex-1 bg-villa-primary-light/70" />
+                  </div>
 
-              <div className="grid gap-3">
-                <button type="button" onClick={() => alert(t({ en: "Google login is coming soon.", zh: "Google 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
-                  <GoogleMark />
-                  {t({ en: "Continue with Google", zh: "使用 Google 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
-                </button>
-                <button type="button" onClick={() => alert(t({ en: "Apple login is coming soon.", zh: "Apple 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
-                  <AppleMark />
-                  {t({ en: "Continue with Apple", zh: "使用 Apple 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
-                </button>
-              </div>
+                  <div className="grid gap-3">
+                    <button type="button" onClick={() => alert(t({ en: "Google login is coming soon.", zh: "Google 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
+                      <GoogleMark />
+                      {t({ en: "Continue with Google", zh: "使用 Google 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
+                    </button>
+                    <button type="button" onClick={() => alert(t({ en: "Apple login is coming soon.", zh: "Apple 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
+                      <AppleMark />
+                      {t({ en: "Continue with Apple", zh: "使用 Apple 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <aside className="relative z-10 mt-9 rounded-[22px] border border-villa-primary-light bg-white/82 p-5 shadow-[0_12px_34px_rgba(61,31,13,0.09)] xl:mt-0 xl:self-end">

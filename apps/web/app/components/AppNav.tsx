@@ -14,7 +14,7 @@ function getSessionName() {
   try {
     const session = JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}");
     const name = session?.user?.name || "";
-    return name === "Pet Owner" ? "JiaJun" : name;
+    return name;
   } catch {
     return "";
   }
@@ -41,7 +41,7 @@ const privateMenu = [
   { href: "/booking", icon: "booking", en: "Bookings", zh: "预约", descEn: "Upcoming stays", descZh: "查看即将入住" },
   { href: "/orders", icon: "orders", en: "Orders", zh: "订单", descEn: "Payment history", descZh: "付款与订单记录" },
   { href: "/diary", icon: "diary", en: "Pet Diary", zh: "宠物日记", descEn: "Daily updates & photos", descZh: "照片和每日更新" },
-  { href: "/auth", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
+  { href: "/account", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
 ];
 
 const loginButtonClass =
@@ -310,7 +310,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
               </button>
               {accountOpen ? (
                 <div className="absolute right-0 top-12 w-44 rounded-[16px] border border-villa-primary-light bg-white p-2 shadow-lg">
-                  <a className="block rounded-[12px] px-3 py-2 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href="/auth">
+                  <a className="block rounded-[12px] px-3 py-2 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href="/account">
                     {t({ en: "My Account", zh: "我的账号" })}
                   </a>
                   <button type="button" className="block w-full rounded-[12px] px-3 py-2 text-left text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" onClick={logout}>
@@ -425,7 +425,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
             : null}
           {loggedIn ? (
             <div className="grid gap-2">
-              <a className="rounded-[14px] px-3 py-3 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href="/auth">
+              <a className="rounded-[14px] px-3 py-3 text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" href="/account">
                 {t({ en: "My Account", zh: "我的账号" })}
               </a>
               <button type="button" className="rounded-[14px] px-3 py-3 text-left text-sm font-bold text-villa-text-secondary hover:bg-villa-primary-bg" onClick={logout}>

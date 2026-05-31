@@ -12,7 +12,7 @@ const items = [
   { href: "/payment", icon: "💳", en: "Payment", zh: "付款" },
   { href: "/orders", icon: "📦", en: "Orders", zh: "订单" },
   { href: "/diary", icon: "📸", en: "Diary", zh: "日记" },
-  { href: "/auth", icon: "🔐", en: "Account", zh: "账号" }
+  { href: "/account", icon: "🔐", en: "Account", zh: "账号" }
 ];
 
 export function OwnerSidebar({ children }: { children: React.ReactNode }) {
