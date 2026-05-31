@@ -375,10 +375,10 @@ export default function HomePage() {
       <AppNav />
 
       <main className="overflow-hidden">
-        <section id="about" className="relative px-4 pb-8 pt-7 sm:px-6 lg:px-16">
-          <div className="absolute inset-y-0 right-0 top-0 h-[560px] w-[70%] overflow-hidden opacity-95 lg:h-full lg:w-[58%]">
-            <DogPhoto position="68% 58%" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.94)_33%,rgba(250,246,242,0.42)_63%,rgba(250,246,242,0.06)_100%)]" />
+        <section id="about" className="relative min-h-[548px] overflow-hidden px-4 pb-7 pt-7 sm:px-6 lg:min-h-[520px] lg:px-16">
+          <div className="absolute right-[-86px] top-[170px] h-[330px] w-[108%] overflow-hidden opacity-90 sm:right-[-40px] sm:w-[92%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
+            <DogPhoto position="50% 58%" className="object-contain lg:object-cover" />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.92)_35%,rgba(250,246,242,0.34)_66%,rgba(250,246,242,0.04)_100%)]" />
             <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-villa-background to-transparent" />
           </div>
 
@@ -403,12 +403,12 @@ export default function HomePage() {
                 {t({ en: "Thoughtful daily updates", zh: "每日温馨照片更新" })}
               </p>
 
-              <div className="mt-6 grid max-w-[300px] gap-3">
-                <a className="villa-button min-h-[58px] w-full gap-3 text-base" href="/booking">
-                  <Icon name="calendar" className="h-6 w-6" />
+              <div className="mt-5 grid max-w-[248px] gap-3 sm:max-w-[300px]">
+                <a className="villa-button min-h-[48px] w-full gap-2 text-sm sm:min-h-[58px] sm:gap-3 sm:text-base" href="/booking">
+                  <Icon name="calendar" className="h-5 w-5 sm:h-6 sm:w-6" />
                   {t({ en: "Book a Stay", zh: "预约寄宿" })}
                 </a>
-                <a className="villa-button-outline min-h-[54px] w-full bg-white/55 text-base backdrop-blur" href="#how-it-works">
+                <a className="villa-button-outline min-h-[46px] w-full bg-white/55 text-sm backdrop-blur sm:min-h-[54px] sm:text-base" href="#how-it-works">
                   {t({ en: "Learn More", zh: "了解更多" })}
                 </a>
               </div>
