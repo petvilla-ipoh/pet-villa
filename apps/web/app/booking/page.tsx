@@ -73,7 +73,6 @@ export default function BookingPage() {
   const { t } = useLanguage();
   const [pets, setPets] = useState<PetProfile[]>([]);
   const [service, setService] = useState<"overnight" | "daycare">("overnight");
-  const [serviceTouched, setServiceTouched] = useState(false);
   const [dateTouched, setDateTouched] = useState(false);
   const [selectedPets, setSelectedPets] = useState<string[]>([]);
   const [startDay, setStartDay] = useState(4);
@@ -106,7 +105,7 @@ export default function BookingPage() {
     return startDay === endDay ? `Jun ${startDay}` : `Jun ${startDay} - Jun ${endDay}`;
   }, [endDay, endTime, service, startDay, startTime]);
 
-  const serviceCompleted = serviceTouched;
+  const serviceCompleted = Boolean(service);
   const dateCompleted = serviceCompleted && dateTouched;
   const petCompleted = dateCompleted && selectedPets.length > 0;
   const confirmCompleted = petCompleted && total > 0;
@@ -114,7 +113,6 @@ export default function BookingPage() {
 
   function chooseService(nextService: "overnight" | "daycare") {
     setService(nextService);
-    setServiceTouched(true);
     if (nextService === "daycare") setEndDay(startDay);
   }
 

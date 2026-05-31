@@ -77,10 +77,11 @@ export default function PaymentPage() {
     : t({ en: `${booking.hours} Hours Daycare`, zh: `${booking.hours} 小时日托` });
 
   const buttonText = useMemo(() => {
+    if (method === "duitnow") return t({ en: "I Have Paid", zh: "我已付款" });
     return amountMode === "deposit"
       ? t({ en: `Pay RM${amount} Deposit`, zh: `支付 RM${amount} 订金` })
       : t({ en: `Pay RM${amount} in Full`, zh: `支付 RM${amount} 全款` });
-  }, [amount, amountMode, t]);
+  }, [amount, amountMode, method, t]);
 
   function confirmPayment() {
     if (!draft) {
@@ -189,8 +190,12 @@ export default function PaymentPage() {
                 <div className="mt-4 rounded-[20px] border border-villa-primary-light bg-villa-primary-bg p-4">
                   {method === "duitnow" ? (
                     <div className="text-center">
+                      <div className="mb-4 rounded-[18px] border border-villa-primary-light bg-white p-4">
+                        <img src="/logo.png" alt="Pet Villa" className="mx-auto h-14 w-28 object-contain" />
+                        <p className="m-0 mt-2 text-xs font-black uppercase text-villa-text-primary">Pet Villa Sdn Bhd</p>
+                      </div>
                       <h3 className="card-title">{t({ en: "Scan To Pay", zh: "扫码付款" })}</h3>
-                      <p className="mt-1 text-xs font-bold text-villa-text-secondary">RM{amount} {amountMode === "deposit" ? "Deposit" : "Payment"}</p>
+                      <p className="mt-1 text-xs font-bold text-villa-text-secondary">DuitNow QR · Scan & Pay</p>
                       <div className="mx-auto mt-4 grid h-52 w-52 max-w-full place-items-center rounded-[20px] bg-[#e91e63] p-4 shadow-md">
                         <div className="grid h-full w-full place-items-center rounded-[12px] bg-white">
                           <div className="h-32 w-32 bg-[repeating-linear-gradient(45deg,#e91e63_0_6px,#ffffff_6px_12px)]" />
@@ -200,6 +205,7 @@ export default function PaymentPage() {
                       <div className="mt-4 rounded-[16px] bg-white p-3">
                         <p className="m-0 text-xs font-bold text-villa-text-secondary">{t({ en: "Amount To Pay", zh: "需付款金额" })}</p>
                         <p className="m-0 text-[28px] font-black text-villa-primary">RM{amount}</p>
+                        <p className="m-0 text-xs font-bold text-villa-text-muted">{amountMode === "deposit" ? t({ en: "Deposit", zh: "订金" }) : t({ en: "Full payment", zh: "全款" })}</p>
                       </div>
                     </div>
                   ) : null}
