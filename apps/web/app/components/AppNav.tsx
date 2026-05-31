@@ -9,6 +9,16 @@ function hasSession() {
   return Boolean(window.localStorage.getItem("pet-villa-session"));
 }
 
+function getSessionName() {
+  if (typeof window === "undefined") return "Jia Jun";
+  try {
+    const session = JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}");
+    return session?.user?.name || "Jia Jun";
+  } catch {
+    return "Jia Jun";
+  }
+}
+
 function getLocationState() {
   if (typeof window === "undefined") return { pathname: "", tab: "login" };
   const params = new URLSearchParams(window.location.search);
@@ -23,6 +33,14 @@ const privateNav = [
   { href: "/booking", en: "Bookings", zh: "预约" },
   { href: "/orders", en: "Orders", zh: "订单" },
   { href: "/diary", en: "Pet Diary", zh: "宠物日记" }
+];
+
+const privateMenu = [
+  { href: "/pets", icon: "pets", en: "My Pets", zh: "我的宠物", descEn: "Manage your dogs", descZh: "管理狗狗资料" },
+  { href: "/booking", icon: "booking", en: "Bookings", zh: "预约", descEn: "Upcoming stays", descZh: "查看即将入住" },
+  { href: "/orders", icon: "orders", en: "Orders", zh: "订单", descEn: "Payment history", descZh: "付款与订单记录" },
+  { href: "/diary", icon: "diary", en: "Pet Diary", zh: "宠物日记", descEn: "Daily updates & photos", descZh: "照片和每日更新" },
+  { href: "/auth", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
 ];
 
 const loginButtonClass =
@@ -53,9 +71,93 @@ function NavLogo() {
   );
 }
 
+function MenuGlyph({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <span className="relative h-6 w-6">
+        <span className="absolute left-1 top-1/2 h-0.5 w-5 -translate-y-1/2 rotate-45 rounded-full bg-villa-text-primary" />
+        <span className="absolute left-1 top-1/2 h-0.5 w-5 -translate-y-1/2 -rotate-45 rounded-full bg-villa-text-primary" />
+      </span>
+    );
+  }
+
+  return <span className="h-0.5 w-6 rounded-full bg-villa-text-primary shadow-[0_7px_0_#3d1f0d,0_-7px_0_#3d1f0d]" />;
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 28 28" className="h-6 w-6" aria-hidden="true">
+      <path d="M12 5H6v18h6M12 14h10M18 10l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MenuItemIcon({ name }: { name: string }) {
+  const stroke = "#3d1f0d";
+  const coral = "#e8927c";
+  if (name === "pets") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+        <ellipse cx="24" cy="31" rx="9" ry="7" fill={coral} />
+        <ellipse cx="13" cy="21" rx="4" ry="5.5" fill={coral} />
+        <ellipse cx="20" cy="14" rx="4" ry="5.5" fill={coral} />
+        <ellipse cx="28" cy="14" rx="4" ry="5.5" fill={coral} />
+        <ellipse cx="35" cy="21" rx="4" ry="5.5" fill={coral} />
+      </svg>
+    );
+  }
+  if (name === "booking") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+        <rect x="10" y="12" width="28" height="28" rx="6" fill="#fff8f5" stroke={coral} strokeWidth="3" />
+        <path d="M10 21h28M17 8v9M31 8v9" stroke={coral} strokeWidth="3.2" strokeLinecap="round" />
+        <path d="M18 28h4M27 28h4M18 34h4M27 34h4" stroke="#7a9e7e" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "orders") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+        <path d="m24 6 16 9v18l-16 9-16-9V15L24 6Z" fill="#f2a46d" />
+        <path d="m16 19 8 5 8-5M24 24v12" fill="none" stroke="#fff8f5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (name === "diary") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+        <path d="M11 18h7l3-5h7l3 5h6a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V23a5 5 0 0 1 5-5Z" fill="#fff8f5" stroke={stroke} strokeWidth="3" />
+        <circle cx="24" cy="30" r="8" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
+      </svg>
+    );
+  }
+  if (name === "account") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+        <circle cx="24" cy="16" r="8" fill={coral} />
+        <path d="M9 41c3-12 27-12 30 0" fill={coral} />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <circle cx="24" cy="24" r="16" fill="#fff8f5" stroke={stroke} strokeWidth="3" />
+    </svg>
+  );
+}
+
 export function AppNav({ host = false }: { host?: boolean }) {
-  const { t } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("Jia Jun");
   const [locationState, setLocationState] = useState(() => getLocationState());
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -63,10 +165,12 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
   useEffect(() => {
     setLoggedIn(hasSession());
+    setUserName(getSessionName());
     setLocationState(getLocationState());
 
     function sync() {
       setLoggedIn(hasSession());
+      setUserName(getSessionName());
       setLocationState(getLocationState());
     }
     function closeAccount(event: MouseEvent) {
@@ -104,13 +208,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
     ? isRegisterActive ? activeAuthButtonClass : inactiveAuthButtonClass
     : registerButtonClass;
   const mobileLoginClass = isLoginActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
-    : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm";
+    ? "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-md"
+    : "inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-villa-primary px-4 text-sm font-black text-villa-primary shadow-sm";
   const mobileRegisterClass = isRegisterActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
+    ? "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-md"
     : isAuthPage
-      ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
-      : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-sm";
+      ? "inline-flex min-h-[48px] items-center justify-center rounded-full border-2 border-villa-primary px-4 text-sm font-black text-villa-primary shadow-sm"
+      : "inline-flex min-h-[48px] items-center justify-center rounded-full bg-villa-primary px-4 text-sm font-black text-white shadow-[0_8px_20px_rgba(232,146,124,0.22)]";
 
   function selectAuthTab(event: ReactMouseEvent<HTMLAnchorElement>, tab: "login" | "register") {
     if (!isAuthPage) return;
@@ -138,11 +242,17 @@ export function AppNav({ host = false }: { host?: boolean }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-villa-primary-light bg-villa-background/95 px-4 py-3 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+    <header className="sticky top-0 z-40 rounded-b-[26px] border-b border-villa-primary-light bg-villa-background/96 px-4 py-5 shadow-[0_8px_26px_rgba(61,31,13,0.06)] backdrop-blur-xl lg:rounded-none lg:px-4 lg:py-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <NavLogo />
-        <div className="flex items-center gap-1.5 lg:hidden">
-          {!loggedIn ? (
+        <div className="flex items-center gap-2 lg:hidden">
+          <a className={`${mobileLoginClass} min-w-[72px]`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
+            {t({ en: "Login", zh: "登录" })}
+          </a>
+          <a className={`${mobileRegisterClass} min-w-[88px]`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
+            {t({ en: "Register", zh: "注册" })}
+          </a>
+          {false ? (
             <>
               <a className={mobileLoginClass} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
                 {t({ en: "Login", zh: "登录" })}
@@ -154,12 +264,12 @@ export function AppNav({ host = false }: { host?: boolean }) {
           ) : null}
           <button
             type="button"
-            className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-md"
+            className="grid h-[52px] w-[52px] place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-[0_8px_22px_rgba(61,31,13,0.10)] transition hover:-translate-y-px"
             onClick={() => setOpen((value) => !value)}
             aria-label="Menu"
             aria-expanded={open}
           >
-            <span className="h-0.5 w-5 rounded-full bg-villa-text-primary shadow-[0_6px_0_#3d1f0d,0_-6px_0_#3d1f0d]" />
+            <MenuGlyph open={open} />
           </button>
         </div>
 
@@ -215,6 +325,84 @@ export function AppNav({ host = false }: { host?: boolean }) {
       </div>
 
       {open ? (
+        loggedIn ? (
+          <nav className="mx-auto mt-4 max-w-[430px] rounded-[28px] border border-villa-primary-light bg-white/96 p-5 shadow-[0_18px_48px_rgba(61,31,13,0.14)] backdrop-blur lg:hidden">
+            <div className="mb-4 flex items-center gap-4">
+              <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
+                <img src="/hero-dogs.png" alt="" className="h-full w-full object-cover" style={{ objectPosition: "34% 76%" }} />
+              </div>
+              <div>
+                <p className="m-0 text-sm font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
+                <h2 className="m-0 font-title text-2xl font-black leading-tight text-villa-text-primary">{userName}</h2>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              {privateMenu.map((item) => (
+                <a key={item.href} className="flex items-center gap-3 rounded-[18px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-4 py-3 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-white">
+                    <MenuItemIcon name={item.icon} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block text-base font-black leading-tight text-villa-text-primary">{t({ en: item.en, zh: item.zh })}</strong>
+                    <span className="block text-xs font-bold leading-tight text-villa-text-muted">{t({ en: item.descEn, zh: item.descZh })}</span>
+                  </span>
+                  <span className="text-villa-text-muted"><ChevronIcon /></span>
+                </a>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-[18px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-3">
+              <div className="mb-3 flex items-center gap-3 px-1">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-villa-text-primary">
+                  <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden="true">
+                    <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" strokeWidth="2.5" />
+                    <path d="M4 16h24M16 4c4 4 6 8 6 12s-2 8-6 12M16 4c-4 4-6 8-6 12s2 8 6 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <strong className="text-base font-black text-villa-text-primary">{t({ en: "Language", zh: "语言" })}</strong>
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-full bg-white/80 p-1">
+                <button type="button" className={`min-h-[42px] rounded-full text-sm font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("en")}>EN</button>
+                <button type="button" className={`min-h-[42px] rounded-full text-sm font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("zh")}>中文</button>
+              </div>
+            </div>
+
+            <button type="button" className="mt-3 flex min-h-[54px] w-full items-center gap-3 rounded-[18px] border border-villa-primary-light bg-white px-5 text-left text-base font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
+              <LogoutIcon />
+              {t({ en: "Logout", zh: "退出登录" })}
+            </button>
+          </nav>
+        ) : (
+          <nav className="mx-auto mt-4 max-w-[430px] rounded-[28px] border border-villa-primary-light bg-white/96 p-5 shadow-[0_18px_48px_rgba(61,31,13,0.14)] backdrop-blur lg:hidden">
+            <a className="villa-button min-h-[64px] w-full justify-between px-6 text-xl" href="/booking">
+              <span className="inline-flex items-center gap-3">
+                <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
+                  <rect x="10" y="12" width="28" height="28" rx="6" fill="#fff8f5" stroke="currentColor" strokeWidth="3" />
+                  <path d="M10 21h28M17 8v9M31 8v9" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
+                </svg>
+                {t({ en: "Book Now", zh: "立即预约" })}
+              </span>
+              <ChevronIcon />
+            </a>
+            <div className="my-5 h-px bg-villa-primary-light" />
+            <div className="grid gap-3">
+              <button type="button" className="flex min-h-[56px] items-center gap-4 rounded-[18px] px-4 text-left" onClick={() => setLang("en")}>
+                <span className={`grid h-12 w-12 place-items-center rounded-full text-sm font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>EN</span>
+                <strong className="flex-1 text-lg font-black text-villa-text-primary">English</strong>
+                {lang === "en" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
+              </button>
+              <button type="button" className="flex min-h-[56px] items-center gap-4 rounded-[18px] px-4 text-left" onClick={() => setLang("zh")}>
+                <span className={`grid h-12 w-12 place-items-center rounded-full text-lg font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "bg-villa-primary-bg text-villa-text-secondary"}`}>中</span>
+                <strong className="flex-1 text-lg font-black text-villa-text-primary">中文</strong>
+                {lang === "zh" ? <span className="text-villa-primary"><svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span> : null}
+              </button>
+            </div>
+          </nav>
+        )
+      ) : null}
+
+      {false ? (
         <nav className="mx-auto mt-3 grid max-w-7xl gap-3 rounded-[22px] border border-villa-primary-light bg-white/95 p-4 shadow-lg backdrop-blur lg:hidden">
           {loggedIn
             ? privateNav.map((item) => (
