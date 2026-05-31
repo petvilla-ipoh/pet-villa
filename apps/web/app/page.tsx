@@ -4,10 +4,18 @@ import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
 
 const heroFeatures = [
-  { icon: "🏡", title: { en: "Cage Free Home", zh: "不关笼家庭照顾" } },
-  { icon: "❤️", title: { en: "24h Owner Care", zh: "主人24小时陪伴" } },
-  { icon: "📸", title: { en: "Daily Updates", zh: "每日照片更新" } },
-  { icon: "🧼", title: { en: "Safe & Clean", zh: "安全干净" } }
+  { icon: "🏡", title: { en: "Cage Free Home Environment", zh: "不关笼家庭环境" } },
+  { icon: "🤗", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
+  { icon: "📸", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
+  { icon: "🐾", title: { en: "Small Group Max 3 Dogs", zh: "小群照顾最多3只狗" } },
+  { icon: "🛡️", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
+];
+
+const heroTags = [
+  { icon: "🚫", label: "No cages" },
+  { icon: "🐶", label: "Max 3 dogs" },
+  { icon: "👜", label: "1-12kg only" },
+  { icon: "📸", label: "24h updates" }
 ];
 
 const notices = [
@@ -40,14 +48,23 @@ export default function HomePage() {
       <AppNav />
 
       <main>
-        <section id="about" className="villa-section relative pb-7 pt-6 sm:pb-10 sm:pt-8">
+        <section id="about" className="villa-section relative overflow-hidden pb-7 pt-8 sm:pb-10 sm:pt-10">
+          <div className="pointer-events-none absolute inset-y-0 right-0 top-0 h-[540px] w-[72%] opacity-95 lg:h-full lg:w-[50%]">
+            <img
+              src="/hero-dogs.png"
+              alt=""
+              className="h-full w-full object-cover object-[72%_62%]"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.92)_34%,rgba(250,246,242,0.35)_63%,rgba(250,246,242,0.08)_100%)]" />
+            <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-villa-background to-transparent" />
+          </div>
           <span className="paw-mark right-5 top-5" />
-          <div className="villa-container grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
-            <div>
+          <div className="villa-container relative z-10 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+            <div className="max-w-[560px]">
               <span className="rounded-pill bg-villa-primary-light px-3 py-2 text-xs font-bold uppercase text-villa-text-primary">
                 The Pet Villa · Ipoh · Pet Boarding
               </span>
-              <h1 className="page-title mt-4">A Home Away From Home</h1>
+              <h1 className="page-title mt-5 max-w-[360px] lg:max-w-none">A Home Away From Home <span className="text-villa-primary">♡</span></h1>
               <p className="body-copy mt-3 max-w-2xl">
                 {t({
                   en: "Premium small dog boarding in Ipoh · No cages · 24h companionship · thoughtful daily updates",
@@ -58,26 +75,29 @@ export default function HomePage() {
                 <a className="villa-button" href="/booking">{t({ en: "Book a Stay", zh: "预约寄宿" })}</a>
                 <a className="villa-button-outline" href="#how-it-works">{t({ en: "Learn More", zh: "了解更多" })}</a>
               </div>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {["No cages", "Max 3 dogs", "1-12kg only", "24h updates"].map((tag) => (
-                  <span key={tag} className="rounded-pill bg-white px-3 py-2 text-xs font-bold text-villa-text-secondary shadow-sm">{tag}</span>
+              <div className="mt-5 grid grid-cols-2 gap-2 min-[390px]:grid-cols-4">
+                {heroTags.map((tag) => (
+                  <span key={tag.label} className="inline-flex items-center justify-center gap-1.5 rounded-pill bg-white/95 px-3 py-2 text-xs font-bold text-villa-text-secondary shadow-md backdrop-blur">
+                    <span className="text-villa-primary">{tag.icon}</span>
+                    {tag.label}
+                  </span>
                 ))}
               </div>
             </div>
-            <div className="relative h-[300px] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-lg sm:h-[380px] lg:aspect-[4/3] lg:h-auto">
+            <div className="relative mt-1 h-[330px] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-[0_14px_44px_rgba(61,31,13,0.16)] sm:h-[420px] lg:mt-0 lg:aspect-[4/3] lg:h-auto">
               <img
                 src="/hero-dogs.png"
                 alt="Toy poodle and French bulldog resting in a warm home living room"
-                className="absolute inset-0 h-full w-full object-cover object-[center_68%]"
+                className="absolute inset-0 h-full w-full object-cover object-[center_66%]"
               />
-              <div className="absolute left-3 top-3 rounded-pill bg-white/95 px-3 py-2 text-xs font-black text-villa-accent-green shadow-md backdrop-blur sm:left-4 sm:top-4 sm:px-4 sm:text-sm">
+              <div className="absolute left-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-xs font-black text-villa-accent-green shadow-md backdrop-blur sm:text-sm">
                 🏡 Cage Free
               </div>
-              <div className="absolute right-3 top-3 rounded-pill bg-white/95 px-3 py-2 text-xs font-black text-villa-primary shadow-md backdrop-blur sm:right-4 sm:top-4 sm:px-4 sm:text-sm">
+              <div className="absolute right-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-xs font-black text-villa-primary shadow-md backdrop-blur sm:text-sm">
                 ❤️ 24h Care
               </div>
-              <div className="absolute inset-x-0 bottom-3 flex justify-center px-4 sm:bottom-4">
-                <div className="rounded-pill bg-white/95 px-4 py-2.5 text-xs font-black text-villa-primary shadow-lg backdrop-blur sm:px-5 sm:py-3 sm:text-sm">
+              <div className="absolute inset-x-0 bottom-4 flex justify-center px-4">
+                <div className="rounded-pill bg-white/95 px-5 py-2.5 text-sm font-black text-villa-primary shadow-lg backdrop-blur">
                   📸 3–5 Daily Photo Updates
                 </div>
               </div>
@@ -87,16 +107,16 @@ export default function HomePage() {
 
         <section id="services" className="villa-section pt-0">
           <div className="villa-container">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-5 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/95 shadow-[0_12px_36px_rgba(61,31,13,0.10)] backdrop-blur">
               {heroFeatures.map((feature) => (
                 <article
                   key={feature.title.en}
-                  className="rounded-[20px] border border-villa-primary-light bg-white p-3 text-center shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4"
+                  className="border-r border-villa-primary-light/60 px-1.5 py-4 text-center last:border-r-0 sm:px-4"
                 >
-                  <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-villa-primary-bg text-xl sm:h-12 sm:w-12 sm:text-2xl">
+                  <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-villa-primary-bg text-xl shadow-sm sm:h-12 sm:w-12 sm:text-2xl">
                     {feature.icon}
                   </div>
-                  <h2 className="mt-2 text-xs font-black leading-tight text-villa-text-primary sm:mt-3 sm:text-sm">
+                  <h2 className="mt-2 text-[10px] font-black leading-tight text-villa-text-primary min-[390px]:text-[11px] sm:mt-3 sm:text-sm">
                     {t(feature.title)}
                   </h2>
                 </article>
