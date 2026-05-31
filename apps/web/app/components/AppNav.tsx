@@ -13,9 +13,10 @@ function getSessionName() {
   if (typeof window === "undefined") return "Jia Jun";
   try {
     const session = JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}");
-    return session?.user?.name || "Jia Jun";
+    const name = session?.user?.name || "JiaJun";
+    return name === "Pet Owner" ? "JiaJun" : name;
   } catch {
-    return "Jia Jun";
+    return "JiaJun";
   }
 }
 
@@ -246,12 +247,23 @@ export function AppNav({ host = false }: { host?: boolean }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <NavLogo />
         <div className="flex items-center gap-2 lg:hidden">
-          <a className={`${mobileLoginClass} min-w-[68px]`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
-            {t({ en: "Login", zh: "登录" })}
-          </a>
-          <a className={`${mobileRegisterClass} min-w-[82px]`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
-            {t({ en: "Register", zh: "注册" })}
-          </a>
+          {loggedIn ? (
+            <div className="mr-1 flex min-w-0 items-center justify-end gap-1 text-right">
+              <span className="whitespace-nowrap text-[15px] font-black leading-none text-villa-text-primary">
+                Welcome, {userName}
+              </span>
+              <span className="text-lg leading-none text-villa-primary" aria-hidden="true">🐾</span>
+            </div>
+          ) : (
+            <>
+              <a className={`${mobileLoginClass} min-w-[68px]`} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>
+                {t({ en: "Login", zh: "登录" })}
+              </a>
+              <a className={`${mobileRegisterClass} min-w-[82px]`} href="/auth?tab=register" onClick={(event) => selectAuthTab(event, "register")}>
+                {t({ en: "Register", zh: "注册" })}
+              </a>
+            </>
+          )}
           {false ? (
             <>
               <a className={mobileLoginClass} href="/auth?tab=login" onClick={(event) => selectAuthTab(event, "login")}>

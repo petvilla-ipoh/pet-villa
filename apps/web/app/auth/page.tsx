@@ -174,7 +174,7 @@ export default function AuthPage() {
 
   function submit() {
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
-      user: { id: "demo-owner", role: "owner", name: "Pet Owner", email: "owner@example.com" }
+      user: { id: "demo-owner", role: "owner", name: "JiaJun", email: "owner@example.com" }
     }));
     window.dispatchEvent(new Event("pet-villa-auth"));
     window.location.href = redirect || "/";
