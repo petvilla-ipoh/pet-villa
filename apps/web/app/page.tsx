@@ -4,11 +4,10 @@ import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
 
 const heroFeatures = [
-  { icon: "🏠", title: { en: "Cage Free Home Environment", zh: "不关笼家庭环境" } },
-  { icon: "🤗", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
-  { icon: "📸", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
-  { icon: "🐾", title: { en: "Small Group Max 3 Dogs", zh: "小群照顾最多3只狗" } },
-  { icon: "🛡️", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
+  { icon: "🏡", title: { en: "Cage Free Home", zh: "不关笼家庭照顾" } },
+  { icon: "❤️", title: { en: "24h Owner Care", zh: "主人24小时陪伴" } },
+  { icon: "📸", title: { en: "Daily Updates", zh: "每日照片更新" } },
+  { icon: "🧼", title: { en: "Safe & Clean", zh: "安全干净" } }
 ];
 
 const notices = [
@@ -41,9 +40,9 @@ export default function HomePage() {
       <AppNav />
 
       <main>
-        <section id="about" className="villa-section relative pt-8">
+        <section id="about" className="villa-section relative pb-7 pt-6 sm:pb-10 sm:pt-8">
           <span className="paw-mark right-5 top-5" />
-          <div className="villa-container grid gap-7 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+          <div className="villa-container grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
             <div>
               <span className="rounded-pill bg-villa-primary-light px-3 py-2 text-xs font-bold uppercase text-villa-text-primary">
                 The Pet Villa · Ipoh · Pet Boarding
@@ -65,21 +64,21 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-lg">
+            <div className="relative h-[300px] overflow-hidden rounded-[28px] border-[6px] border-white bg-white shadow-lg sm:h-[380px] lg:aspect-[4/3] lg:h-auto">
               <img
                 src="/hero-dogs.png"
                 alt="Toy poodle and French bulldog resting in a warm home living room"
                 className="absolute inset-0 h-full w-full object-cover object-[center_68%]"
               />
-              <div className="absolute left-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-sm font-black text-villa-accent-green shadow-md backdrop-blur">
+              <div className="absolute left-3 top-3 rounded-pill bg-white/95 px-3 py-2 text-xs font-black text-villa-accent-green shadow-md backdrop-blur sm:left-4 sm:top-4 sm:px-4 sm:text-sm">
                 🏡 Cage Free
               </div>
-              <div className="absolute right-4 top-4 rounded-pill bg-white/95 px-4 py-2 text-sm font-black text-villa-primary shadow-md backdrop-blur">
+              <div className="absolute right-3 top-3 rounded-pill bg-white/95 px-3 py-2 text-xs font-black text-villa-primary shadow-md backdrop-blur sm:right-4 sm:top-4 sm:px-4 sm:text-sm">
                 ❤️ 24h Care
               </div>
-              <div className="absolute inset-x-0 bottom-4 flex justify-center px-4">
-                <div className="rounded-pill bg-white/95 px-5 py-3 text-sm font-black text-villa-primary shadow-lg backdrop-blur">
-                  📸 3-5 Daily Photo Updates
+              <div className="absolute inset-x-0 bottom-3 flex justify-center px-4 sm:bottom-4">
+                <div className="rounded-pill bg-white/95 px-4 py-2.5 text-xs font-black text-villa-primary shadow-lg backdrop-blur sm:px-5 sm:py-3 sm:text-sm">
+                  📸 3–5 Daily Photo Updates
                 </div>
               </div>
             </div>
@@ -88,18 +87,16 @@ export default function HomePage() {
 
         <section id="services" className="villa-section pt-0">
           <div className="villa-container">
-            <div className="grid overflow-hidden rounded-[24px] border border-villa-primary-light bg-white shadow-lg sm:grid-cols-5">
-              {heroFeatures.map((feature, index) => (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {heroFeatures.map((feature) => (
                 <article
                   key={feature.title.en}
-                  className={`flex items-center gap-3 p-4 text-left sm:block sm:text-center ${
-                    index > 0 ? "border-t border-villa-primary-light/60 sm:border-l sm:border-t-0" : ""
-                  }`}
+                  className="rounded-[20px] border border-villa-primary-light bg-white p-3 text-center shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-4"
                 >
-                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-villa-primary-bg text-2xl sm:mx-auto">
+                  <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-villa-primary-bg text-xl sm:h-12 sm:w-12 sm:text-2xl">
                     {feature.icon}
                   </div>
-                  <h2 className="text-sm font-black leading-tight text-villa-text-primary sm:mt-3">
+                  <h2 className="mt-2 text-xs font-black leading-tight text-villa-text-primary sm:mt-3 sm:text-sm">
                     {t(feature.title)}
                   </h2>
                 </article>
