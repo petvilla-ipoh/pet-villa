@@ -4,10 +4,9 @@ import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
 
 const heroFeatures = [
-  { icon: "🏡", title: { en: "Cage Free Home Environment", zh: "不关笼家庭环境" } },
+  { icon: "🏡", title: { en: "Cage Free Home", zh: "不关笼家庭" } },
   { icon: "🤗", title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" } },
   { icon: "📸", title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" } },
-  { icon: "🐾", title: { en: "Small Group Max 3 Dogs", zh: "小群照顾最多3只狗" } },
   { icon: "🛡️", title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" } }
 ];
 
@@ -107,16 +106,16 @@ export default function HomePage() {
 
         <section id="services" className="villa-section pt-0">
           <div className="villa-container">
-            <div className="grid grid-cols-5 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/95 shadow-[0_12px_36px_rgba(61,31,13,0.10)] backdrop-blur">
+            <div className="grid grid-cols-4 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/95 shadow-[0_12px_36px_rgba(61,31,13,0.10)] backdrop-blur">
               {heroFeatures.map((feature) => (
                 <article
                   key={feature.title.en}
-                  className="border-r border-villa-primary-light/60 px-1.5 py-4 text-center last:border-r-0 sm:px-4"
+                  className="border-r border-villa-primary-light/60 px-2 py-3 text-center last:border-r-0 sm:px-4 sm:py-4"
                 >
-                  <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-villa-primary-bg text-xl shadow-sm sm:h-12 sm:w-12 sm:text-2xl">
+                  <div className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-villa-primary-bg text-lg shadow-sm sm:h-12 sm:w-12 sm:text-2xl">
                     {feature.icon}
                   </div>
-                  <h2 className="mt-2 text-[10px] font-black leading-tight text-villa-text-primary min-[390px]:text-[11px] sm:mt-3 sm:text-sm">
+                  <h2 className="mt-2 text-[9px] font-black leading-[1.12] text-villa-text-primary min-[390px]:text-[10px] sm:mt-3 sm:text-sm">
                     {t(feature.title)}
                   </h2>
                 </article>
