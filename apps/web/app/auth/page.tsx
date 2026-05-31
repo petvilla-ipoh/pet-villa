@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useLanguage } from "../components/LanguageProvider";
 
 type AuthMode = "login" | "register";
@@ -117,24 +117,33 @@ function DogCardArt({ duo = false }: { duo?: boolean }) {
 
 function AuthInput({
   icon,
+  name,
   label,
   placeholder,
   type = "text",
   trailingIcon
 }: {
   icon: FieldIconType;
+  name: string;
   label: string;
   placeholder: string;
   type?: string;
   trailingIcon?: FieldIconType;
 }) {
+  const [visible, setVisible] = useState(false);
+  const inputType = trailingIcon === "eye" && type === "password" ? (visible ? "text" : "password") : type;
+
   return (
     <label className="grid gap-2">
       <span className="text-sm font-black text-villa-text-primary">{label}</span>
       <span className="flex h-14 items-center gap-3 rounded-[14px] border border-villa-primary-light bg-white/80 px-4 shadow-[0_8px_24px_rgba(61,31,13,0.04)] transition focus-within:border-villa-primary focus-within:shadow-[0_0_0_3px_rgba(232,146,124,0.15)]">
         <FieldIcon type={icon} />
-        <input className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-villa-text-primary outline-none placeholder:text-villa-text-muted" type={type} placeholder={placeholder} />
-        {trailingIcon ? <FieldIcon type={trailingIcon} /> : null}
+        <input name={name} className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-villa-text-primary outline-none placeholder:text-villa-text-muted" type={inputType} placeholder={placeholder} />
+        {trailingIcon ? (
+          <button type="button" onClick={() => setVisible((value) => !value)} aria-label={visible ? "Hide password" : "Show password"}>
+            <FieldIcon type={trailingIcon} />
+          </button>
+        ) : null}
       </span>
     </label>
   );
@@ -172,9 +181,15 @@ export default function AuthPage() {
     window.dispatchEvent(new Event("pet-villa-route"));
   }
 
-  function submit() {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    const form = new FormData(event.currentTarget);
+    const fullName = String(form.get("fullName") || "").trim();
+    const emailOrPhone = String(form.get("emailOrPhone") || form.get("email") || "").trim();
+    const storedName = window.localStorage.getItem("pet-villa-last-full-name") || "";
+    const nextName = mode === "register" ? fullName : storedName;
+    if (fullName) window.localStorage.setItem("pet-villa-last-full-name", fullName);
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
-      user: { id: "demo-owner", role: "owner", name: "JiaJun", email: "owner@example.com" }
+      user: { id: "demo-owner", role: "owner", name: nextName, email: emailOrPhone || "owner@example.com" }
     }));
     window.dispatchEvent(new Event("pet-villa-auth"));
     window.location.href = redirect || "/";
@@ -234,34 +249,36 @@ export default function AuthPage() {
                   : t({ en: "Join Pet Villa and give your dog a home away from home", zh: "加入 Pet Villa，给狗狗一个家一样的寄宿体验" })}
               </p>
 
-              <form className="mt-10 grid gap-5" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+              <form className="mt-10 grid gap-5" onSubmit={(event) => { event.preventDefault(); submit(event); }}>
                 {isLogin ? (
                   <>
                     <AuthInput
                       icon="mail"
+                      name="emailOrPhone"
                       label={t({ en: "Email or Phone Number", zh: "邮箱或电话号码" })}
                       placeholder={t({ en: "Enter your email address or phone number", zh: "输入邮箱或电话号码" })}
                     />
                     <AuthInput
                       icon="lock"
+                      name="password"
                       label={t({ en: "Password", zh: "密码" })}
                       placeholder={t({ en: "Enter your password", zh: "输入密码" })}
                       type="password"
                       trailingIcon="eye"
                     />
-                    <button type="button" className="justify-self-end text-sm font-bold text-villa-primary">
+                    <button type="button" className="justify-self-end text-sm font-bold text-villa-primary" onClick={() => alert(t({ en: "Password reset is coming soon. Please WhatsApp Pet Villa for help.", zh: "密码重置即将开放。请先 WhatsApp Pet Villa 协助处理。" }))}>
                       {t({ en: "Forgot password?", zh: "忘记密码？" })}
                     </button>
                   </>
                 ) : (
                   <>
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <AuthInput icon="user" label={t({ en: "Full Name", zh: "姓名" })} placeholder={t({ en: "Enter your name", zh: "输入姓名" })} />
-                      <AuthInput icon="phone" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
+                      <AuthInput icon="user" name="fullName" label={t({ en: "Full Name", zh: "姓名" })} placeholder={t({ en: "Enter your name", zh: "输入姓名" })} />
+                      <AuthInput icon="phone" name="phone" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
                     </div>
-                    <AuthInput icon="mail" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
-                    <AuthInput icon="lock" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
-                    <AuthInput icon="lock" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
+                    <AuthInput icon="mail" name="email" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
+                    <AuthInput icon="lock" name="password" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
+                    <AuthInput icon="lock" name="confirmPassword" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
                     <label className="flex items-center gap-3 text-sm font-semibold text-villa-text-secondary">
                       <input type="checkbox" defaultChecked className="h-5 w-5 accent-villa-primary" />
                       <span>
@@ -286,13 +303,13 @@ export default function AuthPage() {
               </div>
 
               <div className="grid gap-3">
-                <button type="button" className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
+                <button type="button" onClick={() => alert(t({ en: "Google login is coming soon.", zh: "Google 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
                   <GoogleMark />
-                  {t({ en: "Continue with Google", zh: "使用 Google 继续" })}
+                  {t({ en: "Continue with Google", zh: "使用 Google 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
                 </button>
-                <button type="button" className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
+                <button type="button" onClick={() => alert(t({ en: "Apple login is coming soon.", zh: "Apple 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
                   <AppleMark />
-                  {t({ en: "Continue with Apple", zh: "使用 Apple 继续" })}
+                  {t({ en: "Continue with Apple", zh: "使用 Apple 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
                 </button>
               </div>
             </div>

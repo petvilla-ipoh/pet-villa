@@ -1,17 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
+import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
 
 const days = Array.from({ length: 30 }, (_, index) => index + 1);
 const fullDays = new Set([8, 14, 15, 22]);
-const pets = [
-  { id: "mochi", name: "Mochi", breed: "Toy Poodle", weight: "4.8kg", traits: ["Vaccinated", "Calm"], tone: "apricot" },
-  { id: "boba", name: "Boba", breed: "Maltese", weight: "6.2kg", traits: ["Vaccinated", "Playful"], tone: "cream" },
-  { id: "luna", name: "Luna", breed: "Maltese", weight: "3.9kg", traits: ["Vaccinated", "Shy"], tone: "soft" }
-];
 const timeOptions = ["9:00am", "10:00am", "11:00am", "12:00pm", "1:00pm", "2:00pm", "3:00pm", "4:00pm", "5:00pm", "6:00pm", "7:00pm", "8:00pm"];
 
 function hourIndex(value: string) {
@@ -27,7 +23,6 @@ function ServiceIcon({ type }: { type: "overnight" | "daycare" }) {
       </svg>
     );
   }
-
   return (
     <svg viewBox="0 0 56 56" className="h-9 w-9" aria-hidden="true">
       <circle cx="28" cy="28" r="11" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
@@ -45,15 +40,15 @@ function CalendarIcon() {
   );
 }
 
-function DogAvatar({ tone }: { tone: string }) {
-  const fur = tone === "apricot" ? "#d99a62" : tone === "cream" ? "#f7efe5" : "#f2e5d6";
-  const ear = tone === "apricot" ? "#bd7844" : "#e7d7c7";
-
+function DogAvatar({ pet }: { pet?: PetProfile }) {
+  if (pet?.photoDataUrl) {
+    return <img src={pet.photoDataUrl} alt="" className="h-14 w-14 shrink-0 rounded-[16px] object-cover" />;
+  }
   return (
     <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[16px] bg-villa-primary-bg">
       <svg viewBox="0 0 72 72" className="h-full w-full" aria-hidden="true">
-        <circle cx="36" cy="37" r="22" fill={fur} />
-        <path d="M17 34c-8 2-11 12-8 20 3 7 12 8 17 1M55 34c8 2 11 12 8 20-3 7-12 8-17 1" fill={ear} />
+        <circle cx="36" cy="37" r="22" fill="#d99a62" />
+        <path d="M17 34c-8 2-11 12-8 20 3 7 12 8 17 1M55 34c8 2 11 12 8 20-3 7-12 8-17 1" fill="#bd7844" />
         <circle cx="28" cy="38" r="3" fill="#3d1f0d" />
         <circle cx="44" cy="38" r="3" fill="#3d1f0d" />
         <ellipse cx="36" cy="47" rx="6" ry="4" fill="#3d1f0d" />
@@ -75,33 +70,60 @@ function CheckMark({ active }: { active: boolean }) {
 
 export default function BookingPage() {
   const { t } = useLanguage();
+  const [pets, setPets] = useState<PetProfile[]>([]);
   const [service, setService] = useState<"overnight" | "daycare">("overnight");
-  const [selectedPets, setSelectedPets] = useState(["mochi"]);
+  const [serviceTouched, setServiceTouched] = useState(false);
+  const [dateTouched, setDateTouched] = useState(false);
+  const [selectedPets, setSelectedPets] = useState<string[]>([]);
   const [startDay, setStartDay] = useState(4);
   const [endDay, setEndDay] = useState(6);
   const [startTime, setStartTime] = useState("10:00am");
   const [endTime, setEndTime] = useState("2:00pm");
 
+  useEffect(() => {
+    setPets(readPetProfiles());
+    function syncPets() {
+      const nextPets = readPetProfiles();
+      setPets(nextPets);
+      setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
+    }
+    window.addEventListener("pet-villa-pets", syncPets);
+    return () => window.removeEventListener("pet-villa-pets", syncPets);
+  }, []);
+
+  const selectedPetObjects = pets.filter((pet) => selectedPets.includes(pet.id));
   const petCount = Math.max(1, selectedPets.length);
-  const selectedPetNames = pets.filter((pet) => selectedPets.includes(pet.id)).map((pet) => pet.name);
+  const selectedPetNames = selectedPetObjects.map((pet) => pet.name);
   const daycareHours = Math.max(1, hourIndex(endTime) - hourIndex(startTime));
   const overnightNights = Math.max(1, endDay - startDay + 1);
   const unitTotal = service === "overnight" ? overnightNights * 40 : daycareHours * 5;
-  const total = unitTotal * petCount;
+  const total = selectedPets.length > 0 ? unitTotal * petCount : 0;
 
   const dateLabel = useMemo(() => {
     if (service === "daycare") return `Jun ${startDay}, ${startTime} - ${endTime}`;
     return startDay === endDay ? `Jun ${startDay}` : `Jun ${startDay} - Jun ${endDay}`;
   }, [endDay, endTime, service, startDay, startTime]);
 
+  const serviceCompleted = serviceTouched;
+  const dateCompleted = serviceCompleted && dateTouched;
+  const petCompleted = dateCompleted && selectedPets.length > 0;
+  const confirmCompleted = petCompleted && total > 0;
+  const currentStep = !serviceCompleted ? 0 : !dateCompleted ? 1 : !petCompleted ? 2 : 3;
+
+  function chooseService(nextService: "overnight" | "daycare") {
+    setService(nextService);
+    setServiceTouched(true);
+    if (nextService === "daycare") setEndDay(startDay);
+  }
+
   function chooseDate(day: number) {
     if (fullDays.has(day)) return;
+    setDateTouched(true);
     if (service === "daycare") {
       setStartDay(day);
       setEndDay(day);
       return;
     }
-
     if (startDay === endDay) {
       if (day > startDay) {
         setEndDay(day);
@@ -110,12 +132,10 @@ export default function BookingPage() {
       }
       return;
     }
-
     if (day > endDay) {
       setEndDay(day);
       return;
     }
-
     if (day < startDay) {
       setStartDay(day);
       setEndDay(day);
@@ -128,14 +148,24 @@ export default function BookingPage() {
   function togglePet(id: string) {
     setSelectedPets((current) => {
       if (current.includes(id)) {
-        return current.length === 1 ? current : current.filter((petId) => petId !== id);
+        return current.filter((petId) => petId !== id);
       }
       return [...current, id];
     });
   }
 
-  const steps = ["Service", "Date", "Pet", "Confirm"];
-  const selectedPetSummary = selectedPetNames.join(", ");
+  function stepState(index: number) {
+    if (confirmCompleted || index < currentStep) return "done";
+    if (index === currentStep) return "current";
+    return "upcoming";
+  }
+
+  const steps = [
+    t({ en: "Service", zh: "服务" }),
+    t({ en: "Date", zh: "日期" }),
+    t({ en: "Pet", zh: "宠物" }),
+    t({ en: "Confirm", zh: "确认" })
+  ];
 
   return (
     <ProtectedPage>
@@ -148,38 +178,41 @@ export default function BookingPage() {
             <div className="grid gap-4">
               <div className="rounded-[20px] border border-villa-primary-light bg-white/88 px-4 py-3 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
                 <div className="grid grid-cols-4 items-start gap-1">
-                  {steps.map((step, index) => (
-                    <div key={step} className="relative grid justify-items-center gap-1 text-center">
-                      {index > 0 ? <span className="absolute right-1/2 top-[10px] h-0.5 w-full bg-villa-primary-light/75" /> : null}
-                      <span className={`relative z-10 grid h-5 w-5 place-items-center rounded-full border-2 ${index === 0 ? "border-villa-primary bg-villa-primary" : "border-villa-primary-light bg-white"}`}>
-                        {index === 0 ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
-                      </span>
-                      <span className={`text-[11px] font-black ${index === 0 ? "text-villa-primary" : "text-villa-text-muted"}`}>{step}</span>
-                    </div>
-                  ))}
+                  {steps.map((step, index) => {
+                    const state = stepState(index);
+                    return (
+                      <div key={step} className="relative grid justify-items-center gap-1 text-center">
+                        {index > 0 ? <span className={`absolute right-1/2 top-[10px] h-0.5 w-full ${stepState(index - 1) === "done" ? "bg-villa-primary" : "bg-villa-primary-light/75"}`} /> : null}
+                        <span className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border-2 text-[11px] font-black ${
+                          state === "upcoming" ? "border-villa-primary-light bg-white text-villa-text-muted" : "border-villa-primary bg-villa-primary text-white"
+                        }`}>
+                          {state === "done" ? "✓" : index + 1}
+                        </span>
+                        <span className={`text-[11px] font-black ${state === "upcoming" ? "text-villa-text-muted" : "text-villa-primary"}`}>{step}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">Choose Service</h2>
+                <h2 className="section-title">{t({ en: "Choose Service", zh: "选择服务" })}</h2>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {[
-                    { id: "overnight" as const, title: "Overnight Boarding", price: "RM40/night", desc: "No cages · 24h Care" },
-                    { id: "daycare" as const, title: "Daycare", price: "RM5/hour", desc: "9:00am – 8:00pm" }
+                    { id: "overnight" as const, title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }), price: "RM40/night", desc: t({ en: "No cages · 24h Care", zh: "不关笼 · 24小时照顾" }) },
+                    { id: "daycare" as const, title: t({ en: "Daycare", zh: "日托" }), price: "RM5/hour", desc: "9:00am – 8:00pm" }
                   ].map((item) => {
                     const active = service === item.id;
                     return (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setService(item.id)}
+                        onClick={() => chooseService(item.id)}
                         className={`flex min-h-[104px] items-center gap-3 rounded-[18px] border p-3 text-left transition hover:-translate-y-px ${
                           active ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white shadow-sm"
                         }`}
                       >
-                        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-[#fff0ec]">
-                          <ServiceIcon type={item.id} />
-                        </span>
+                        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-[#fff0ec]"><ServiceIcon type={item.id} /></span>
                         <span className="min-w-0 flex-1">
                           <strong className="block font-title text-[18px] font-black leading-tight text-villa-text-primary">{item.title}</strong>
                           <span className="mt-1 block text-sm font-black text-villa-primary">{item.price}</span>
@@ -193,13 +226,15 @@ export default function BookingPage() {
               </section>
 
               <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">Choose Date / Time</h2>
+                <h2 className="section-title">{t({ en: "Choose Date / Time", zh: "选择日期 / 时间" })}</h2>
                 <div className="mt-3 rounded-[14px] bg-villa-primary-bg p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="m-0 text-sm font-black text-villa-text-primary">{dateLabel}</p>
                       <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">
-                        {service === "overnight" ? `${overnightNights} Nights Selected · RM${unitTotal} / dog` : `${daycareHours} Hours Selected · RM${unitTotal} / dog`}
+                        {service === "overnight"
+                          ? t({ en: `${overnightNights} Nights Selected · RM${unitTotal} / dog`, zh: `已选 ${overnightNights} 晚 · 每只 RM${unitTotal}` })
+                          : t({ en: `${daycareHours} Hours Selected · RM${unitTotal} / dog`, zh: `已选 ${daycareHours} 小时 · 每只 RM${unitTotal}` })}
                       </p>
                     </div>
                     <div className="text-right text-lg font-black text-villa-primary">RM{unitTotal}</div>
@@ -209,14 +244,14 @@ export default function BookingPage() {
                 {service === "daycare" ? (
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <label className="grid gap-2">
-                      <span className="villa-label">Start time</span>
-                      <select className="villa-input" value={startTime} onChange={(event) => setStartTime(event.target.value)}>
+                      <span className="villa-label">{t({ en: "Start time", zh: "开始时间" })}</span>
+                      <select className="villa-input" value={startTime} onChange={(event) => { setStartTime(event.target.value); setDateTouched(true); }}>
                         {timeOptions.slice(0, -1).map((time) => <option key={time}>{time}</option>)}
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span className="villa-label">End time</span>
-                      <select className="villa-input" value={endTime} onChange={(event) => setEndTime(event.target.value)}>
+                      <span className="villa-label">{t({ en: "End time", zh: "结束时间" })}</span>
+                      <select className="villa-input" value={endTime} onChange={(event) => { setEndTime(event.target.value); setDateTouched(true); }}>
                         {timeOptions.slice(1).map((time) => <option key={time}>{time}</option>)}
                       </select>
                     </label>
@@ -226,7 +261,7 @@ export default function BookingPage() {
                 <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/40 p-3">
                   <div className="mb-3 flex items-center justify-between">
                     <strong className="text-sm">June 2026</strong>
-                    <span className="text-xs font-bold text-villa-text-muted">Full dates are disabled</span>
+                    <span className="text-xs font-bold text-villa-text-muted">{t({ en: "Full dates are disabled", zh: "已满日期不可选" })}</span>
                   </div>
                   <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-villa-text-muted">
                     {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
@@ -258,83 +293,93 @@ export default function BookingPage() {
               </section>
 
               <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">Choose Pets</h2>
-                <p className="mt-1 text-xs font-bold text-villa-text-secondary">Select the dog(s) staying with us.</p>
-                <div className="mt-3 grid gap-2">
-                  {pets.map((pet) => {
-                    const active = selectedPets.includes(pet.id);
-                    return (
-                      <button
-                        key={pet.id}
-                        type="button"
-                        onClick={() => togglePet(pet.id)}
-                        className={`relative flex min-h-[86px] items-center gap-3 rounded-[18px] border p-3 text-left transition hover:-translate-y-px ${
-                          active ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white shadow-sm"
-                        }`}
-                      >
-                        <DogAvatar tone={pet.tone} />
-                        <span className="min-w-0 flex-1">
-                          <strong className="block font-title text-[18px] font-black leading-tight text-villa-text-primary">{pet.name}</strong>
-                          <span className="mt-1 block text-xs font-bold text-villa-text-secondary">{pet.breed} · {pet.weight}</span>
-                          <span className="mt-1.5 flex flex-wrap gap-1.5">
-                            {pet.traits.map((trait) => (
-                              <span key={trait} className="rounded-full bg-[#eef5eb] px-2 py-0.5 text-[10px] font-black text-villa-accent-green">
-                                ✓ {trait}
+                <h2 className="section-title">{t({ en: "Choose Pets", zh: "选择宠物" })}</h2>
+                {pets.length === 0 ? (
+                  <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-4 text-center">
+                    <h3 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Please add your pet first before booking.", zh: "预约前请先添加宠物资料。" })}</h3>
+                    <a href="/pets?mode=add" className="villa-button mt-4 w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mt-1 text-xs font-bold text-villa-text-secondary">{t({ en: "Select the dog(s) staying with us.", zh: "选择这次要入住的狗狗。" })}</p>
+                    <div className="mt-3 grid gap-2">
+                      {pets.map((pet) => {
+                        const active = selectedPets.includes(pet.id);
+                        return (
+                          <button
+                            key={pet.id}
+                            type="button"
+                            onClick={() => togglePet(pet.id)}
+                            className={`relative flex min-h-[86px] items-center gap-3 rounded-[18px] border p-3 text-left transition hover:-translate-y-px ${
+                              active ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white shadow-sm"
+                            }`}
+                          >
+                            <DogAvatar pet={pet} />
+                            <span className="min-w-0 flex-1">
+                              <strong className="block font-title text-[18px] font-black leading-tight text-villa-text-primary">{pet.name}</strong>
+                              <span className="mt-1 block text-xs font-bold text-villa-text-secondary">{pet.breed} · {pet.weight}</span>
+                              <span className="mt-1.5 flex flex-wrap gap-1.5">
+                                {pet.vaccinated ? <span className="rounded-full bg-[#eef5eb] px-2 py-0.5 text-[10px] font-black text-villa-accent-green">✓ {t({ en: "Vaccinated", zh: "已接种" })}</span> : null}
+                                {pet.calm ? <span className="rounded-full bg-villa-primary-bg px-2 py-0.5 text-[10px] font-black text-villa-primary">✓ {t({ en: "Calm", zh: "稳定" })}</span> : null}
                               </span>
-                            ))}
-                          </span>
-                        </span>
-                        <CheckMark active={active} />
-                      </button>
-                    );
-                  })}
-                </div>
+                            </span>
+                            <CheckMark active={active} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
 
                 <label className="mt-3 grid gap-2">
-                  <span className="villa-label">Special Request (Optional)</span>
-                  <textarea className="villa-input h-16 py-3" placeholder="Tell us anything important for your dog's comfort." />
+                  <span className="villa-label">{t({ en: "Special Request (Optional)", zh: "特别要求（选填）" })}</span>
+                  <textarea className="villa-input h-16 py-3" placeholder={t({ en: "Tell us anything important for your dog's comfort.", zh: "告诉我们狗狗照顾上需要注意的事项。" })} />
                 </label>
               </section>
             </div>
 
             <aside className="h-fit rounded-[22px] border border-villa-primary-light bg-white/90 p-4 shadow-[0_8px_28px_rgba(61,31,13,0.10)] lg:sticky lg:top-24">
-              <h2 className="section-title">Booking Summary</h2>
+              <h2 className="section-title">{t({ en: "Booking Summary", zh: "预约摘要" })}</h2>
               <div className="mt-4 rounded-[18px] bg-villa-primary-bg/55 p-4">
                 <div className="grid gap-3 text-sm font-black text-villa-text-primary">
                   <div className="flex items-center gap-3">
                     <ServiceIcon type={service} />
-                    <span>{service === "overnight" ? "Overnight Boarding" : "Daycare"}</span>
+                    <span>{service === "overnight" ? t({ en: "Overnight Boarding", zh: "过夜寄宿" }) : t({ en: "Daycare", zh: "日托" })}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <CalendarIcon />
-                    <span>{dateLabel}{service === "overnight" ? ` (${overnightNights} Nights)` : ""}</span>
+                    <span>{dateLabel}{service === "overnight" ? ` (${overnightNights} ${t({ en: "Nights", zh: "晚" })})` : ""}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <DogAvatar tone="apricot" />
-                    <span>{selectedPetSummary}</span>
+                    <DogAvatar pet={selectedPetObjects[0]} />
+                    <span>{selectedPetNames.length ? selectedPetNames.join(", ") : t({ en: "No pet selected", zh: "未选择宠物" })}</span>
                   </div>
-                  <div className="text-xs font-bold text-villa-text-secondary">{petCount} {petCount === 1 ? "Dog" : "Dogs"}</div>
+                  <div className="text-xs font-bold text-villa-text-secondary">{selectedPets.length} {selectedPets.length === 1 ? t({ en: "Dog", zh: "只狗" }) : t({ en: "Dogs", zh: "只狗" })}</div>
                 </div>
               </div>
 
               <div className="my-4 h-px bg-villa-primary-light" />
               <div className="grid gap-3">
                 <div className="flex items-end justify-between">
-                  <span className="text-base font-black text-villa-text-primary">Total</span>
+                  <span className="text-base font-black text-villa-text-primary">{t({ en: "Total", zh: "总计" })}</span>
                   <span className="text-2xl font-black text-villa-text-primary">RM{total}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black">
-                  <span className="text-villa-text-secondary">Deposit Today (50%)</span>
+                  <span className="text-villa-text-secondary">{t({ en: "Deposit Today (50%)", zh: "今日订金（50%）" })}</span>
                   <span className="text-villa-primary">RM{(total / 2).toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
-                  <span>Balance Later</span>
+                  <span>{t({ en: "Balance Later", zh: "尾款稍后支付" })}</span>
                   <span>RM{(total / 2).toFixed(0)}</span>
                 </div>
               </div>
               <div className="my-4 h-px bg-villa-primary-light" />
-              <a href="/payment" className="villa-button w-full">Continue to Payment</a>
-              <p className="mt-3 text-center text-[11px] font-bold leading-relaxed text-villa-text-muted">Your booking is only confirmed after deposit payment.</p>
+              {pets.length === 0 ? (
+                <a href="/pets?mode=add" className="villa-button w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
+              ) : (
+                <a href={confirmCompleted ? "/payment" : "#"} className={`villa-button w-full ${confirmCompleted ? "" : "pointer-events-none opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</a>
+              )}
+              <p className="mt-3 text-center text-[11px] font-bold leading-relaxed text-villa-text-muted">{t({ en: "Your booking is only confirmed after deposit payment.", zh: "付款订金后，预约才会确认。" })}</p>
             </aside>
           </div>
         </section>

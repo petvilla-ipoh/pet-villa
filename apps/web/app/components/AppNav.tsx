@@ -10,13 +10,13 @@ function hasSession() {
 }
 
 function getSessionName() {
-  if (typeof window === "undefined") return "Jia Jun";
+  if (typeof window === "undefined") return "";
   try {
     const session = JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}");
-    const name = session?.user?.name || "JiaJun";
+    const name = session?.user?.name || "";
     return name === "Pet Owner" ? "JiaJun" : name;
   } catch {
-    return "JiaJun";
+    return "";
   }
 }
 
@@ -158,7 +158,7 @@ function MenuItemIcon({ name }: { name: string }) {
 export function AppNav({ host = false }: { host?: boolean }) {
   const { lang, setLang, t } = useLanguage();
   const [loggedIn, setLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("Jia Jun");
+  const [userName, setUserName] = useState("");
   const [locationState, setLocationState] = useState(() => getLocationState());
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -250,7 +250,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
           {loggedIn ? (
             <div className="mr-1 flex min-w-0 items-center justify-end gap-1 text-right">
               <span className="whitespace-nowrap text-[15px] font-black leading-none text-villa-text-primary">
-                Welcome, {userName}
+                Welcome{userName ? `, ${userName}` : ""}
               </span>
               <span className="text-lg leading-none text-villa-primary" aria-hidden="true">🐾</span>
             </div>
@@ -345,7 +345,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
               </div>
               <div>
                 <p className="m-0 text-xs font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
-                <h2 className="m-0 font-title text-xl font-black leading-tight text-villa-text-primary">{userName}</h2>
+                <h2 className="m-0 font-title text-xl font-black leading-tight text-villa-text-primary">{userName || "Pet Villa"}</h2>
               </div>
             </div>
 
