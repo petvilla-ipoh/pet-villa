@@ -1,105 +1,220 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
+import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
+import { getCurrentUserId } from "./lib/petProfiles";
 
-const coral = "#e8927c";
-const deep = "#3d1f0d";
-const soft = "#f5c4b3";
-const cream = "#fff8f5";
-const green = "#7a9e7e";
+const phone = "+60165236409";
+const whatsappUrl = "https://wa.me/60165236409?text=Hi%20Pet%20Villa%2C%20I%20would%20like%20to%20ask%20about%20boarding.";
+const socialLinks = {
+  whatsapp: whatsappUrl,
+  instagram: "https://instagram.com/thepetvillaipoh", // TODO_UPDATE_SOCIAL_LINK
+  facebook: "https://facebook.com/thepetvillaipoh", // TODO_UPDATE_SOCIAL_LINK
+  xhs: "https://www.xiaohongshu.com/search_result?keyword=The%20Pet%20Villa%20Ipoh" // TODO_UPDATE_SOCIAL_LINK
+};
 
-type IconName =
-  | "no"
+type Copy = { en: string; zh: string };
+type HomeIconName =
+  | "moon"
+  | "sun"
+  | "paw"
   | "heart"
   | "dog"
   | "camera"
-  | "home"
-  | "owner"
   | "shield"
-  | "moon"
-  | "sun"
   | "calendar"
-  | "profile"
-  | "clipboard"
-  | "wallet"
+  | "gift"
+  | "friend"
   | "vaccine"
   | "food"
+  | "no"
   | "flea"
-  | "vet";
+  | "vet"
+  | "whatsapp"
+  | "instagram"
+  | "facebook"
+  | "xhs";
 
-const featureCards = [
+const services = [
   {
-    icon: "no",
-    title: { en: "Cage Free Home", zh: "不关笼家庭" },
-    body: { en: "Your dog stays in a safe, comfortable home.", zh: "狗狗住在安全舒适的家庭环境。" }
+    id: "overnight",
+    icon: "moon",
+    title: { en: "Overnight Boarding", zh: "寄宿服务" },
+    price: { en: "RM40 / night", zh: "RM40 / 晚" },
+    details: {
+      en: ["No cages", "Same-room sleeping", "24h companionship", "Daily photo updates"],
+      zh: ["不关笼", "晚上一起睡", "24小时陪伴", "每日照片更新"]
+    },
+    href: "/booking?service=overnight",
+    cta: { en: "Book Boarding", zh: "立即预约寄宿" }
   },
   {
-    icon: "owner",
-    title: { en: "24h Supervision By Owner", zh: "主人24小时陪伴" },
-    body: { en: "We are always here with your dog, day and night.", zh: "白天夜晚都有人陪伴照顾。" }
-  },
-  {
-    icon: "camera",
-    title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" },
-    body: { en: "Get daily photos and videos to see your dog's happiness.", zh: "每天收到照片视频，安心看到狗狗状态。" }
-  },
-  {
-    icon: "shield",
-    title: { en: "Safe, Clean & Loved", zh: "安全干净被爱护" },
-    body: { en: "A clean, secure and loving space for your furry friend.", zh: "干净安全又有爱的寄宿空间。" }
+    id: "daycare",
+    icon: "sun",
+    title: { en: "Daycare", zh: "日托服务" },
+    price: { en: "RM5 / hour", zh: "RM5 / 小时" },
+    details: {
+      en: ["Daytime care", "9:00am - 8:00pm", "Safe activity space"],
+      zh: ["白天照顾", "9:00am - 8:00pm", "安全活动空间"]
+    },
+    href: "/booking?service=daycare",
+    cta: { en: "Book Daycare", zh: "立即预约日托" }
   }
-] satisfies { icon: IconName; title: { en: string; zh: string }; body: { en: string; zh: string } }[];
+] satisfies Array<{
+  id: string;
+  icon: HomeIconName;
+  title: Copy;
+  price: Copy;
+  details: { en: string[]; zh: string[] };
+  href: string;
+  cta: Copy;
+}>;
 
-const serviceCards = [
+const promotions = [
+  {
+    code: "WELCOME10",
+    icon: "gift",
+    label: { en: "New Guest", zh: "新客专享" },
+    title: { en: "RM10 OFF", zh: "RM10 OFF" },
+    body: { en: "First boarding discount", zh: "首次寄宿优惠" }
+  },
+  {
+    code: "SECOND50",
+    icon: "dog",
+    label: { en: "Multi-dog", zh: "多只家庭优惠" },
+    title: { en: "50% OFF", zh: "50% OFF" },
+    body: { en: "Second dog discount", zh: "第二只狗狗优惠" }
+  },
+  {
+    code: "REFER10",
+    icon: "friend",
+    label: { en: "Referral", zh: "推荐好友" },
+    title: { en: "RM10 Voucher", zh: "RM10 Voucher" },
+    body: { en: "Both sides receive a voucher", zh: "双方各得优惠券" }
+  }
+] satisfies Array<{ code: string; icon: HomeIconName; label: Copy; title: Copy; body: Copy }>;
+
+const whyItems = [
   {
     icon: "no",
     title: { en: "No Cages", zh: "不关笼" },
-    body: { en: "Your dog stays free in a calm home space.", zh: "狗狗在放松的家庭空间自由活动。" }
+    body: { en: "Free movement in a calm home.", zh: "狗狗在宽敞的家庭空间自由活动" }
   },
   {
     icon: "heart",
-    title: { en: "24h Care", zh: "24小时照顾" },
-    body: { en: "Owner-supervised care, day and night.", zh: "白天晚上都有人看顾陪伴。" }
+    title: { en: "24h Care", zh: "24小时陪伴" },
+    body: { en: "Owner care day and night.", zh: "白天晚上都有保姆陪伴照顾" }
   },
   {
     icon: "dog",
-    title: { en: "1-12kg Only", zh: "仅接1-12kg" },
-    body: { en: "Small dogs only, with a gentle group setting.", zh: "只接小型犬，环境更安心。" }
+    title: { en: "1-12kg Only", zh: "仅接待 1-12kg" },
+    body: { en: "Small dogs feel safer.", zh: "只接待小型犬，让狗狗更安心" }
   },
   {
     icon: "camera",
-    title: { en: "3-5 Daily Photo Updates", zh: "每日3-5次照片更新" },
-    body: { en: "Daily photos and videos so you can feel at ease.", zh: "每天收到照片视频，让你安心看到狗狗状态。" }
+    title: { en: "Daily Updates", zh: "每日 3-5 次更新" },
+    body: { en: "Photos and videos every day.", zh: "每天收到照片视频，让你安心" }
+  },
+  {
+    icon: "shield",
+    title: { en: "Safety First", zh: "安全第一" },
+    body: { en: "Clean, checked, and loved.", zh: "环境清洁消毒，定期健康检查" }
   }
-] satisfies { icon: IconName; title: { en: string; zh: string }; body: { en: string; zh: string } }[];
+] satisfies Array<{ icon: HomeIconName; title: Copy; body: Copy }>;
 
-const steps = [
-  { icon: "profile", en: "Register", zh: "注册", body: { en: "Create account", zh: "创建账号" } },
-  { icon: "dog", en: "Add Your Dog", zh: "添加狗狗", body: { en: "Dog profile", zh: "宠物档案" } },
-  { icon: "calendar", en: "Choose Dates", zh: "选择日期", body: { en: "Pick check-in & check-out", zh: "选择入住日期" } },
-  { icon: "clipboard", en: "Confirm Booking", zh: "确认预约", body: { en: "Review details", zh: "检查资料" } },
-  { icon: "wallet", en: "Pay Deposit", zh: "付订金", body: { en: "Secure your dog's stay", zh: "确认名额" } }
-] satisfies { icon: IconName; en: string; zh: string; body: { en: string; zh: string } }[];
-
-const notices = [
-  { icon: "vaccine", en: "Vaccinated", zh: "已打疫苗" },
-  { icon: "food", en: "Bring Own Food", zh: "自备狗粮" },
-  { icon: "dog", en: "Small Dogs (1-12kg)", zh: "小型犬 1-12kg" },
-  { icon: "no", en: "No Aggressive Dogs", zh: "不接攻击性犬" },
-  { icon: "flea", en: "Flea Free", zh: "无跳蚤" },
-  { icon: "vet", en: "Emergency Vet Support", zh: "紧急兽医支援" }
-] satisfies { icon: IconName; en: string; zh: string }[];
+const requirements = [
+  { icon: "vaccine", title: { en: "Vaccinated", zh: "已打疫苗" } },
+  { icon: "food", title: { en: "Bring Own Food", zh: "自备狗粮" } },
+  { icon: "dog", title: { en: "Small Dogs 1-12kg", zh: "小型犬 1-12kg" } },
+  { icon: "no", title: { en: "No Aggressive Dogs", zh: "不接攻击性犬" } },
+  { icon: "flea", title: { en: "Flea Free", zh: "无跳蚤" } },
+  { icon: "vet", title: { en: "Emergency Vet Support", zh: "紧急兽医支持" } }
+] satisfies Array<{ icon: HomeIconName; title: Copy }>;
 
 const reviews = [
-  { name: "林美玲", dog: "Mochi (Poodle)", quote: { en: "Mochi looked loved, calm, and safe every day.", zh: "Mochi 每天都很安心，也被照顾得很好。" }, pos: "35% 78%" },
-  { name: "陈嘉欣", dog: "Boba (Frenchie)", quote: { en: "The updates were professional, warm, and always on time.", zh: "照片更新温暖准时，很专业。" }, pos: "68% 72%" },
-  { name: "王俊伟", dog: "Luna (Maltese)", quote: { en: "Simple booking and very careful small-dog care.", zh: "预约简单，小型犬照顾很细心。" }, pos: "50% 65%" }
+  {
+    name: "Grace Sam",
+    pet: "Toy Poodle",
+    date: "2026-05-18",
+    rating: 5,
+    quote: {
+      en: "We received photos every day. My dog looked happy, safe, and relaxed. I will choose Pet Villa again!",
+      zh: "每天都会收到照片，狗狗玩得很开心！第一次寄宿也很放心，会继续选择 Pet Villa！"
+    }
+  },
+  {
+    name: "Michelle Tan",
+    pet: "French Bulldog",
+    date: "2026-05-12",
+    rating: 5,
+    quote: {
+      en: "Warm updates, clean home, and very thoughtful care for small dogs.",
+      zh: "更新很温暖，环境干净，对小型犬照顾得很细心。"
+    }
+  },
+  {
+    name: "Rachel Lee",
+    pet: "Maltese",
+    date: "2026-05-05",
+    rating: 5,
+    quote: {
+      en: "The booking was simple and my dog settled in quickly.",
+      zh: "预约很简单，狗狗也很快适应，真的很安心。"
+    }
+  }
+] satisfies Array<{ name: string; pet: string; date: string; rating: number; quote: Copy }>;
+
+const galleryDogs = [
+  { breed: "Poodle", color: "#f0b46e" },
+  { breed: "French Bulldog", color: "#f8f1e9" },
+  { breed: "Maltese", color: "#fffaf2" },
+  { breed: "Corgi", color: "#e8a45d" },
+  { breed: "Shih Tzu", color: "#d8b28a" },
+  { breed: "Pomeranian", color: "#efc27e" }
 ];
 
-function Icon({ name, className = "h-8 w-8" }: { name: IconName; className?: string }) {
-  const strokeProps = { fill: "none", stroke: deep, strokeWidth: "3", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+function Icon({ name, className = "h-9 w-9" }: { name: HomeIconName; className?: string }) {
+  const deep = "#3d1f0d";
+  const coral = "#e8927c";
+  const green = "#7a9e7e";
 
+  if (name === "moon") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <path d="M42 45A20 20 0 0 1 25 13a23 23 0 1 0 26 26 20 20 0 0 1-9 6Z" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
+        <path d="M47 13v8M43 17h8" stroke="#d9922e" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "sun") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <circle cx="32" cy="32" r="12" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
+        <path d="M32 6v9M32 49v9M6 32h9M49 32h9M14 14l6 6M44 44l6 6M50 14l-6 6M20 44l-6 6" stroke="#d9922e" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "paw") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <ellipse cx="32" cy="42" rx="13" ry="10" fill={coral} />
+        <ellipse cx="17" cy="28" rx="6" ry="8" fill={coral} />
+        <ellipse cx="28" cy="17" rx="6" ry="9" fill={coral} />
+        <ellipse cx="40" cy="17" rx="6" ry="9" fill={coral} />
+        <ellipse cx="49" cy="28" rx="6" ry="8" fill={coral} />
+      </svg>
+    );
+  }
+  if (name === "heart") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <circle cx="32" cy="32" r="27" fill="#fff3ef" />
+        <path d="M32 47S17 38 17 27c0-7 9-10 15 0 6-10 15-7 15 0 0 11-15 20-15 20Z" fill={coral} />
+      </svg>
+    );
+  }
   if (name === "no") {
     return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
@@ -108,127 +223,53 @@ function Icon({ name, className = "h-8 w-8" }: { name: IconName; className?: str
       </svg>
     );
   }
-
-  if (name === "heart") {
-    return (
-      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <circle cx="32" cy="32" r="27" fill="#fff3ef" />
-        <path d="M32 47S17 38 17 27c0-7 9-10 15 0 6-10 15-7 15 0 0 11-15 20-15 20Z" fill={coral} stroke={coral} strokeWidth="2" />
-      </svg>
-    );
-  }
-
-  if (name === "dog") {
-    return (
-      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <circle cx="32" cy="34" r="18" fill="#fff8f5" stroke={deep} strokeWidth="3" />
-        <path d="M17 28c-7 1-10 9-7 15 3 6 11 5 13 0M47 28c7 1 10 9 7 15-3 6-11 5-13 0" fill="#d99864" />
-        <circle cx="25" cy="34" r="2.5" fill={deep} />
-        <circle cx="39" cy="34" r="2.5" fill={deep} />
-        <ellipse cx="32" cy="41" rx="5" ry="3.5" fill={deep} />
-        <path d="M27 47c3 3 7 3 10 0" {...strokeProps} strokeWidth="2" />
-      </svg>
-    );
-  }
-
   if (name === "camera") {
     return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <circle cx="32" cy="32" r="27" fill="#fff3ef" />
-        <path d="M17 25h9l3-5h9l3 5h6a6 6 0 0 1 6 6v15a6 6 0 0 1-6 6H17a6 6 0 0 1-6-6V31a6 6 0 0 1 6-6Z" fill="#fff" stroke={deep} strokeWidth="3" />
-        <circle cx="32" cy="38" r="9" fill={soft} stroke={coral} strokeWidth="3" />
-        <circle cx="47" cy="31" r="2.5" fill={coral} />
+        <rect x="12" y="23" width="40" height="28" rx="8" fill="#fff" stroke={deep} strokeWidth="3" />
+        <path d="M23 23l4-6h10l4 6" fill="#f5c4b3" stroke={deep} strokeWidth="3" />
+        <circle cx="32" cy="37" r="9" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
+        <circle cx="45" cy="30" r="2.5" fill={coral} />
       </svg>
     );
   }
-
-  if (name === "home") {
-    return (
-      <svg viewBox="0 0 72 72" className={className} aria-hidden="true">
-        <path d="M12 36 36 15l24 21" fill="none" stroke={deep} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M19 33v25h34V33" fill={cream} stroke={deep} strokeWidth="3" />
-        <path d="M26 45c0-5 4-8 10-8s10 3 10 8c0 8-10 13-10 13s-10-5-10-13Z" fill={coral} opacity="0.9" />
-        <path d="M9 56c7-1 11-5 14-11M63 56c-7-1-11-5-14-11" fill="none" stroke={green} strokeWidth="3" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (name === "owner") {
-    return (
-      <svg viewBox="0 0 72 72" className={className} aria-hidden="true">
-        <circle cx="30" cy="23" r="10" fill="#f2b27f" stroke={deep} strokeWidth="2.5" />
-        <path d="M15 62c2-16 27-16 30 0" fill="#fff3ef" stroke={deep} strokeWidth="3" />
-        <circle cx="47" cy="43" r="9" fill="#fff8f5" stroke={deep} strokeWidth="2.5" />
-        <path d="M39 45c3 7 13 7 17 0" fill="none" stroke={deep} strokeWidth="2.3" strokeLinecap="round" />
-        <path d="M20 40c6 8 18 10 31 6" fill="none" stroke={coral} strokeWidth="4" strokeLinecap="round" />
-        <path d="M55 16c3-5 10-2 8 4-1 4-8 8-8 8s-7-4-8-8c-2-6 5-9 8-4Z" fill={coral} />
-      </svg>
-    );
-  }
-
   if (name === "shield") {
     return (
-      <svg viewBox="0 0 72 72" className={className} aria-hidden="true">
-        <path d="M36 10 57 18v17c0 17-10 27-21 33-11-6-21-16-21-33V18l21-8Z" fill="#fff8f5" stroke={deep} strokeWidth="4" />
-        <path d="m26 35 7 7 15-17" fill="none" stroke={coral} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9 58c7-1 11-5 14-11M63 58c-7-1-11-5-14-11" fill="none" stroke={green} strokeWidth="3" strokeLinecap="round" />
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <path d="M32 7 51 15v16c0 15-9 24-19 29-10-5-19-14-19-29V15l19-8Z" fill="#fff8f5" stroke={deep} strokeWidth="4" />
+        <path d="m22 32 7 7 14-17" fill="none" stroke={coral} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
-
-  if (name === "moon" || name === "sun") {
-    return name === "moon" ? (
+  if (name === "dog" || name === "friend") {
+    return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <path d="M42 45A20 20 0 0 1 25 13a23 23 0 1 0 26 26 20 20 0 0 1-9 6Z" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
-        <path d="M47 13v8M43 17h8M17 48v6M14 51h6" stroke="#d9922e" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-    ) : (
-      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <circle cx="32" cy="32" r="12" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
-        <path d="M32 6v9M32 49v9M6 32h9M49 32h9M14 14l6 6M44 44l6 6M50 14l-6 6M20 44l-6 6" stroke="#d9922e" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="32" cy="34" r="19" fill="#fff8f5" stroke={deep} strokeWidth="3" />
+        <path d="M17 28c-7 1-10 9-7 15 3 6 11 5 13 0M47 28c7 1 10 9 7 15-3 6-11 5-13 0" fill="#d99864" />
+        <circle cx="25" cy="35" r="2.5" fill={deep} />
+        <circle cx="39" cy="35" r="2.5" fill={deep} />
+        <ellipse cx="32" cy="43" rx="5" ry="3.5" fill={deep} />
+        {name === "friend" ? <circle cx="48" cy="14" r="8" fill={coral} opacity="0.85" /> : null}
       </svg>
     );
   }
-
   if (name === "calendar") {
     return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <rect x="13" y="15" width="38" height="38" rx="7" fill="#fff8f5" stroke={deep} strokeWidth="3" />
+        <rect x="13" y="15" width="38" height="38" rx="7" fill="#fff8f5" stroke={coral} strokeWidth="3" />
         <path d="M13 26h38M23 10v10M41 10v10" stroke={coral} strokeWidth="4" strokeLinecap="round" />
-        <path d="M23 35h5M36 35h5M23 44h5M36 44h5" stroke={green} strokeWidth="3" strokeLinecap="round" />
       </svg>
     );
   }
-
-  if (name === "profile") {
+  if (name === "gift") {
     return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <circle cx="32" cy="24" r="11" fill="#f2b27f" stroke={deep} strokeWidth="3" />
-        <path d="M14 55c3-13 14-19 18-19s15 6 18 19" fill="#fff3ef" stroke={deep} strokeWidth="3" />
+        <rect x="12" y="26" width="40" height="28" rx="6" fill="#fff8f5" stroke={coral} strokeWidth="3" />
+        <path d="M32 26v28M12 36h40" stroke={coral} strokeWidth="3" />
+        <path d="M31 24c-12 0-13-13-4-13 5 0 5 8 5 13Zm2 0c12 0 13-13 4-13-5 0-5 8-5 13Z" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
       </svg>
     );
   }
-
-  if (name === "clipboard") {
-    return (
-      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <rect x="17" y="13" width="30" height="42" rx="6" fill="#fff8f5" stroke={deep} strokeWidth="3" />
-        <path d="M25 13c1-5 13-5 14 0v5H25v-5Z" fill={soft} stroke={deep} strokeWidth="3" />
-        <path d="m24 36 6 6 12-14" fill="none" stroke={coral} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-
-  if (name === "wallet") {
-    return (
-      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-        <rect x="12" y="20" width="42" height="29" rx="7" fill="#fff8f5" stroke={deep} strokeWidth="3" />
-        <path d="M44 29h10v11H44c-4 0-6-2-6-5s2-6 6-6Z" fill={soft} stroke={deep} strokeWidth="3" />
-        <circle cx="45" cy="35" r="2" fill={deep} />
-      </svg>
-    );
-  }
-
   if (name === "vaccine" || name === "food" || name === "flea" || name === "vet") {
     const label = name === "vaccine" ? "V" : name === "food" ? "F" : name === "flea" ? "X" : "+";
     return (
@@ -239,368 +280,439 @@ function Icon({ name, className = "h-8 w-8" }: { name: IconName; className?: str
       </svg>
     );
   }
-
+  if (name === "whatsapp" || name === "instagram" || name === "facebook" || name === "xhs") {
+    const label = name === "whatsapp" ? "WA" : name === "instagram" ? "IG" : name === "facebook" ? "f" : "RED";
+    const fill = name === "whatsapp" ? "#25D366" : name === "facebook" ? "#1877F2" : name === "xhs" ? "#ff2442" : "#e8927c";
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <circle cx="32" cy="32" r="26" fill={fill} />
+        <text x="32" y="38" textAnchor="middle" fontSize={name === "xhs" ? "14" : "17"} fontWeight="900" fill="#fff">{label}</text>
+      </svg>
+    );
+  }
   return null;
 }
 
-function MiniDogArt({ className = "h-full w-full" }: { className?: string }) {
+function Stars({ rating = 5 }: { rating?: number }) {
   return (
-    <svg viewBox="0 0 150 120" className={className} aria-hidden="true">
-      <path d="M22 92c8-19 29-27 50-19 8 3 14 9 18 16 6-10 19-16 35-12 13 4 21 13 23 25H18c1-4 2-7 4-10Z" fill="#fff8f5" />
-      <path d="M38 96c-9-24 3-48 27-51 24 3 36 27 27 51H38Z" fill="#f2b27f" stroke={deep} strokeWidth="2" />
-      <circle cx="65" cy="70" r="25" fill="#f4c18d" />
-      <path d="M41 65c-7 2-11 9-10 17 1 9 8 14 15 12M89 65c7 2 11 9 10 17-1 9-8 14-15 12" fill="#d99864" />
-      <circle cx="55" cy="70" r="3" fill={deep} />
-      <circle cx="75" cy="70" r="3" fill={deep} />
-      <ellipse cx="65" cy="78" rx="5" ry="4" fill={deep} />
-      <path d="M59 84c4 4 9 4 13 0" fill="none" stroke={deep} strokeWidth="2" strokeLinecap="round" />
-      <path d="M14 94c7-1 12-5 16-13M134 96c-7-1-12-5-15-13" fill="none" stroke={green} strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CartoonPetArt({ variant, className = "h-full w-full" }: { variant: "boarding" | "daycare" | "food" | "camera"; className?: string }) {
-  if (variant === "daycare") {
-    return (
-      <svg viewBox="0 0 180 150" className={className} aria-hidden="true">
-        <rect x="0" y="0" width="180" height="150" rx="28" fill="#fff3ef" />
-        <circle cx="136" cy="34" r="18" fill="#ffd45b" stroke="#d9922e" strokeWidth="4" />
-        <path d="M136 4v14M136 50v14M106 34h14M152 34h14M114 12l10 10M148 46l10 10M158 12l-10 10M124 46l-10 10" stroke="#d9922e" strokeWidth="4" strokeLinecap="round" />
-        <ellipse cx="90" cy="123" rx="58" ry="14" fill="#f5c4b3" opacity="0.45" />
-        <circle cx="92" cy="74" r="36" fill="#fff8f5" stroke={deep} strokeWidth="3" />
-        <path d="M58 66c-11 2-16 13-12 24 4 10 16 10 22 2M126 66c11 2 16 13 12 24-4 10-16 10-22 2" fill="#d99864" />
-        <circle cx="80" cy="75" r="4" fill={deep} />
-        <circle cx="104" cy="75" r="4" fill={deep} />
-        <ellipse cx="92" cy="88" rx="8" ry="6" fill={deep} />
-        <path d="M82 98c7 7 14 7 21 0" fill="none" stroke={deep} strokeWidth="3" strokeLinecap="round" />
-        <circle cx="48" cy="112" r="15" fill="#f2b27f" stroke={coral} strokeWidth="3" />
-        <path d="M40 112h16M48 104v16" stroke="#fff" strokeWidth="4" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (variant === "food") {
-    return (
-      <svg viewBox="0 0 180 150" className={className} aria-hidden="true">
-        <rect width="180" height="150" rx="28" fill="#fff8f5" />
-        <path d="M38 74c8-24 27-38 52-38s44 14 52 38" fill="#f5c4b3" opacity="0.5" />
-        <path d="M47 95h86l-9 30H56L47 95Z" fill="#f2b27f" stroke={deep} strokeWidth="4" strokeLinejoin="round" />
-        <path d="M60 95c2-12 14-20 30-20s28 8 30 20" fill="#fff3ef" stroke={deep} strokeWidth="4" />
-        <circle cx="76" cy="88" r="4" fill={deep} />
-        <circle cx="104" cy="88" r="4" fill={deep} />
-        <ellipse cx="90" cy="99" rx="7" ry="5" fill={deep} />
-        <path d="M75 120h30" stroke="#fff8f5" strokeWidth="7" strokeLinecap="round" />
-        <path d="M32 46c6-10 20-4 14 7-4 7-16 13-16 13s-5-13 2-20ZM142 48c8-9 20-1 12 9-5 6-18 10-18 10s-3-14 6-19Z" fill={coral} opacity="0.85" />
-      </svg>
-    );
-  }
-
-  if (variant === "camera") {
-    return (
-      <svg viewBox="0 0 180 150" className={className} aria-hidden="true">
-        <rect width="180" height="150" rx="28" fill="#fff3ef" />
-        <rect x="34" y="50" width="76" height="56" rx="14" fill="#fff" stroke={deep} strokeWidth="4" />
-        <path d="M49 50l8-12h31l8 12" fill="#f5c4b3" stroke={deep} strokeWidth="4" strokeLinejoin="round" />
-        <circle cx="72" cy="78" r="17" fill="#f5c4b3" stroke={coral} strokeWidth="4" />
-        <circle cx="98" cy="62" r="4" fill={coral} />
-        <rect x="82" y="35" width="64" height="48" rx="12" fill="#fff8f5" stroke={deep} strokeWidth="4" transform="rotate(10 114 59)" />
-        <circle cx="114" cy="59" r="13" fill="#f5c4b3" stroke={coral} strokeWidth="4" />
-        <path d="M132 29c4-7 14-3 12 5-2 6-11 11-11 11s-7-8-1-16ZM42 119c5-8 16-2 12 7-3 6-14 10-14 10s-5-10 2-17Z" fill={coral} opacity="0.82" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 180 150" className={className} aria-hidden="true">
-      <rect width="180" height="150" rx="28" fill="#fff3ef" />
-      <ellipse cx="90" cy="124" rx="62" ry="13" fill="#f5c4b3" opacity="0.45" />
-      <path d="M31 110c5-29 29-48 59-48s54 19 59 48" fill="#fff8f5" />
-      <circle cx="79" cy="72" r="34" fill="#f4c18d" stroke={deep} strokeWidth="3" />
-      <circle cx="121" cy="76" r="31" fill="#fff" stroke={deep} strokeWidth="3" />
-      <path d="M49 67c-10 2-15 12-12 23s15 12 21 3M105 68c-9 2-13 11-10 20s13 10 18 3" fill="#d99864" />
-      <path d="M136 67c9 2 13 11 10 20s-13 10-18 3" fill="#d99864" />
-      <circle cx="69" cy="74" r="4" fill={deep} />
-      <circle cx="89" cy="74" r="4" fill={deep} />
-      <circle cx="112" cy="78" r="3.5" fill={deep} />
-      <circle cx="130" cy="78" r="3.5" fill={deep} />
-      <ellipse cx="79" cy="87" rx="7" ry="5" fill={deep} />
-      <ellipse cx="121" cy="90" rx="7" ry="5" fill={deep} />
-      <path d="M69 97c6 6 13 6 20 0M112 100c6 5 12 5 18 0" fill="none" stroke={deep} strokeWidth="3" strokeLinecap="round" />
-      <path d="M25 43c8-14 28-5 20 10-5 10-23 18-23 18s-7-18 3-28Z" fill={coral} opacity="0.85" />
-    </svg>
-  );
-}
-
-function PawIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <ellipse cx="16" cy="21" rx="7" ry="5.5" fill={deep} />
-      <ellipse cx="8" cy="13" rx="3.2" ry="4.4" fill={deep} />
-      <ellipse cx="14" cy="8" rx="3" ry="4.4" fill={deep} />
-      <ellipse cx="20" cy="8" rx="3" ry="4.4" fill={deep} />
-      <ellipse cx="25" cy="13" rx="3.2" ry="4.4" fill={deep} />
-    </svg>
-  );
-}
-
-function StarRating() {
-  return (
-    <div className="flex gap-1" aria-label="5 star rating">
+    <div className="flex gap-1 text-[#f5a623]" aria-label={`${rating} stars`}>
       {Array.from({ length: 5 }).map((_, index) => (
-        <svg key={index} viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-          <path d="m12 2 3 6 7 .9-5 4.8 1.2 6.9L12 17.2l-6.2 3.4L7 13.7 2 8.9 9 8l3-6Z" fill="#f5a623" />
-        </svg>
+        <span key={index} className="text-base leading-none">{index < rating ? "★" : "☆"}</span>
       ))}
     </div>
   );
 }
 
-function DogPhoto({ className = "", position = "center 68%" }: { className?: string; position?: string }) {
-  return <img src="/hero-dogs.png" alt="" className={`h-full w-full object-cover ${className}`} style={{ objectPosition: position }} />;
-}
-
-function ArrowIcon() {
+function DogPortrait({ breed, color, large = false }: { breed: string; color: string; large?: boolean }) {
+  const isFrenchie = breed.includes("French");
+  const isCorgi = breed.includes("Corgi");
+  const isMaltese = breed.includes("Maltese");
+  const isPoodle = breed.includes("Poodle");
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 180 130" className="h-full w-full" aria-hidden="true">
+      <rect width="180" height="130" rx="22" fill="#fff3ef" />
+      <ellipse cx="92" cy="112" rx="58" ry="11" fill="#f5c4b3" opacity="0.35" />
+      <circle cx="90" cy="62" r={large ? 38 : 34} fill={color} stroke="#3d1f0d" strokeWidth="3" />
+      {isFrenchie ? (
+        <>
+          <path d="M55 30 38 7l3 39Z" fill={color} stroke="#3d1f0d" strokeWidth="3" />
+          <path d="M125 30 142 7l-3 39Z" fill={color} stroke="#3d1f0d" strokeWidth="3" />
+        </>
+      ) : (
+        <>
+          <ellipse cx="55" cy="62" rx={isPoodle ? 19 : 15} ry={isPoodle ? 27 : 22} fill={isMaltese ? "#f4eadf" : "#c68553"} />
+          <ellipse cx="125" cy="62" rx={isPoodle ? 19 : 15} ry={isPoodle ? 27 : 22} fill={isMaltese ? "#f4eadf" : "#c68553"} />
+        </>
+      )}
+      {isCorgi ? <path d="M55 34 44 12l23 12M125 34l11-22-23 12" fill={color} stroke="#3d1f0d" strokeWidth="3" /> : null}
+      <circle cx="78" cy="63" r="4" fill="#3d1f0d" />
+      <circle cx="102" cy="63" r="4" fill="#3d1f0d" />
+      <ellipse cx="90" cy="76" rx="8" ry="6" fill="#3d1f0d" />
+      <path d="M80 86c7 7 14 7 21 0" fill="none" stroke="#3d1f0d" strokeWidth="3" strokeLinecap="round" />
+      <path d="M31 104c7-1 12-5 16-13M149 104c-7-1-12-5-16-13" fill="none" stroke="#7a9e7e" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }
 
+function formatDay(date: Date, lang: "en" | "zh") {
+  return lang === "zh"
+    ? `${date.getMonth() + 1}月${date.getDate()}日`
+    : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function couponKey() {
+  return `pet-villa-coupons:${getCurrentUserId()}`;
+}
+
+function readCoupons() {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(couponKey()) || "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+
 export default function HomePage() {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
+  const [claimedCoupons, setClaimedCoupons] = useState<string[]>([]);
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [activeGallery, setActiveGallery] = useState(0);
+  const [capacityMap, setCapacityMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    setClaimedCoupons(readCoupons());
+    setCapacityMap(buildCapacityMap());
+    const sync = () => setCapacityMap(buildCapacityMap());
+    window.addEventListener("pet-villa-orders", sync);
+    return () => window.removeEventListener("pet-villa-orders", sync);
+  }, []);
+
+  const today = startOfLocalDay(new Date());
+  const availabilityDays = useMemo(() => Array.from({ length: 4 }, (_, index) => addDays(today, index)), [today.getTime()]);
+  const todaySlots = availableSlotsForDate(today, capacityMap);
+  const activeReview = reviews[reviewIndex];
+
+  function claimCoupon(code: string) {
+    const next = Array.from(new Set([...claimedCoupons, code]));
+    window.localStorage.setItem(couponKey(), JSON.stringify(next));
+    setClaimedCoupons(next);
+  }
+
+  function slotLabel(date: Date) {
+    const slots = availableSlotsForDate(date, capacityMap);
+    if (slots <= 0) return t({ en: "Full", zh: "满位" });
+    if (slots === 1) return t({ en: "1 slot left", zh: "剩 1 位" });
+    return t({ en: "Available", zh: "可预约" });
+  }
 
   return (
     <div className="villa-shell paw-bg">
       <AppNav />
 
-      <main className="overflow-hidden">
-        <section id="about" className="relative min-h-[455px] overflow-hidden px-4 pb-7 pt-7 sm:px-6 lg:min-h-[520px] lg:px-16">
-          <div className="absolute right-[-48px] top-[70px] h-[318px] w-[112%] overflow-hidden opacity-88 sm:right-[-24px] sm:w-[96%] lg:inset-y-0 lg:right-0 lg:top-0 lg:h-full lg:w-[58%] lg:opacity-95">
-            <DogPhoto position="44% 60%" className="object-cover" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#faf6f2_0%,rgba(250,246,242,0.88)_30%,rgba(250,246,242,0.42)_54%,rgba(250,246,242,0.06)_82%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-villa-background to-transparent" />
-          </div>
+      <main className="pb-24 lg:pb-0">
+        <section className="px-4 pb-5 pt-5 sm:px-6 lg:px-10">
+          <div className="villa-container overflow-hidden rounded-[26px] border border-villa-primary-light bg-white/75 shadow-[0_14px_44px_rgba(61,31,13,0.08)]">
+            <div className="relative grid gap-0 lg:min-h-[610px] lg:grid-cols-[1fr_0.95fr]">
+              <div className="relative z-10 px-4 pb-4 pt-7 sm:px-7 lg:px-8 lg:py-14">
+                <div className="inline-flex rounded-pill bg-villa-primary-light/80 px-4 py-2 text-[11px] font-black uppercase text-villa-text-primary">
+                  The Pet Villa · Ipoh · Pet Boarding
+                </div>
+                <h1 className="mt-5 max-w-[330px] font-title text-[34px] font-black leading-[1.05] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
+                  {t({ en: "Cage Free · 24h Care", zh: "不关笼 · 24小时陪伴" })}
+                  <span className="ml-2 text-villa-primary">♡</span>
+                </h1>
+                <p className="mt-3 text-[15px] font-black text-villa-text-primary sm:text-lg">
+                  {t({ en: "Premium small dog boarding in Ipoh", zh: "怡保精品小型犬寄宿" })}
+                </p>
+                <ul className="mt-4 grid gap-2 text-[13px] font-bold leading-relaxed text-villa-text-primary sm:text-sm">
+                  {[
+                    { en: "Only 3 dogs per day", zh: "一天只接待 3 只狗狗" },
+                    { en: "3-5 photo/video updates daily", zh: "每日 3-5 次照片视频更新" },
+                    { en: "Only small dogs from 1-12kg", zh: "仅接待 1-12kg 小型犬" }
+                  ].map((item) => (
+                    <li key={item.en} className="flex items-center gap-2">
+                      <Icon name="paw" className="h-4 w-4 shrink-0" />
+                      {t(item)}
+                    </li>
+                  ))}
+                </ul>
 
-          <div className="villa-container relative z-10">
-            <div className="max-w-[365px] lg:max-w-[560px]">
-              <span className="inline-flex rounded-pill bg-villa-primary-light px-4 py-2 text-[11px] font-black uppercase text-villa-text-primary shadow-sm sm:text-xs">
-                The Pet Villa · Ipoh · Pet Boarding
-              </span>
-              <h1 className="page-title mt-5 max-w-[330px] lg:max-w-[520px]">
-                A Home Away From Home <span className="text-villa-primary">♡</span>
-              </h1>
-              <p className="mt-4 max-w-[330px] text-[15px] font-semibold leading-relaxed text-villa-text-secondary lg:max-w-[480px]">
-                {t({
-                  en: "Premium small dog boarding in Ipoh",
-                  zh: "怡保精品小型犬寄宿"
-                })}
-                <br />
-                <span className="inline-flex items-center gap-2">
-                  <Icon name="home" className="h-4 w-4" /> No cages · 24h companionship
-                </span>
-                <br />
-                {t({ en: "Thoughtful daily updates", zh: "每日温馨照片更新" })}
-              </p>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:max-w-[560px]">
+                  {services.map((service) => (
+                    <a
+                      key={service.id}
+                      href={service.href}
+                      className="rounded-[22px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_10px_30px_rgba(61,31,13,0.08)] transition hover:-translate-y-0.5 hover:shadow-lg"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Icon name={service.icon} className="h-11 w-11 shrink-0" />
+                        <div className="min-w-0">
+                          <h2 className="text-sm font-black text-villa-text-primary">{t(service.title)}</h2>
+                          <p className="mt-1 text-[26px] font-black leading-none text-villa-primary">{t(service.price)}</p>
+                        </div>
+                      </div>
+                      <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-bold text-villa-text-primary">
+                        {service.details[lang].map((detail) => (
+                          <li key={detail} className="flex items-center gap-1.5">
+                            <span className="text-villa-accent-green">✓</span>
+                            {detail}
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="villa-button mt-4 min-h-[40px] w-full text-xs">{t(service.cta)}</span>
+                    </a>
+                  ))}
+                </div>
 
-              <div className="mt-5 grid max-w-[248px] gap-3 sm:max-w-[300px]">
-                <a className="villa-button min-h-[48px] w-full gap-2 text-sm sm:min-h-[58px] sm:gap-3 sm:text-base" href="/booking">
-                  <Icon name="calendar" className="h-5 w-5 sm:h-6 sm:w-6" />
-                  {t({ en: "Book a Stay", zh: "预约寄宿" })}
-                </a>
-                <a className="villa-button-outline min-h-[46px] w-full bg-white/55 text-sm backdrop-blur sm:min-h-[54px] sm:text-base" href="#how-it-works">
-                  {t({ en: "Learn More", zh: "了解更多" })}
-                </a>
+                <div className="mt-4 grid grid-cols-2 gap-3 lg:max-w-[560px]">
+                  <a className="villa-button min-h-[46px] text-sm" href="/booking?service=overnight">
+                    {t({ en: "Book Boarding", zh: "立即预约寄宿" })}
+                  </a>
+                  <a className="villa-button-outline min-h-[46px] bg-white/65 text-sm" href={whatsappUrl} target="_blank" rel="noreferrer">
+                    WhatsApp {t({ en: "Ask", zh: "咨询" })}
+                  </a>
+                </div>
+              </div>
+
+              <div className="relative min-h-[250px] lg:min-h-full">
+                <img src="/hero-dogs.png" alt="Poodle and French Bulldog at The Pet Villa" className="absolute inset-0 h-full w-full object-cover object-[50%_68%]" />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,248,245,0.08)_0%,rgba(255,248,245,0.0)_45%,#fff8f5_100%)] lg:bg-[linear-gradient(90deg,#fff8f5_0%,rgba(255,248,245,0.2)_28%,rgba(255,248,245,0)_100%)]" />
               </div>
             </div>
           </div>
         </section>
 
-        <section id="services" className="px-4 pb-8 sm:px-6 lg:px-16">
-          <div className="villa-container grid grid-cols-2 overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/88 shadow-[0_12px_36px_rgba(61,31,13,0.10)] lg:grid-cols-4">
-            {serviceCards.map((feature, index) => (
-              <article
-                key={feature.title.en}
-                className={`grid min-h-[168px] place-items-center border-b border-villa-primary-light/75 p-4 text-center lg:border-b-0 lg:border-r ${
-                  index % 2 === 0 ? "border-r" : ""
-                } ${index > 1 ? "border-b-0" : ""} ${index === serviceCards.length - 1 ? "lg:border-r-0" : ""}`}
-              >
-                <div className="grid h-16 w-16 place-items-center rounded-[18px] bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.08)]">
-                  <Icon name={feature.icon} className="h-11 w-11" />
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <div className="grid gap-4 lg:grid-cols-[180px_1fr_96px] lg:items-center">
+              <div className="flex items-center gap-3">
+                <div className="grid h-14 w-14 place-items-center rounded-[18px] bg-villa-primary-bg">
+                  <Icon name="dog" className="h-10 w-10" />
                 </div>
                 <div>
-                  <h2 className="mt-3 font-title text-[16px] font-black leading-tight text-villa-text-primary">{t(feature.title)}</h2>
-                  <p className="mt-2 text-[11px] font-semibold leading-relaxed text-villa-text-secondary">{t(feature.body)}</p>
+                  <h2 className="text-base font-black text-villa-text-primary">{t({ en: "Today Availability", zh: "今日名额" })}</h2>
+                  <p className="mt-1 text-xl font-black text-villa-text-primary">
+                    {Math.max(0, todaySlots)} / {MAX_DOGS_PER_DAY} {t({ en: "dogs left", zh: "只狗狗" })}
+                  </p>
+                  <div className="mt-2 h-2 w-24 overflow-hidden rounded-full bg-villa-primary-light/45">
+                    <span className="block h-full rounded-full bg-villa-primary" style={{ width: `${Math.max(0, todaySlots / MAX_DOGS_PER_DAY) * 100}%` }} />
+                  </div>
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="px-4 pb-8 sm:px-6 lg:px-16">
-          <div className="villa-container">
-            <div className="mb-4 flex items-center gap-2">
-              <h2 className="section-title">{t({ en: "Simple Pricing", zh: "清晰价格" })}</h2>
-              <PawIcon className="h-5 w-5" />
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <article className="relative overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-                <span className="absolute right-4 top-4 rounded-pill bg-villa-primary px-4 py-2 text-xs font-black text-white">Most Popular</span>
-                <div className="grid gap-4">
-                  <div>
-                    <Icon name="moon" className="h-12 w-12" />
-                    <h3 className="card-title mt-3">Overnight Boarding</h3>
-                    <div className="price-number mt-3">RM40<span className="ml-1 text-sm text-villa-text-primary">/night</span></div>
-                    <ul className="mt-4 grid gap-2 text-xs font-bold text-villa-text-primary">
-                      {["No cages", "Same-room sleeping", "24h companionship", "Daily photo updates"].map((item) => (
-                        <li key={item} className="flex items-center gap-2"><PawIcon className="h-4 w-4" /> {item}</li>
-                      ))}
-                    </ul>
-                    <a className="villa-button mt-5 w-full justify-between" href="/booking">
-                      <span className="flex-1 text-center">{t({ en: "Book Now", zh: "立即预约" })}</span>
-                      <ArrowIcon />
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {availabilityDays.map((date) => {
+                  const slots = availableSlotsForDate(date, capacityMap);
+                  const isFull = slots <= 0;
+                  return (
+                    <a key={date.toISOString()} href="/booking" className="rounded-[14px] border border-villa-primary-light bg-white/75 px-2 py-3 text-center transition hover:-translate-y-px hover:shadow-md">
+                      <span className="block text-[10px] font-black text-villa-text-primary">{formatDay(date, lang)}</span>
+                      <strong className={`mt-2 block text-[12px] font-black ${isFull ? "text-red-500" : slots === 1 ? "text-orange-500" : "text-villa-accent-green"}`}>
+                        {slotLabel(date)}
+                      </strong>
                     </a>
-                  </div>
-                </div>
-              </article>
-
-              <article className="relative overflow-hidden rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-                <div className="grid gap-4 sm:grid-cols-[1fr_150px]">
-                  <div>
-                    <Icon name="sun" className="h-12 w-12" />
-                    <h3 className="card-title mt-3">Daycare</h3>
-                    <div className="price-number mt-3">RM5<span className="ml-1 text-sm text-villa-text-primary">/hour</span></div>
-                    <ul className="mt-4 grid gap-2 text-xs font-bold text-villa-text-primary">
-                      {["Flexible daytime care", "9:00am - 8:00pm", "Safe & supervised play"].map((item) => (
-                        <li key={item} className="flex items-center gap-2"><PawIcon className="h-4 w-4" /> {item}</li>
-                      ))}
-                    </ul>
-                    <a className="villa-button-outline mt-5 w-full justify-between" href="/booking">
-                      <span className="flex-1 text-center">{t({ en: "Book Now", zh: "立即预约" })}</span>
-                      <ArrowIcon />
-                    </a>
-                  </div>
-                  <div className="hidden h-48 overflow-hidden rounded-[22px] bg-villa-primary-bg sm:block">
-                    <CartoonPetArt variant="daycare" />
-                  </div>
-                </div>
-              </article>
+                  );
+                })}
+              </div>
+              <a className="villa-button-outline min-h-[42px] w-full bg-white text-xs" href="/booking">
+                <Icon name="calendar" className="h-4 w-4" />
+                {t({ en: "View Calendar", zh: "查看日历" })}
+              </a>
             </div>
           </div>
         </section>
 
-        <section id="how-it-works" className="px-4 pb-8 sm:px-6 lg:px-16">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-            <div className="mb-4 flex items-center justify-center gap-2">
-              <h2 className="section-title">{t({ en: "How It Works", zh: "预约流程" })}</h2>
-              <PawIcon className="h-5 w-5" />
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Promotions", zh: "精选优惠" })}</h2>
+              <span className="text-xs font-black text-villa-primary">{t({ en: "Coupon Wallet", zh: "优惠券钱包" })}</span>
             </div>
-            <div className="grid grid-cols-2 overflow-hidden rounded-[20px] border border-villa-primary-light sm:grid-cols-5">
-              {steps.map((step, index) => (
-                <article
-                  key={step.en}
-                  className={`relative grid min-h-[154px] place-items-center border-b border-villa-primary-light/75 bg-white/45 p-4 text-center sm:min-h-[142px] sm:border-b-0 sm:border-r ${
-                    index % 2 === 0 ? "border-r" : ""
-                  } ${index === 4 ? "col-span-2 border-b-0 sm:col-span-1 sm:border-r-0" : ""}`}
-                >
-                  <span className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full bg-villa-primary text-xs font-black text-white shadow-[0_6px_16px_rgba(232,146,124,0.25)]">{index + 1}</span>
-                  <div className="grid h-16 w-16 place-items-center rounded-[18px] bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.08)]">
-                    <Icon name={step.icon} className="h-11 w-11" />
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              {promotions.map((promo) => {
+                const claimed = claimedCoupons.includes(promo.code);
+                return (
+                  <article key={promo.code} className="rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/70 p-3 shadow-sm">
+                    <span className="inline-flex rounded-pill bg-white px-2 py-1 text-[9px] font-black text-villa-primary">{t(promo.label)}</span>
+                    <Icon name={promo.icon} className="mt-2 h-10 w-10" />
+                    <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t(promo.title)}</h3>
+                    <p className="mt-1 min-h-[30px] text-[10px] font-bold leading-tight text-villa-text-secondary">{t(promo.body)}</p>
+                    <button type="button" className={`mt-3 min-h-[34px] w-full rounded-pill text-[11px] font-black ${claimed ? "bg-villa-accent-green text-white" : "bg-villa-primary text-white"}`} onClick={() => claimCoupon(promo.code)}>
+                      {claimed ? t({ en: "CLAIMED", zh: "已领取" }) : "CLAIM"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <h2 className="mb-4 font-title text-xl font-black text-villa-text-primary">
+              {t({ en: "Why Choose Pet Villa", zh: "为什么选择 Pet Villa" })}
+            </h2>
+            <div className="grid grid-cols-3 overflow-hidden rounded-[20px] border border-villa-primary-light sm:grid-cols-5">
+              {whyItems.map((item, index) => (
+                <article key={item.title.en} className={`min-h-[128px] border-b border-r border-villa-primary-light/70 bg-white/50 p-3 text-center ${index > 2 ? "border-b-0" : ""} sm:border-b-0`}>
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-villa-primary-bg shadow-sm">
+                    <Icon name={item.icon} className="h-8 w-8" />
                   </div>
-                  <div>
-                    <h3 className="mt-3 text-sm font-black leading-tight text-villa-text-primary">{t({ en: step.en, zh: step.zh })}</h3>
-                    <p className="mt-1 text-[11px] font-semibold leading-snug text-villa-text-secondary">{t(step.body)}</p>
-                  </div>
+                  <h3 className="mt-2 text-[12px] font-black leading-tight text-villa-text-primary">{t(item.title)}</h3>
+                  <p className="mt-1 text-[10px] font-bold leading-tight text-villa-text-secondary">{t(item.body)}</p>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="px-4 pb-8 sm:px-6 lg:px-16">
-          <div className="villa-container grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <article className="rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-              <div className="mb-4 flex items-center justify-center gap-2">
-                <h2 className="section-title">{t({ en: "Before Boarding", zh: "入住前须知" })}</h2>
-                <PawIcon className="h-5 w-5" />
-              </div>
-              <div className="grid grid-cols-3 overflow-hidden rounded-[18px] border border-villa-primary-light">
-                {notices.map((notice) => (
-                  <div key={notice.en} className="grid min-h-[118px] place-items-center border-b border-r border-villa-primary-light/70 p-3 text-center last:border-r-0">
-                    <Icon name={notice.icon} className="h-12 w-12" />
-                    <strong className="text-[11px] font-black leading-tight text-villa-text-primary">{t({ en: notice.en, zh: notice.zh })}</strong>
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Pet Owner Reviews", zh: "宠主评价" })}</h2>
+              <button type="button" className="text-xs font-black text-villa-primary" onClick={() => setReviewsOpen(true)}>
+                {t({ en: "View All", zh: "查看全部" })} →
+              </button>
+            </div>
+            <div className="rounded-[20px] bg-villa-primary-bg/70 p-4">
+              <Stars rating={activeReview.rating} />
+              <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-primary">“{t(activeReview.quote)}”</p>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 overflow-hidden rounded-full">
+                    <DogPortrait breed={activeReview.pet} color="#f0b46e" />
                   </div>
-                ))}
-              </div>
-            </article>
-
-            <article id="reviews" className="rounded-[24px] border border-villa-primary-light bg-white/88 p-5 shadow-[0_12px_36px_rgba(61,31,13,0.10)]">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <h2 className="section-title">{t({ en: "What Our Pet Parents Say", zh: "宠主评价" })}</h2>
-                  <PawIcon className="h-5 w-5" />
+                  <div>
+                    <strong className="block text-sm font-black">{activeReview.name}</strong>
+                    <span className="text-xs font-bold text-villa-text-secondary">{activeReview.pet}</span>
+                  </div>
                 </div>
-                <a href="#reviews" className="inline-flex items-center gap-1 text-xs font-black text-villa-primary">View All <ArrowIcon /></a>
+                <div className="flex gap-2">
+                  {reviews.map((review, index) => (
+                    <button
+                      key={review.name}
+                      type="button"
+                      className={`h-2.5 w-2.5 rounded-full ${index === reviewIndex ? "bg-villa-primary" : "bg-villa-primary-light"}`}
+                      onClick={() => setReviewIndex(index)}
+                      aria-label={`Show review ${index + 1}`}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {reviews.map((review) => (
-                  <article key={review.name} className="rounded-[18px] bg-villa-primary-bg p-3">
-                    <div className="h-28 overflow-hidden rounded-[16px] bg-white">
-                      <DogPhoto position={review.pos} />
-                    </div>
-                    <div className="mt-3"><StarRating /></div>
-                    <p className="mt-2 text-[11px] font-bold leading-snug text-villa-text-secondary">"{t(review.quote)}"</p>
-                    <div className="mt-3 flex items-center gap-2">
-                      <div className="h-8 w-8 overflow-hidden rounded-full bg-white"><DogPhoto position={review.pos} /></div>
-                      <div>
-                        <strong className="text-[11px]">{review.name}</strong>
-                        <p className="m-0 text-[10px] font-semibold text-villa-text-muted">{review.dog}</p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </article>
+            </div>
           </div>
         </section>
 
-        <section className="px-4 pb-10 sm:px-6 lg:px-16">
-          <div className="villa-container">
-            <div className="mb-4 flex items-center gap-2">
-              <h2 className="section-title">{t({ en: "Happy Guests", zh: "快乐小客人" })}</h2>
-              <PawIcon className="h-5 w-5" />
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Happy Guests", zh: "快乐小客人" })}</h2>
+              <button type="button" className="text-xs font-black text-villa-primary" onClick={() => setGalleryOpen(true)}>
+                {t({ en: "View All", zh: "查看全部" })} →
+              </button>
             </div>
-            <div className="grid grid-cols-[repeat(4,minmax(0,1fr))] gap-3 sm:grid-cols-[repeat(7,minmax(0,1fr))]">
-              {["34% 76%", "70% 72%", "50% 68%", "62% 64%", "39% 72%", "72% 68%", "32% 69%"].map((position, index) => (
-                <div key={position} className="h-20 overflow-hidden rounded-[16px] bg-white shadow-[0_8px_22px_rgba(61,31,13,0.10)] sm:h-24">
-                  <DogPhoto position={position} />
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {galleryDogs.map((dog, index) => (
+                <button
+                  key={dog.breed}
+                  type="button"
+                  className="h-24 overflow-hidden rounded-[16px] border border-villa-primary-light bg-white shadow-sm transition hover:-translate-y-px hover:shadow-md sm:h-28"
+                  onClick={() => {
+                    setActiveGallery(index);
+                    setGalleryOpen(true);
+                  }}
+                  aria-label={`Open ${dog.breed} gallery photo`}
+                >
+                  <DogPortrait breed={dog.breed} color={dog.color} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-4 pb-5 sm:px-6 lg:px-10">
+          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+            <h2 className="mb-4 font-title text-xl font-black text-villa-text-primary">{t({ en: "Boarding Requirements", zh: "入住前须知" })}</h2>
+            <div className="grid grid-cols-3 overflow-hidden rounded-[20px] border border-villa-primary-light">
+              {requirements.map((item, index) => (
+                <div key={item.title.en} className={`grid min-h-[92px] place-items-center border-b border-r border-villa-primary-light/70 bg-white/50 p-2 text-center ${index >= 3 ? "border-b-0" : ""}`}>
+                  <Icon name={item.icon} className="h-9 w-9" />
+                  <strong className="text-[10px] font-black leading-tight text-villa-text-primary">{t(item.title)}</strong>
                 </div>
               ))}
-              <a href="#reviews" className="grid h-20 place-items-center rounded-[16px] bg-villa-primary p-3 text-center text-sm font-black text-white shadow-[0_10px_28px_rgba(232,146,124,0.28)] sm:h-24">
-                View Gallery
-              </a>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="relative overflow-hidden bg-villa-host-dark px-4 py-10 text-villa-primary-light">
-        <span className="paw-mark paw-mark-lg bottom-4 left-4 opacity-[0.08]" />
-        <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-3">
+      <footer className="bg-villa-host-dark px-4 py-6 text-villa-primary-light sm:px-6 lg:px-10">
+        <div className="villa-container grid gap-5 text-xs font-semibold sm:grid-cols-4">
           <div>
-            <h3 className="font-title text-xl font-black">The Pet Villa</h3>
-            <p className="mt-2 text-xs font-semibold text-villa-primary-light/75">{t({ en: "Premium small dog boarding in Ipoh.", zh: "怡保精品小型犬寄宿。" })}</p>
+            <h2 className="font-title text-lg font-black text-white">The Pet Villa</h2>
+            <p className="mt-1 text-villa-primary-light/80">{t({ en: "Premium small dog boarding in Ipoh", zh: "怡保精品小型犬寄宿" })}</p>
           </div>
           <div>
-            <h3 className="font-title text-xl font-black">{t({ en: "Contact", zh: "联系" })}</h3>
-            <p className="mt-2 text-xs font-semibold text-villa-primary-light/75">WhatsApp · Instagram · Facebook</p>
+            <h3 className="text-sm font-black text-white">{t({ en: "Contact Us", zh: "联系我们" })}</h3>
+            <a className="mt-1 block hover:text-white" href={`tel:${phone}`}>{phone}</a>
+            <a className="block hover:text-white" href={whatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>
+            <a className="block hover:text-white" href="mailto:PetVillaIpoh@gmail.com">PetVillaIpoh@gmail.com</a>
+            <p className="m-0">Ipoh, Perak</p>
           </div>
           <div>
-            <h3 className="font-title text-xl font-black">{t({ en: "Hours", zh: "时间" })}</h3>
-            <p className="mt-2 text-xs font-semibold text-villa-primary-light/75">Check-in 9:00am-8:00pm<br />Check-out before 12:00pm</p>
+            <h3 className="text-sm font-black text-white">{t({ en: "Hours", zh: "营业时间" })}</h3>
+            <p className="mt-1">Check-in: 9:00am - 8:00pm</p>
+            <p className="m-0">Check-out: before 12:00pm</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-white">{t({ en: "Follow Us", zh: "关注我们" })}</h3>
+            <div className="mt-2 flex gap-2">
+              {Object.entries(socialLinks).map(([key, href]) => (
+                <a key={key} href={href} target="_blank" rel="noreferrer" className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:-translate-y-px hover:bg-white/20" aria-label={key}>
+                  <Icon name={key as HomeIconName} className="h-6 w-6" />
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       </footer>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-villa-primary-light bg-villa-background/95 p-3 shadow-[0_-10px_28px_rgba(61,31,13,0.10)] backdrop-blur lg:hidden">
+        <a href={whatsappUrl} target="_blank" rel="noreferrer" className="villa-button-outline min-h-[44px] bg-white text-xs">
+          WhatsApp {t({ en: "Ask", zh: "咨询" })}
+        </a>
+        <a href="/booking?service=overnight" className="villa-button min-h-[44px] text-xs">
+          {t({ en: "Book Boarding", zh: "立即预约寄宿" })}
+        </a>
+      </div>
+
+      {reviewsOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="max-h-[86vh] w-full max-w-lg overflow-auto rounded-[24px] border border-villa-primary-light bg-white p-5 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-title text-xl font-black">{t({ en: "All Reviews", zh: "全部评价" })}</h2>
+              <button type="button" className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black" onClick={() => setReviewsOpen(false)}>×</button>
+            </div>
+            <div className="grid gap-3">
+              {reviews.map((review) => (
+                <article key={review.name} className="rounded-[18px] bg-villa-primary-bg p-4">
+                  <Stars rating={review.rating} />
+                  <p className="mt-2 text-sm font-bold leading-relaxed">“{t(review.quote)}”</p>
+                  <p className="mt-3 text-xs font-black">{review.name} · {review.pet} · {review.date}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {galleryOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="w-full max-w-2xl rounded-[24px] border border-villa-primary-light bg-white p-5 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-title text-xl font-black">{galleryDogs[activeGallery]?.breed || t({ en: "Gallery", zh: "相册" })}</h2>
+              <button type="button" className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black" onClick={() => setGalleryOpen(false)}>×</button>
+            </div>
+            <div className="h-[330px] overflow-hidden rounded-[22px] bg-villa-primary-bg">
+              <DogPortrait breed={galleryDogs[activeGallery]?.breed || "Poodle"} color={galleryDogs[activeGallery]?.color || "#f0b46e"} large />
+            </div>
+            <div className="mt-4 grid grid-cols-6 gap-2">
+              {galleryDogs.map((dog, index) => (
+                <button key={dog.breed} type="button" className={`h-14 overflow-hidden rounded-[12px] border ${index === activeGallery ? "border-villa-primary" : "border-villa-primary-light"}`} onClick={() => setActiveGallery(index)}>
+                  <DogPortrait breed={dog.breed} color={dog.color} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

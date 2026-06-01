@@ -119,6 +119,14 @@ export default function BookingPage() {
     return () => window.removeEventListener("pet-villa-pets", syncPets);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const serviceParam = params.get("service");
+    if (serviceParam === "daycare" || serviceParam === "overnight") {
+      chooseService(serviceParam);
+    }
+  }, []);
+
   const selectedPetObjects = pets.filter((pet) => selectedPets.includes(pet.id));
   const petCount = Math.max(1, selectedPets.length);
   const selectedPetNames = selectedPetObjects.map((pet) => pet.name);
