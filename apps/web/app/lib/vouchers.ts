@@ -10,6 +10,8 @@ export type VoucherDefinition = {
   type: VoucherType;
   value: number;
   minSpend: number;
+  claimable: boolean;
+  source: "promotion" | "referral";
   title: { en: string; zh: string };
   body: { en: string; zh: string };
   label: { en: string; zh: string };
@@ -38,6 +40,8 @@ export const VOUCHER_DEFINITIONS: VoucherDefinition[] = [
     type: "fixed",
     value: 10,
     minSpend: 40,
+    claimable: true,
+    source: "promotion",
     label: { en: "New Guest", zh: "新客专享" },
     title: { en: "RM10 OFF", zh: "RM10 OFF" },
     body: { en: "First boarding discount", zh: "首次寄宿优惠" }
@@ -47,6 +51,8 @@ export const VOUCHER_DEFINITIONS: VoucherDefinition[] = [
     type: "second_dog_half",
     value: 50,
     minSpend: 0,
+    claimable: true,
+    source: "promotion",
     label: { en: "Multi-dog", zh: "多只狗狗优惠" },
     title: { en: "50% OFF", zh: "50% OFF" },
     body: { en: "Second dog half price", zh: "第二只狗狗半价" }
@@ -56,14 +62,99 @@ export const VOUCHER_DEFINITIONS: VoucherDefinition[] = [
     type: "fixed",
     value: 10,
     minSpend: 40,
-    label: { en: "Referral", zh: "推荐好友" },
+    claimable: false,
+    source: "referral",
+    label: { en: "Referral Program", zh: "推荐奖励" },
     title: { en: "RM10 Voucher", zh: "RM10 Voucher" },
-    body: { en: "Both sides receive RM10", zh: "双方各得 RM10 优惠" }
+    body: {
+      en: "Issued only after your friend verifies email and completes their first order.",
+      zh: "好友验证邮箱并完成第一笔订单后才发放。"
+    }
   }
 ];
 
 function voucherKey(userId = getCurrentUserId()) {
   return `pet-villa-vouchers:${userId}`;
+}
+
+function referralMapKey() {
+  return "pet-villa-referral-code-map";
+}
+
+function pendingReferralKey(userId = getCurrentUserId()) {
+  return `pet-villa-pending-referral:${userId}`;
+}
+
+function getSessionUser() {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}")?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+function readReferralMap(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(referralMapKey()) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeReferralMap(map: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(referralMapKey(), JSON.stringify(map));
+}
+
+function makeInitials(name: string) {
+  const cleaned = name.trim().replace(/[^a-zA-Z\s]/g, "");
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  if (parts[0]) return parts[0].slice(0, 2).toUpperCase().padEnd(2, "X");
+  return "PV";
+}
+
+export function getReferralCode(userId = getCurrentUserId()) {
+  const user = getSessionUser();
+  const name = user?.name || user?.fullName || "";
+  const source = `${user?.phone || user?.email || userId || "123"}`.replace(/\D/g, "");
+  const suffix = (source || "123").slice(-3).padStart(3, "1");
+  const code = `PETVILLA-${makeInitials(name)}${suffix}`;
+  const map = readReferralMap();
+  if (userId && userId !== "guest" && map[code] !== userId) {
+    writeReferralMap({ ...map, [code]: userId });
+  }
+  return code;
+}
+
+export function savePendingReferralCode(code: string, userId = getCurrentUserId()) {
+  if (typeof window === "undefined") return;
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return;
+  window.localStorage.setItem(pendingReferralKey(userId), JSON.stringify({
+    code: normalized,
+    registeredAt: new Date().toISOString(),
+    emailVerified: true,
+    firstOrderCompleted: false,
+    rewarded: false
+  }));
+}
+
+export function readPendingReferralCode(userId = getCurrentUserId()) {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.localStorage.getItem(pendingReferralKey(userId)) || "null") as null | {
+      code: string;
+      registeredAt: string;
+      emailVerified: boolean;
+      firstOrderCompleted: boolean;
+      rewarded: boolean;
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function readVouchers(userId = getCurrentUserId()): UserVoucher[] {
@@ -82,6 +173,40 @@ export function writeVouchers(vouchers: UserVoucher[], userId = getCurrentUserId
   window.dispatchEvent(new Event("pet-villa-vouchers"));
 }
 
+function addReferralVoucher(userId: string, orderId: string) {
+  const definition = VOUCHER_DEFINITIONS.find((voucher) => voucher.code === "REFER10");
+  if (!definition) return;
+  const current = readVouchers(userId);
+  if (current.some((voucher) => voucher.code === "REFER10" && voucher.orderId === orderId)) return;
+  const nextVoucher: UserVoucher = {
+    ...definition,
+    id: `REFER10-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    status: "available",
+    claimedAt: new Date().toISOString()
+  };
+  writeVouchers([nextVoucher, ...current], userId);
+}
+
+export function completeReferralRewardForFirstOrder(orderId: string, userId = getCurrentUserId()) {
+  const pending = readPendingReferralCode(userId);
+  if (!pending || pending.rewarded || !pending.emailVerified) return false;
+  const referrerId = readReferralMap()[pending.code];
+  if (!referrerId || referrerId === userId) return false;
+
+  addReferralVoucher(userId, orderId);
+  addReferralVoucher(referrerId, orderId);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(pendingReferralKey(userId), JSON.stringify({
+      ...pending,
+      firstOrderCompleted: true,
+      rewarded: true,
+      rewardedAt: new Date().toISOString(),
+      orderId
+    }));
+  }
+  return true;
+}
+
 export function claimVoucher(code: string, userId = getCurrentUserId()) {
   if (!userId || userId === "guest") {
     return { ok: false as const, reason: "login" as const };
@@ -89,6 +214,9 @@ export function claimVoucher(code: string, userId = getCurrentUserId()) {
   const definition = VOUCHER_DEFINITIONS.find((voucher) => voucher.code === code);
   if (!definition) {
     return { ok: false as const, reason: "missing" as const };
+  }
+  if (!definition.claimable) {
+    return { ok: false as const, reason: "referral_only" as const };
   }
   const current = readVouchers(userId);
   if (current.some((voucher) => voucher.code === code && voucher.status !== "expired")) {

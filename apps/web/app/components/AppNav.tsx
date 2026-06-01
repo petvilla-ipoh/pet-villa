@@ -49,14 +49,19 @@ const privateNav = [
   { href: "/pets", en: "My Pets", zh: "我的宠物" },
   { href: "/booking", en: "Bookings", zh: "预约" },
   { href: "/orders", en: "Orders", zh: "订单" },
-  { href: "/diary", en: "Pet Diary", zh: "宠物日记" }
+  { href: "/payment", en: "Payment", zh: "付款" },
+  { href: "/diary", en: "Pet Diary", zh: "宠物日记" },
+  { href: "/vouchers", en: "My Vouchers", zh: "优惠券" }
 ];
 
 const privateMenu = [
+  { href: "/", icon: "home", en: "Home", zh: "首页", descEn: "Back to Pet Villa", descZh: "返回首页" },
   { href: "/pets", icon: "pets", en: "My Pets", zh: "我的宠物", descEn: "Manage your dogs", descZh: "管理狗狗资料" },
   { href: "/booking", icon: "booking", en: "Bookings", zh: "预约", descEn: "Upcoming stays", descZh: "查看即将入住" },
   { href: "/orders", icon: "orders", en: "Orders", zh: "订单", descEn: "Payment history", descZh: "付款与订单记录" },
+  { href: "/payment", icon: "payment", en: "Payment", zh: "付款", descEn: "Continue payment", descZh: "继续付款" },
   { href: "/diary", icon: "diary", en: "Pet Diary", zh: "宠物日记", descEn: "Daily updates & photos", descZh: "照片和每日更新" },
+  { href: "/vouchers", icon: "vouchers", en: "My Vouchers", zh: "优惠券", descEn: "Available rewards", descZh: "查看可用优惠" },
   { href: "/account", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
 ];
 
@@ -120,6 +125,14 @@ function LogoutIcon() {
 function MenuItemIcon({ name }: { name: string }) {
   const stroke = "#3d1f0d";
   const coral = "#e8927c";
+  if (name === "home") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+        <path d="M8 24 24 10l16 14v16H13V24Z" fill="#fff8f5" stroke={coral} strokeWidth="3" strokeLinejoin="round" />
+        <path d="M20 40V28h8v12" fill="#f5c4b3" stroke={stroke} strokeWidth="2.5" />
+      </svg>
+    );
+  }
   if (name === "pets") {
     return (
       <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
@@ -148,6 +161,15 @@ function MenuItemIcon({ name }: { name: string }) {
       </svg>
     );
   }
+  if (name === "payment") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+        <rect x="7" y="13" width="34" height="24" rx="6" fill="#fff8f5" stroke={coral} strokeWidth="3" />
+        <path d="M7 21h34" stroke={stroke} strokeWidth="3" />
+        <path d="M14 30h10" stroke="#7a9e7e" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
   if (name === "diary") {
     return (
       <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
@@ -161,6 +183,14 @@ function MenuItemIcon({ name }: { name: string }) {
       <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <circle cx="24" cy="16" r="8" fill={coral} />
         <path d="M9 41c3-12 27-12 30 0" fill={coral} />
+      </svg>
+    );
+  }
+  if (name === "vouchers") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+        <path d="M9 17a5 5 0 0 1 5-5h20a5 5 0 0 1 5 5v3a5 5 0 0 0 0 8v3a5 5 0 0 1-5 5H14a5 5 0 0 1-5-5v-3a5 5 0 0 0 0-8v-3Z" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
+        <path d="M20 17v18M27 20h6M27 28h6" stroke="#3d1f0d" strokeWidth="2.5" strokeLinecap="round" />
       </svg>
     );
   }

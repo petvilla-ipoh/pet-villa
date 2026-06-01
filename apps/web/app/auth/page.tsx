@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useLanguage } from "../components/LanguageProvider";
+import { savePendingReferralCode } from "../lib/vouchers";
 
 type AuthMode = "login" | "register";
 type FieldIconType = "mail" | "lock" | "user" | "phone" | "eye";
@@ -11,6 +12,7 @@ type PendingUser = {
   phone: string;
   email: string;
   password: string;
+  referralCode?: string;
   otp: string;
   expiresAt: number;
 };
@@ -218,6 +220,7 @@ export default function AuthPage() {
     const email = String(form.get("email") || "").trim();
     const password = String(form.get("password") || "").trim();
     const confirmPassword = String(form.get("confirmPassword") || "").trim();
+    const referralCode = String(form.get("referralCode") || "").trim();
     setErrorMessage("");
     setStatusMessage("");
 
@@ -235,6 +238,7 @@ export default function AuthPage() {
         phone,
         email,
         password,
+        referralCode,
         otp: DEMO_OTP,
         expiresAt: Date.now() + 5 * 60 * 1000
       };
@@ -304,6 +308,9 @@ export default function AuthPage() {
     };
     window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
     window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
+    if (pendingUser.referralCode) {
+      savePendingReferralCode(pendingUser.referralCode, "demo-owner");
+    }
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
       user: {
         id: "demo-owner",
@@ -535,6 +542,7 @@ export default function AuthPage() {
                       <AuthInput icon="phone" name="phone" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
                     </div>
                     <AuthInput icon="mail" name="email" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
+                    <AuthInput icon="user" name="referralCode" label={t({ en: "Referral Code (Optional)", zh: "推荐码（可选）" })} placeholder="PETVILLA-JJ123" />
                     <AuthInput icon="lock" name="password" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
                     <AuthInput icon="lock" name="confirmPassword" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
                     <label className="flex items-center gap-3 text-sm font-semibold text-villa-text-secondary">

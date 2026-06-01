@@ -1,7 +1,7 @@
 "use client";
 
 import { getCurrentUserId, type PetProfile } from "./petProfiles";
-import { markVoucherUsed } from "./vouchers";
+import { completeReferralRewardForFirstOrder, markVoucherUsed } from "./vouchers";
 
 export type BookingDraft = {
   id: string;
@@ -93,7 +93,13 @@ export function createOrderFromDraft(draft: BookingDraft, paid: number, userId =
 }
 
 export function updateOrder(orderId: string, updater: (order: VillaOrder) => VillaOrder, userId = getCurrentUserId()) {
-  const next = readOrders(userId).map((order) => (order.orderId === orderId ? updater(order) : order));
+  const current = readOrders(userId);
+  const previous = current.find((order) => order.orderId === orderId);
+  const next = current.map((order) => (order.orderId === orderId ? updater(order) : order));
   writeOrders(next, userId);
+  const updated = next.find((order) => order.orderId === orderId);
+  if (updated?.status === "completed" && previous?.status !== "completed") {
+    completeReferralRewardForFirstOrder(orderId, userId);
+  }
   return next;
 }

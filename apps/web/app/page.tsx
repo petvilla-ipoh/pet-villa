@@ -6,7 +6,7 @@ import { useLanguage } from "./components/LanguageProvider";
 import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
 import { getCurrentUserId } from "./lib/petProfiles";
 import { readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
-import { claimVoucher, readVouchers } from "./lib/vouchers";
+import { claimVoucher, getReferralCode, readVouchers } from "./lib/vouchers";
 
 const phone = "+60165236409";
 const whatsappUrl = "https://wa.me/60165236409?text=Hi%20Pet%20Villa%2C%20I%20would%20like%20to%20ask%20about%20boarding.";
@@ -373,12 +373,16 @@ export default function HomePage() {
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [activeGallery, setActiveGallery] = useState(0);
+  const [reviewTouchStart, setReviewTouchStart] = useState<number | null>(null);
+  const [galleryTouchStart, setGalleryTouchStart] = useState<number | null>(null);
   const [capacityMap, setCapacityMap] = useState<Record<string, number>>({});
   const [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
+  const [referralCode, setReferralCode] = useState("PETVILLA-PV123");
   const [couponMessage, setCouponMessage] = useState("");
 
   useEffect(() => {
     setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
+    setReferralCode(getReferralCode());
     setGuestPhotos(readHomeGuestPhotos(6));
     setCapacityMap(buildCapacityMap());
     const sync = () => setCapacityMap(buildCapacityMap());
@@ -413,6 +417,32 @@ export default function HomePage() {
     setCouponMessage(t({ en: "You have already claimed this voucher.", zh: "你已经领取过这张优惠券。" }));
   }
 
+  async function copyReferralCode() {
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setCouponMessage(t({ en: "Referral code copied.", zh: "推荐码已复制。" }));
+    } catch {
+      setCouponMessage(referralCode);
+    }
+  }
+
+  function moveReview(direction: 1 | -1) {
+    setReviewIndex((index) => (index + direction + reviews.length) % reviews.length);
+  }
+
+  function moveGallery(direction: 1 | -1) {
+    setActiveGallery((index) => {
+      const total = Math.max(1, guestPhotos.length);
+      return (index + direction + total) % total;
+    });
+  }
+
+  function handleSwipe(startX: number, endX: number, callback: (direction: 1 | -1) => void) {
+    const delta = endX - startX;
+    if (Math.abs(delta) < 35) return;
+    callback(delta < 0 ? 1 : -1);
+  }
+
   function slotLabel(date: Date) {
     const slots = availableSlotsForDate(date, capacityMap);
     if (slots <= 0) return t({ en: "Full", zh: "满位" });
@@ -427,13 +457,13 @@ export default function HomePage() {
       <main className="pb-24 lg:pb-0">
         <section className="px-4 pb-5 pt-5 sm:px-6 lg:px-10">
           <div className="villa-container overflow-hidden rounded-[26px] border border-villa-primary-light bg-white/75 shadow-[0_14px_44px_rgba(61,31,13,0.08)]">
-            <div className="relative grid gap-0 lg:min-h-[610px] lg:grid-cols-[1fr_0.95fr]">
-              <div className="relative z-10 px-4 pb-4 pt-7 sm:px-7 lg:px-8 lg:py-14">
+            <div className="relative grid grid-cols-[minmax(0,0.58fr)_minmax(0,0.42fr)] gap-0 lg:min-h-[610px] lg:grid-cols-[1fr_0.95fr]">
+              <div className="relative z-10 px-3 pb-4 pt-5 sm:px-7 lg:px-8 lg:py-14">
                 <div className="inline-flex rounded-pill bg-villa-primary-light/80 px-4 py-2 text-[11px] font-black uppercase text-villa-text-primary">
                   The Pet Villa · Ipoh · Pet Boarding
                 </div>
-                <h1 className="mt-5 max-w-[330px] font-title text-[34px] font-black leading-[1.05] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
-                  {t({ en: "Cage Free · 24h Care", zh: "不关笼 · 24小时陪伴" })}
+                <h1 className="mt-4 max-w-[250px] font-title text-[25px] font-black leading-[1.05] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
+                  {t({ en: "不关笼 · 24小时陪伴", zh: "不关笼 · 24小时陪伴" })}
                   <span className="ml-2 text-villa-primary">♡</span>
                 </h1>
                 <p className="mt-3 text-[15px] font-black text-villa-text-primary sm:text-lg">
@@ -452,18 +482,18 @@ export default function HomePage() {
                   ))}
                 </ul>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:max-w-[560px]">
+                <div className="mt-4 grid grid-cols-2 gap-2 lg:max-w-[560px]">
                   {services.map((service) => (
                     <a
                       key={service.id}
                       href={service.href}
-                      className="rounded-[22px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_10px_30px_rgba(61,31,13,0.08)] transition hover:-translate-y-0.5 hover:shadow-lg"
+                      className="rounded-[18px] border border-villa-primary-light bg-white/88 p-2.5 shadow-[0_10px_30px_rgba(61,31,13,0.08)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4"
                     >
                       <div className="flex items-start gap-3">
                         <Icon name={service.icon} className="h-11 w-11 shrink-0" />
                         <div className="min-w-0">
-                          <h2 className="text-sm font-black text-villa-text-primary">{t(service.title)}</h2>
-                          <p className="mt-1 text-[26px] font-black leading-none text-villa-primary">{t(service.price)}</p>
+                          <h2 className="text-[11px] font-black text-villa-text-primary sm:text-sm">{t(service.title)}</h2>
+                          <p className="mt-1 text-[18px] font-black leading-none text-villa-primary sm:text-[26px]">{t(service.price)}</p>
                         </div>
                       </div>
                       <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-bold text-villa-text-primary">
@@ -474,22 +504,22 @@ export default function HomePage() {
                           </li>
                         ))}
                       </ul>
-                      <span className="villa-button mt-4 min-h-[40px] w-full text-xs">{t(service.cta)}</span>
+                      <span className="villa-button mt-3 min-h-[34px] w-full text-[10px] sm:min-h-[40px] sm:text-xs">{t(service.cta)}</span>
                     </a>
                   ))}
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 lg:max-w-[560px]">
-                  <a className="villa-button min-h-[46px] text-sm" href="/booking?service=overnight">
+                <div className="mt-3 grid grid-cols-2 gap-2 lg:max-w-[560px]">
+                  <a className="villa-button min-h-[40px] text-xs sm:min-h-[46px] sm:text-sm" href="/booking?service=overnight">
                     {t({ en: "Book Boarding", zh: "立即预约寄宿" })}
                   </a>
-                  <a className="villa-button-outline min-h-[46px] bg-white/65 text-sm" href={whatsappUrl} target="_blank" rel="noreferrer">
+                  <a className="villa-button-outline min-h-[40px] bg-white/65 text-xs sm:min-h-[46px] sm:text-sm" href={whatsappUrl} target="_blank" rel="noreferrer">
                     WhatsApp {t({ en: "Ask", zh: "咨询" })}
                   </a>
                 </div>
               </div>
 
-              <div className="relative min-h-[250px] lg:min-h-full">
+              <div className="relative min-h-[360px] lg:min-h-full">
                 <img src="/hero-dogs.png" alt="Poodle and French Bulldog at The Pet Villa" className="absolute inset-0 h-full w-full object-cover object-[50%_68%]" />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,248,245,0.08)_0%,rgba(255,248,245,0.0)_45%,#fff8f5_100%)] lg:bg-[linear-gradient(90deg,#fff8f5_0%,rgba(255,248,245,0.2)_28%,rgba(255,248,245,0)_100%)]" />
               </div>
@@ -544,7 +574,7 @@ export default function HomePage() {
             </div>
             {couponMessage ? <p className="mb-3 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{couponMessage}</p> : null}
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
-              {promotions.map((promo) => {
+              {promotions.filter((promo) => promo.code !== "REFER10").map((promo) => {
                 const claimed = claimedCoupons.includes(promo.code);
                 return (
                   <article key={promo.code} className="flex min-h-[178px] flex-col rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/70 p-3 shadow-sm">
@@ -558,6 +588,20 @@ export default function HomePage() {
                   </article>
                 );
               })}
+              <article className="flex min-h-[178px] flex-col rounded-[18px] border border-villa-primary-light bg-white p-3 shadow-sm">
+                <span className="inline-flex rounded-pill bg-villa-primary-bg px-2 py-1 text-[9px] font-black text-villa-primary">
+                  {t({ en: "Referral Program", zh: "推荐奖励" })}
+                </span>
+                <Icon name="friend" className="mt-2 h-10 w-10" />
+                <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t({ en: "My Referral Code", zh: "我的推荐码" })}</h3>
+                <p className="mt-1 rounded-[12px] bg-villa-primary-bg px-2 py-1 text-[10px] font-black text-villa-text-primary">{referralCode}</p>
+                <p className="mt-1 text-[10px] font-bold leading-tight text-villa-text-secondary">
+                  {t({ en: "Both get RM10 after your friend verifies email and completes the first order.", zh: "好友验证邮箱并完成首单后，双方各得 RM10。" })}
+                </p>
+                <button type="button" className="mt-auto min-h-[34px] w-full rounded-pill border border-villa-primary text-[11px] font-black text-villa-primary" onClick={copyReferralCode}>
+                  {t({ en: "Copy Referral Code", zh: "复制推荐码" })}
+                </button>
+              </article>
             </div>
           </div>
         </section>
@@ -589,7 +633,15 @@ export default function HomePage() {
                 {t({ en: "View All", zh: "查看全部" })} →
               </button>
             </div>
-            <div className="rounded-[20px] bg-villa-primary-bg/70 p-4">
+            <div
+              className="rounded-[20px] bg-villa-primary-bg/70 p-4"
+              onTouchStart={(event) => setReviewTouchStart(event.touches[0]?.clientX ?? null)}
+              onTouchEnd={(event) => {
+                if (reviewTouchStart === null) return;
+                handleSwipe(reviewTouchStart, event.changedTouches[0]?.clientX ?? reviewTouchStart, moveReview);
+                setReviewTouchStart(null);
+              }}
+            >
               <Stars rating={activeReview.rating} />
               <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-primary">“{t(activeReview.quote)}”</p>
               <div className="mt-4 flex items-center justify-between gap-3">
@@ -638,7 +690,7 @@ export default function HomePage() {
                   }}
                   aria-label={`Open ${dog.petName} gallery photo`}
                 >
-                  {dog.imageUrl ? <img src={dog.imageUrl} alt={dog.petName} className="h-full w-full object-cover" /> : <DogPortrait breed={dog.breed} color={dog.color} />}
+                  <img src={dog.imageUrl || "/hero-dogs.png"} alt={dog.petName} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -725,16 +777,26 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
           <div className="w-full max-w-2xl rounded-[24px] border border-villa-primary-light bg-white p-5 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-title text-xl font-black">{galleryDogs[activeGallery]?.breed || t({ en: "Gallery", zh: "相册" })}</h2>
+              <h2 className="font-title text-xl font-black">{guestPhotos[activeGallery]?.petName || t({ en: "Gallery", zh: "相册" })}</h2>
               <button type="button" className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black" onClick={() => setGalleryOpen(false)}>×</button>
             </div>
-            <div className="h-[330px] overflow-hidden rounded-[22px] bg-villa-primary-bg">
-              <DogPortrait breed={galleryDogs[activeGallery]?.breed || "Poodle"} color={galleryDogs[activeGallery]?.color || "#f0b46e"} large />
+            <div
+              className="relative h-[330px] overflow-hidden rounded-[22px] bg-villa-primary-bg"
+              onTouchStart={(event) => setGalleryTouchStart(event.touches[0]?.clientX ?? null)}
+              onTouchEnd={(event) => {
+                if (galleryTouchStart === null) return;
+                handleSwipe(galleryTouchStart, event.changedTouches[0]?.clientX ?? galleryTouchStart, moveGallery);
+                setGalleryTouchStart(null);
+              }}
+            >
+              <img src={guestPhotos[activeGallery]?.imageUrl || "/hero-dogs.png"} alt={guestPhotos[activeGallery]?.petName || "Happy guest"} className="h-full w-full object-cover" />
+              <button type="button" className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/85 font-black text-villa-primary shadow-md" onClick={() => moveGallery(-1)} aria-label="Previous photo">‹</button>
+              <button type="button" className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/85 font-black text-villa-primary shadow-md" onClick={() => moveGallery(1)} aria-label="Next photo">›</button>
             </div>
             <div className="mt-4 grid grid-cols-6 gap-2">
-              {galleryDogs.map((dog, index) => (
-                <button key={dog.breed} type="button" className={`h-14 overflow-hidden rounded-[12px] border ${index === activeGallery ? "border-villa-primary" : "border-villa-primary-light"}`} onClick={() => setActiveGallery(index)}>
-                  <DogPortrait breed={dog.breed} color={dog.color} />
+              {guestPhotos.map((dog, index) => (
+                <button key={dog.id} type="button" className={`h-14 overflow-hidden rounded-[12px] border ${index === activeGallery ? "border-villa-primary" : "border-villa-primary-light"}`} onClick={() => setActiveGallery(index)}>
+                  <img src={dog.imageUrl || "/hero-dogs.png"} alt={dog.petName} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
