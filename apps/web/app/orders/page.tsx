@@ -76,14 +76,14 @@ export default function OrdersPage() {
       };
     });
     setOrders(nextOrders);
-    setMessage(t({ en: "Demo Payment Success. Balance paid successfully.", zh: "æµ‹è¯•ä»˜æ¬¾æˆåŠŸã€‚å°¾æ¬¾å·²æˆåŠŸæ”¯ä»˜ã€‚" }));
+    setMessage(t({ en: "Demo payment success. Balance paid successfully.", zh: "测试付款成功，尾款已支付。" }));
   }
 
   function cancelOrder(order: VillaOrder) {
     const nextOrders = updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled", cancelledAt: new Date().toISOString() }));
     restoreVoucherForOrder(order.orderId);
     setOrders(nextOrders);
-    setMessage(t({ en: "Booking cancelled.", zh: "é¢„çº¦å·²å–æ¶ˆã€‚" }));
+    setMessage(t({ en: "Booking cancelled.", zh: "预约已取消。" }));
     setCancelTarget(null);
   }
 
@@ -101,7 +101,7 @@ export default function OrdersPage() {
 
   function saveReview(order: VillaOrder) {
     if (reviewStars < 1) {
-      setMessage(t({ en: "Please choose a star rating first.", zh: "è¯·å…ˆé€‰æ‹©æ˜Ÿçº§è¯„åˆ†ã€‚" }));
+      setMessage(t({ en: "Please choose a star rating first.", zh: "请先选择星级评分。" }));
       return;
     }
     const nextOrders = updateOrder(order.orderId, (current) => ({
@@ -110,7 +110,7 @@ export default function OrdersPage() {
     }));
     setOrders(nextOrders);
     closeReview();
-    setMessage(t({ en: "Review saved. Thank you!", zh: "è¯„ä»·å·²ä¿å­˜ï¼Œè°¢è°¢ä½ ï¼" }));
+    setMessage(t({ en: "Review saved. Thank you!", zh: "评价已保存，谢谢你！" }));
   }
 
   function getTimeStatus(order: VillaOrder) {
@@ -147,14 +147,14 @@ export default function OrdersPage() {
     <ProtectedPage>
       <OwnerSidebar>
         <section className="p-4 lg:p-8">
-          <h1 className="page-title">{t({ en: "My Orders", zh: "æˆ‘çš„è®¢å•" })}</h1>
+          <h1 className="page-title">{t({ en: "My Orders", zh: "我的订单" })}</h1>
           <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
             {[
-              ["all", "All", "å…¨éƒ¨"],
-              ["active", "Active", "è¿›è¡Œä¸­"],
-              ["balance", "Balance Due", "å¾…ä»˜å°¾æ¬¾"],
-              ["completed", "Completed", "å·²å®Œæˆ"],
-              ["cancelled", "Cancelled", "å·²å–æ¶ˆ"]
+              ["all", "All", "全部"],
+              ["active", "Active", "进行中"],
+              ["balance", "Balance Due", "待付尾款"],
+              ["completed", "Completed", "已完成"],
+              ["cancelled", "Cancelled", "已取消"]
             ].map(([id, en, zh]) => (
               <button key={id} type="button" onClick={() => setFilter(id as Filter)} className={`${filter === id ? "villa-button" : "villa-button-outline"} min-h-[38px] min-w-fit px-4 py-2 text-xs`}>
                 {t({ en, zh })}
@@ -166,9 +166,9 @@ export default function OrdersPage() {
 
           {orders.length === 0 ? (
             <div className="villa-card mt-5 text-center">
-              <h2 className="card-title">{t({ en: "No orders yet", zh: "è¿˜æ²¡æœ‰è®¢å•" })}</h2>
-              <p className="body-copy mt-2">{t({ en: "Create a booking and pay the deposit to see it here.", zh: "åˆ›å»ºé¢„çº¦å¹¶æ”¯ä»˜è®¢é‡‘åŽï¼Œè®¢å•ä¼šæ˜¾ç¤ºåœ¨è¿™é‡Œã€‚" })}</p>
-              <a href="/booking" className="villa-button mt-4 w-full">{t({ en: "Book a Stay", zh: "ç«‹å³é¢„çº¦" })}</a>
+              <h2 className="card-title">{t({ en: "No orders yet", zh: "还没有订单" })}</h2>
+              <p className="body-copy mt-2">{t({ en: "Create a booking and pay the deposit to see it here.", zh: "创建预约并支付订金后，订单会显示在这里。" })}</p>
+              <a href="/booking" className="villa-button mt-4 w-full">{t({ en: "Book a Stay", zh: "立即预约" })}</a>
             </div>
           ) : null}
 
@@ -206,15 +206,15 @@ export default function OrdersPage() {
                   </button>
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black text-villa-text-secondary">
-                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Paid", zh: "å·²ä»˜" })}<br /><span className="text-lg text-villa-text-primary">RM{order.paid}</span></div>
-                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Balance", zh: "å°¾æ¬¾" })}<br /><span className="text-lg text-villa-text-primary">RM{order.balance}</span></div>
+                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Paid", zh: "已付" })}<br /><span className="text-lg text-villa-text-primary">RM{order.paid}</span></div>
+                    <div className="rounded-[14px] bg-villa-primary-bg p-3">{t({ en: "Balance", zh: "尾款" })}<br /><span className="text-lg text-villa-text-primary">RM{order.balance}</span></div>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {order.balance > 0 && order.status !== "cancelled" && order.status !== "completed" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "ä»˜å°¾æ¬¾" })}</button> : null}
+                    {order.balance > 0 && order.status !== "cancelled" && order.status !== "completed" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "付尾款" })}</button> : null}
                     {order.status === "confirmed" ? <button type="button" onClick={() => setCancelTarget(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "取消" })}</button> : null}
                     {order.status === "completed" ? <button type="button" onClick={() => openReview(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{order.review ? t({ en: "Reviewed", zh: "已评价" }) : `★★★★★ ${t({ en: "Leave Review", zh: "留下评价" })}`}</button> : null}
-                    <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "æ”¶èµ·è¯¦æƒ…" }) : t({ en: "Order Details", zh: "è®¢å•è¯¦æƒ…" })}</button>
+                    <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "收起详情" }) : t({ en: "Order Details", zh: "订单详情" })}</button>
                   </div>
 
                   {reviewing === order.orderId ? (
@@ -226,10 +226,10 @@ export default function OrdersPage() {
                           </button>
                         ))}
                       </div>
-                      <textarea className="villa-input mt-2 h-20 py-3" value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} placeholder={t({ en: "Share your review...", zh: "å†™ä¸‹ä½ çš„è¯„ä»·..." })} />
+                      <textarea className="villa-input mt-2 h-20 py-3" value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} placeholder={t({ en: "Share your review...", zh: "写下你的评价..." })} />
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={closeReview} className="villa-button-outline w-full">{t({ en: "Cancel", zh: "å–æ¶ˆ" })}</button>
-                        <button type="button" onClick={() => saveReview(order)} className="villa-button w-full">{t({ en: "Save Review", zh: "ä¿å­˜è¯„ä»·" })}</button>
+                        <button type="button" onClick={closeReview} className="villa-button-outline w-full">{t({ en: "Cancel", zh: "取消" })}</button>
+                        <button type="button" onClick={() => saveReview(order)} className="villa-button w-full">{t({ en: "Save Review", zh: "保存评价" })}</button>
                       </div>
                     </div>
                   ) : null}
@@ -237,18 +237,18 @@ export default function OrdersPage() {
                   {open ? (
                     <div className="mt-3 grid gap-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
                       <button type="button" onClick={() => window.location.href = "/diary"} className="flex items-center justify-between rounded-[14px] bg-white p-3 text-left text-sm font-black text-villa-text-primary">
-                        <span>{order.photosAvailable ? `${order.photosAvailable} ${t({ en: "Photos Available", zh: "å¼ ç…§ç‰‡å¯æŸ¥çœ‹" })}` : t({ en: "No diary photos yet", zh: "è¿˜æ²¡æœ‰æ—¥è®°ç…§ç‰‡" })}</span>
+                        <span>{order.photosAvailable ? `${order.photosAvailable} ${t({ en: "Photos Available", zh: "张照片可查看" })}` : t({ en: "No diary photos yet", zh: "还没有日记照片" })}</span>
                         <span>›</span>
                       </button>
                       <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
-                        <div className="flex justify-between"><span>{t({ en: "Booking Total", zh: "é¢„çº¦æ€»é¢" })}</span><strong>RM{order.total}</strong></div>
-                        <div className="mt-2 flex justify-between"><span>{t({ en: "Paid", zh: "å·²ä»˜" })}</span><strong>RM{order.paid}</strong></div>
-                        <div className="mt-2 flex justify-between"><span>{t({ en: "Balance", zh: "å°¾æ¬¾" })}</span><strong>RM{order.balance}</strong></div>
+                        <div className="flex justify-between"><span>{t({ en: "Booking Total", zh: "预约总额" })}</span><strong>RM{order.total}</strong></div>
+                        <div className="mt-2 flex justify-between"><span>{t({ en: "Paid", zh: "已付" })}</span><strong>RM{order.paid}</strong></div>
+                        <div className="mt-2 flex justify-between"><span>{t({ en: "Balance", zh: "尾款" })}</span><strong>RM{order.balance}</strong></div>
                       </div>
                       <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
                         <p className="m-0">{order.serviceLabel}</p>
                         <p className="m-0 mt-1">{order.dateLabel}</p>
-                        <p className="m-0 mt-1">{order.specialRequest || t({ en: "No special request.", zh: "æ²¡æœ‰ç‰¹åˆ«è¦æ±‚ã€‚" })}</p>
+                        <p className="m-0 mt-1">{order.specialRequest || t({ en: "No special request.", zh: "没有特别要求。" })}</p>
                       </div>
                       {order.review ? (
                         <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">

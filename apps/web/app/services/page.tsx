@@ -15,7 +15,7 @@ export default function ServicesPage() {
           <h1 className="section-title mt-4 max-w-4xl">{t({ en: "Small-dog boarding with clear rules and warm care", zh: "小型犬专属寄宿，规则清晰，照护温暖" })}</h1>
           <div className="mt-10 grid gap-5 lg:grid-cols-2">
             {[
-              ["🌙", "Overnight Boarding", "过夜寄宿", "RM40/night", "No cages, same-room sleeping, 24h companionship.", "不关笼，同房休息，24小时陪伴。"],
+              ["🌙", "Overnight Boarding", "过夜寄宿", "RM35/night", "No cages, same-room sleeping, 24h companionship.", "不关笼，同房休息，24小时陪伴。"],
               ["☀️", "Daycare", "日托", "RM5/hour", "Flexible daytime care from 9:00am to 8:00pm.", "9:00am 至 8:00pm 灵活日间照护。"]
             ].map(([icon, en, zh, price, bodyEn, bodyZh]) => (
               <article key={en} className="villa-card p-7">

@@ -142,12 +142,15 @@ export default function PetsPage() {
   }
 
   function savePet() {
-    if (!formPet.name.trim() || !formPet.breed.trim() || !formPet.weight.trim()) {
-      setError(t({ en: "Please fill in name, breed, and weight before saving.", zh: "保存前请填写名字、品种和体重。" }));
+    if (!formPet.name.trim() || !formPet.breed.trim()) {
+      setError(t({ en: "Please fill in name and breed before saving.", zh: "保存前请填写名字和品种。" }));
       setOpenSection("basic");
       return;
     }
-    const next = upsertPetProfile({ ...formPet });
+    const normalizedWeight = formPet.weight.trim()
+      ? `${formPet.weight.replace(/kg/gi, "").trim()}kg`
+      : "";
+    const next = upsertPetProfile({ ...formPet, weight: normalizedWeight });
     setPets(next);
     setMode("list");
     setError("");
@@ -196,16 +199,37 @@ export default function PetsPage() {
                     <input className="villa-input" value={formPet.age} onChange={(event) => update("age", event.target.value)} placeholder="3 years" />
                   </label>
                   <label className="grid gap-2">
-                    <span className="villa-label">{t({ en: "Weight", zh: "体重" })}</span>
-                    <input className="villa-input" value={formPet.weight} onChange={(event) => update("weight", event.target.value)} placeholder="6.2kg" />
+                    <span className="villa-label">{t({ en: "Weight (kg)", zh: "体重 (kg)" })}</span>
+                    <div className="relative">
+                      <input
+                        className="villa-input pr-12"
+                        type="number"
+                        min="1"
+                        max="12"
+                        step="0.1"
+                        value={formPet.weight.replace(/kg/gi, "")}
+                        onChange={(event) => update("weight", event.target.value)}
+                        placeholder="6.2"
+                      />
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-villa-text-muted">kg</span>
+                    </div>
                   </label>
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Gender", zh: "性别" })}</span>
-                    <input className="villa-input" value={formPet.gender} onChange={(event) => update("gender", event.target.value)} placeholder="Female" />
+                    <select className="villa-input" value={formPet.gender} onChange={(event) => update("gender", event.target.value)}>
+                      <option value="">{t({ en: "Select gender", zh: "选择性别" })}</option>
+                      <option value="Female">{t({ en: "Female", zh: "母" })}</option>
+                      <option value="Male">{t({ en: "Male", zh: "公" })}</option>
+                    </select>
                   </label>
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Coat color", zh: "毛色" })}</span>
-                    <input className="villa-input" value={formPet.coatColor} onChange={(event) => update("coatColor", event.target.value)} placeholder="Cream" />
+                    <select className="villa-input" value={formPet.coatColor} onChange={(event) => update("coatColor", event.target.value)}>
+                      <option value="">{t({ en: "Select coat color", zh: "选择毛色" })}</option>
+                      {["Cream", "White", "Apricot", "Brown", "Black", "Grey", "Mixed"].map((color) => (
+                        <option key={color} value={color}>{color}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">

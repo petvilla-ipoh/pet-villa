@@ -6,6 +6,8 @@ import { useLanguage } from "./components/LanguageProvider";
 import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
 import { getCurrentUserId } from "./lib/petProfiles";
 import { readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
+import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
+import { readHostReviews, type HostReview } from "./lib/reviews";
 import { claimVoucher, getReferralCode, readVouchers } from "./lib/vouchers";
 
 const phone = "+60165236409";
@@ -44,7 +46,7 @@ const services = [
     id: "overnight",
     icon: "moon",
     title: { en: "Overnight Boarding", zh: "寄宿服务" },
-    price: { en: "RM40 / night", zh: "RM40 / 晚" },
+    price: { en: "RM35 / night", zh: "RM35 / 晚" },
     details: {
       en: ["No cages", "Same-room sleeping", "24h companionship", "Daily photo updates"],
       zh: ["不关笼", "晚上一起睡", "24小时陪伴", "每日照片更新"]
@@ -384,7 +386,9 @@ export default function HomePage() {
   const [reviewTouchStart, setReviewTouchStart] = useState<number | null>(null);
   const [galleryTouchStart, setGalleryTouchStart] = useState<number | null>(null);
   const [capacityMap, setCapacityMap] = useState<Record<string, number>>({});
+  const [offDays, setOffDays] = useState<string[]>([]);
   const [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
+  const [hostReviews, setHostReviews] = useState<HostReview[]>([]);
   const [referralCode, setReferralCode] = useState("PETVILLA-PV123");
   const [couponMessage, setCouponMessage] = useState("");
   const [referralCopied, setReferralCopied] = useState(false);
@@ -393,24 +397,35 @@ export default function HomePage() {
     setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
     setReferralCode(getReferralCode());
     setGuestPhotos(readHomeGuestPhotos(6));
+    setHostReviews(readHostReviews());
     setCapacityMap(buildCapacityMap());
-    const sync = () => setCapacityMap(buildCapacityMap());
+    setOffDays(readHostOffDays());
+    const sync = () => {
+      setCapacityMap(buildCapacityMap());
+      setOffDays(readHostOffDays());
+    };
     const syncVouchers = () => setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
     const syncGallery = () => setGuestPhotos(readHomeGuestPhotos(6));
+    const syncReviews = () => setHostReviews(readHostReviews());
     window.addEventListener("pet-villa-orders", sync);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
     window.addEventListener("pet-villa-gallery", syncGallery);
+    window.addEventListener("pet-villa-reviews", syncReviews);
+    window.addEventListener("pet-villa-availability", sync);
     return () => {
       window.removeEventListener("pet-villa-orders", sync);
       window.removeEventListener("pet-villa-vouchers", syncVouchers);
       window.removeEventListener("pet-villa-gallery", syncGallery);
+      window.removeEventListener("pet-villa-reviews", syncReviews);
+      window.removeEventListener("pet-villa-availability", sync);
     };
   }, []);
 
   const today = startOfLocalDay(new Date());
-  const availabilityDays = useMemo(() => Array.from({ length: 30 }, (_, index) => addDays(today, index)), [today.getTime()]);
-  const todaySlots = availableSlotsForDate(today, capacityMap);
-  const activeReview = reviews[reviewIndex];
+  const availabilityDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today.getTime()]);
+  const todaySlots = isHostOffDay(localDateKey(today), offDays) ? 0 : availableSlotsForDate(today, capacityMap);
+  const displayReviews = hostReviews.length ? [...hostReviews, ...reviews] : reviews;
+  const activeReview = displayReviews[reviewIndex % displayReviews.length];
 
   function claimCoupon(code: string) {
     const result = claimVoucher(code);
@@ -431,7 +446,7 @@ export default function HomePage() {
       await navigator.clipboard.writeText(referralCode);
       setReferralCopied(true);
       setCouponMessage(t({
-        en: "Your referral code has been copied. Both of you will get RM10 after your friend completes the first registeration.",
+        en: "Referral code copied. You and your friend will each receive RM10 after your friend completes their first registration.",
         zh: "推荐码已复制。好友完成首次注册后，你们双方都会获得 RM10。"
       }));
       window.setTimeout(() => setReferralCopied(false), 1500);
@@ -441,7 +456,7 @@ export default function HomePage() {
   }
 
   function moveReview(direction: 1 | -1) {
-    setReviewIndex((index) => (index + direction + reviews.length) % reviews.length);
+    setReviewIndex((index) => (index + direction + displayReviews.length) % displayReviews.length);
   }
 
   function moveGallery(direction: 1 | -1) {
@@ -458,6 +473,7 @@ export default function HomePage() {
   }
 
   function slotLabel(date: Date) {
+    if (isHostOffDay(localDateKey(date), offDays)) return t({ en: "Off Day", zh: "休息" });
     const slots = availableSlotsForDate(date, capacityMap);
     if (slots <= 0) return t({ en: "Full", zh: "满位" });
     if (slots === 1) return t({ en: "1 slot left", zh: "剩 1 位" });
@@ -585,7 +601,8 @@ export default function HomePage() {
               </div>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {availabilityDays.map((date) => {
-                  const slots = availableSlotsForDate(date, capacityMap);
+                  const off = isHostOffDay(localDateKey(date), offDays);
+                  const slots = off ? 0 : availableSlotsForDate(date, capacityMap);
                   const isFull = slots <= 0;
                   return (
                     <a key={date.toISOString()} href={`/booking?date=${localDateKey(date)}`} className="min-w-[84px] rounded-[14px] border border-villa-primary-light bg-white/75 px-2 py-3 text-center transition hover:-translate-y-px hover:shadow-md">
@@ -627,14 +644,14 @@ export default function HomePage() {
                   </article>
                 );
               })}
-              <article className="flex min-h-[164px] flex-col rounded-[18px] border border-villa-primary-light bg-white p-3 shadow-sm">
+              <article className="flex min-h-[164px] flex-col items-center rounded-[18px] border border-villa-primary-light bg-white p-3 text-center shadow-sm">
                 <span className="inline-flex rounded-pill bg-villa-primary-bg px-2 py-1 text-[9px] font-black text-villa-primary">
                   {t({ en: "Referral Program", zh: "推荐奖励" })}
                 </span>
                 <Icon name="friend" className="mt-2 h-10 w-10" />
                 <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t({ en: "Invite a friend", zh: "邀请好友" })}</h3>
-                <p className="mt-1 rounded-[12px] bg-villa-primary-bg px-2 py-1 text-[10px] font-black text-villa-text-primary">{referralCode}</p>
-                <p className="mt-1 text-[10px] font-bold leading-tight text-villa-text-secondary">
+                <p className="mt-1 w-full rounded-[12px] bg-villa-primary-bg px-1 py-1 text-[9px] font-black leading-tight tracking-[-0.03em] text-villa-text-primary sm:text-[10px]">{referralCode}</p>
+                <p className="mt-1 text-center text-[10px] font-bold leading-tight text-villa-text-secondary">
                   {t({ en: "Get RM10 each", zh: "双方各得 RM10" })}
                 </p>
                 <button type="button" className="mt-auto min-h-[34px] w-full rounded-pill border border-villa-primary text-[11px] font-black text-villa-primary" onClick={copyReferralCode}>
@@ -694,7 +711,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {reviews.map((review, index) => (
+                  {displayReviews.map((review, index) => (
                     <button
                       key={review.name}
                       type="button"
@@ -803,7 +820,7 @@ export default function HomePage() {
               <button type="button" className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black" onClick={() => setReviewsOpen(false)}>×</button>
             </div>
             <div className="grid gap-3">
-              {reviews.map((review) => (
+              {displayReviews.map((review) => (
                 <article key={review.name} className="rounded-[18px] bg-villa-primary-bg p-4">
                   <Stars rating={review.rating} />
                   <p className="mt-2 text-sm font-bold leading-relaxed">“{t(review.quote)}”</p>

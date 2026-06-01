@@ -7,6 +7,7 @@ import { useLanguage } from "../components/LanguageProvider";
 import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { saveBookingDraft } from "../lib/orderFlow";
 import { getVoucherDiscount, getVoucherIneligibility, readVouchers, type UserVoucher } from "../lib/vouchers";
+import { isHostOffDay, readHostOffDays } from "../lib/hostAvailability";
 import {
   availableSlotsForDate,
   buildCapacityMap,
@@ -110,10 +111,12 @@ export default function BookingPage() {
   const [specialRequest, setSpecialRequest] = useState("");
   const [vouchers, setVouchers] = useState<UserVoucher[]>([]);
   const [selectedVoucherId, setSelectedVoucherId] = useState("");
+  const [offDays, setOffDays] = useState<string[]>([]);
 
   useEffect(() => {
     setPets(readPetProfiles());
     setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
+    setOffDays(readHostOffDays());
     function syncPets() {
       const nextPets = readPetProfiles();
       setPets(nextPets);
@@ -122,11 +125,16 @@ export default function BookingPage() {
     function syncVouchers() {
       setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
     }
+    function syncAvailability() {
+      setOffDays(readHostOffDays());
+    }
     window.addEventListener("pet-villa-pets", syncPets);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
+    window.addEventListener("pet-villa-availability", syncAvailability);
     return () => {
       window.removeEventListener("pet-villa-pets", syncPets);
       window.removeEventListener("pet-villa-vouchers", syncVouchers);
+      window.removeEventListener("pet-villa-availability", syncAvailability);
     };
   }, []);
 
@@ -154,7 +162,7 @@ export default function BookingPage() {
   const selectedPetNames = selectedPetObjects.map((pet) => pet.name);
   const daycareHours = Math.max(1, hourIndex(endTime) - hourIndex(startTime));
   const overnightNights = daysInclusive(startDate, endDate);
-  const unitTotal = service === "overnight" ? overnightNights * 40 : daycareHours * 5;
+  const unitTotal = service === "overnight" ? overnightNights * 35 : daycareHours * 5;
   const subtotal = selectedPets.length > 0 ? unitTotal * petCount : 0;
   const selectedVoucher = vouchers.find((voucher) => voucher.id === selectedVoucherId) || null;
   const voucherDiscount = getVoucherDiscount(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
@@ -163,6 +171,7 @@ export default function BookingPage() {
   const balance = Math.max(0, total - deposit);
   const capacityUsage = useMemo(() => buildCapacityMap(), [dateTouched, selectedPets.length]);
   const capacityIssue = selectedPets.length > 0 ? firstCapacityIssue(startDate, endDate, selectedPets.length, capacityUsage) : null;
+  const offDayIssue = isHostOffDay(toDateKey(startDate), offDays) || isHostOffDay(toDateKey(endDate), offDays);
 
   const dateLabel = useMemo(() => {
     if (service === "daycare") return `${formatDateRange(startDate, startDate)}, ${startTime} - ${endTime}`;
@@ -172,7 +181,7 @@ export default function BookingPage() {
   const serviceCompleted = Boolean(service);
   const dateCompleted = serviceCompleted && dateTouched;
   const petCompleted = dateCompleted && selectedPets.length > 0;
-  const confirmCompleted = petCompleted && total > 0 && !capacityIssue;
+  const confirmCompleted = petCompleted && total > 0 && !capacityIssue && !offDayIssue;
   const currentStep = !serviceCompleted ? 0 : !dateCompleted ? 1 : !petCompleted ? 2 : 3;
 
   function chooseService(nextService: "overnight" | "daycare") {
@@ -181,7 +190,7 @@ export default function BookingPage() {
   }
 
   function chooseDate(date: Date) {
-    if (date < today || availableSlotsForDate(date, capacityUsage) <= 0) return;
+    if (date < today || isHostOffDay(toDateKey(date), offDays) || availableSlotsForDate(date, capacityUsage) <= 0) return;
     setDateTouched(true);
     if (service === "daycare") {
       setStartDate(date);
@@ -295,7 +304,7 @@ export default function BookingPage() {
                 <h2 className="section-title">{t({ en: "Choose Service", zh: "选择服务" })}</h2>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {[
-                    { id: "overnight" as const, title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }), price: "RM40/night", desc: t({ en: "No cages · 24h Care", zh: "不关笼 · 24小时照顾" }) },
+                    { id: "overnight" as const, title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }), price: "RM35/night", desc: t({ en: "No cages · 24h Care", zh: "不关笼 · 24小时照顾" }) },
                     { id: "daycare" as const, title: t({ en: "Daycare", zh: "日托" }), price: "RM5/hour", desc: "9:00am – 8:00pm" }
                   ].map((item) => {
                     const active = service === item.id;
@@ -368,9 +377,10 @@ export default function BookingPage() {
                     {monthCells(visibleMonth).map((date, index) => {
                       if (!date) return <span key={`blank-${index}`} />;
                       const past = date < today;
+                      const off = isHostOffDay(toDateKey(date), offDays);
                       const slots = availableSlotsForDate(date, capacityUsage);
                       const full = slots <= 0;
-                      const disabled = past || full;
+                      const disabled = past || full || off;
                       const active = date >= startOfLocalDay(startDate) && date <= startOfLocalDay(endDate);
                       const isToday = toDateKey(date) === toDateKey(today);
                       return (
@@ -379,7 +389,7 @@ export default function BookingPage() {
                           type="button"
                           disabled={disabled}
                           onClick={() => chooseDate(date)}
-                          title={full ? "Full" : past ? "Past date" : `${slots} slots left`}
+                          title={off ? "Off day" : full ? "Full" : past ? "Past date" : `${slots} slots left`}
                           className={`min-h-[40px] rounded-[12px] border text-xs font-black transition ${
                             disabled
                               ? "cursor-not-allowed border-[#eaded7] bg-[#eee6e1] text-villa-text-muted"
@@ -523,6 +533,11 @@ export default function BookingPage() {
                     en: `Only ${capacityIssue.available} slot${capacityIssue.available === 1 ? "" : "s"} left on ${formatDateRange(capacityIssue.date, capacityIssue.date)}.`,
                     zh: `${formatDateRange(capacityIssue.date, capacityIssue.date)} 只剩 ${capacityIssue.available} 个位置。`
                   })}
+                </p>
+              ) : null}
+              {offDayIssue ? (
+                <p className="mb-3 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-700">
+                  {t({ en: "One of the selected dates is marked as an off day.", zh: "所选日期包含休息日，请重新选择。" })}
                 </p>
               ) : null}
               {pets.length === 0 ? (
