@@ -353,6 +353,14 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function localDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
 function couponKey() {
   return `pet-villa-coupons:${getCurrentUserId()}`;
 }
@@ -379,6 +387,7 @@ export default function HomePage() {
   const [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
   const [referralCode, setReferralCode] = useState("PETVILLA-PV123");
   const [couponMessage, setCouponMessage] = useState("");
+  const [referralCopied, setReferralCopied] = useState(false);
 
   useEffect(() => {
     setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
@@ -399,7 +408,7 @@ export default function HomePage() {
   }, []);
 
   const today = startOfLocalDay(new Date());
-  const availabilityDays = useMemo(() => Array.from({ length: 4 }, (_, index) => addDays(today, index)), [today.getTime()]);
+  const availabilityDays = useMemo(() => Array.from({ length: 30 }, (_, index) => addDays(today, index)), [today.getTime()]);
   const todaySlots = availableSlotsForDate(today, capacityMap);
   const activeReview = reviews[reviewIndex];
 
@@ -420,7 +429,12 @@ export default function HomePage() {
   async function copyReferralCode() {
     try {
       await navigator.clipboard.writeText(referralCode);
-      setCouponMessage(t({ en: "Referral code copied.", zh: "推荐码已复制。" }));
+      setReferralCopied(true);
+      setCouponMessage(t({
+        en: "Your referral code has been copied. Both of you will get RM10 after your friend completes the first registeration.",
+        zh: "推荐码已复制。好友完成首次注册后，你们双方都会获得 RM10。"
+      }));
+      window.setTimeout(() => setReferralCopied(false), 1500);
     } catch {
       setCouponMessage(referralCode);
     }
@@ -482,7 +496,7 @@ export default function HomePage() {
                   ))}
                 </ul>
 
-                <div className="mt-4 grid grid-cols-2 gap-2 lg:max-w-[560px]">
+                <div className="hidden">
                   {services.map((service) => (
                     <a
                       key={service.id}
@@ -519,10 +533,35 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="relative min-h-[360px] lg:min-h-full">
+              <div className="relative min-h-[300px] sm:min-h-[360px] lg:min-h-full">
                 <img src="/hero-dogs.png" alt="Poodle and French Bulldog at The Pet Villa" className="absolute inset-0 h-full w-full object-cover object-[50%_68%]" />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,248,245,0.08)_0%,rgba(255,248,245,0.0)_45%,#fff8f5_100%)] lg:bg-[linear-gradient(90deg,#fff8f5_0%,rgba(255,248,245,0.2)_28%,rgba(255,248,245,0)_100%)]" />
               </div>
+            </div>
+            <div className="grid gap-3 border-t border-villa-primary-light/70 bg-white/68 p-4 sm:grid-cols-2 lg:p-5">
+              {services.map((service) => (
+                <a
+                  key={service.id}
+                  href={service.href}
+                  className="rounded-[18px] border border-villa-primary-light bg-white/90 p-4 shadow-[0_10px_30px_rgba(61,31,13,0.07)] transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon name={service.icon} className="h-10 w-10 shrink-0" />
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-black text-villa-text-primary">{t(service.title)}</h2>
+                      <p className="mt-1 text-[24px] font-black leading-none text-villa-primary">{t(service.price)}</p>
+                    </div>
+                  </div>
+                  <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-bold text-villa-text-primary">
+                    {service.details[lang].map((detail) => (
+                      <li key={detail} className="flex items-center gap-1.5">
+                        <span className="text-villa-accent-green">✓</span>
+                        {detail}
+                      </li>
+                    ))}
+                  </ul>
+                </a>
+              ))}
             </div>
           </div>
         </section>
@@ -544,12 +583,12 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {availabilityDays.map((date) => {
                   const slots = availableSlotsForDate(date, capacityMap);
                   const isFull = slots <= 0;
                   return (
-                    <a key={date.toISOString()} href="/booking" className="rounded-[14px] border border-villa-primary-light bg-white/75 px-2 py-3 text-center transition hover:-translate-y-px hover:shadow-md">
+                    <a key={date.toISOString()} href={`/booking?date=${localDateKey(date)}`} className="min-w-[84px] rounded-[14px] border border-villa-primary-light bg-white/75 px-2 py-3 text-center transition hover:-translate-y-px hover:shadow-md">
                       <span className="block text-[10px] font-black text-villa-text-primary">{formatDay(date, lang)}</span>
                       <strong className={`mt-2 block text-[12px] font-black ${isFull ? "text-red-500" : slots === 1 ? "text-orange-500" : "text-villa-accent-green"}`}>
                         {slotLabel(date)}
@@ -577,7 +616,7 @@ export default function HomePage() {
               {promotions.filter((promo) => promo.code !== "REFER10").map((promo) => {
                 const claimed = claimedCoupons.includes(promo.code);
                 return (
-                  <article key={promo.code} className="flex min-h-[178px] flex-col rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/70 p-3 shadow-sm">
+                  <article key={promo.code} className="flex min-h-[164px] flex-col rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/70 p-3 shadow-sm">
                     <span className="inline-flex rounded-pill bg-white px-2 py-1 text-[9px] font-black text-villa-primary">{t(promo.label)}</span>
                     <Icon name={promo.icon} className="mt-2 h-10 w-10" />
                     <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t(promo.title)}</h3>
@@ -588,18 +627,18 @@ export default function HomePage() {
                   </article>
                 );
               })}
-              <article className="flex min-h-[178px] flex-col rounded-[18px] border border-villa-primary-light bg-white p-3 shadow-sm">
+              <article className="flex min-h-[164px] flex-col rounded-[18px] border border-villa-primary-light bg-white p-3 shadow-sm">
                 <span className="inline-flex rounded-pill bg-villa-primary-bg px-2 py-1 text-[9px] font-black text-villa-primary">
                   {t({ en: "Referral Program", zh: "推荐奖励" })}
                 </span>
                 <Icon name="friend" className="mt-2 h-10 w-10" />
-                <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t({ en: "My Referral Code", zh: "我的推荐码" })}</h3>
+                <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t({ en: "Invite a friend", zh: "邀请好友" })}</h3>
                 <p className="mt-1 rounded-[12px] bg-villa-primary-bg px-2 py-1 text-[10px] font-black text-villa-text-primary">{referralCode}</p>
                 <p className="mt-1 text-[10px] font-bold leading-tight text-villa-text-secondary">
-                  {t({ en: "Both get RM10 after your friend verifies email and completes the first order.", zh: "好友验证邮箱并完成首单后，双方各得 RM10。" })}
+                  {t({ en: "Get RM10 each", zh: "双方各得 RM10" })}
                 </p>
                 <button type="button" className="mt-auto min-h-[34px] w-full rounded-pill border border-villa-primary text-[11px] font-black text-villa-primary" onClick={copyReferralCode}>
-                  {t({ en: "Copy Referral Code", zh: "复制推荐码" })}
+                  {referralCopied ? t({ en: "Copied ✓", zh: "已复制 ✓" }) : t({ en: "Copy Code", zh: "复制推荐码" })}
                 </button>
               </article>
             </div>
@@ -666,6 +705,9 @@ export default function HomePage() {
                   ))}
                 </div>
               </div>
+              <p className="mt-3 text-center text-[11px] font-bold text-villa-text-secondary/80">
+                {t({ en: "Swipe to view more reviews →", zh: "左右滑动查看更多评价 →" })}
+              </p>
             </div>
           </div>
         </section>

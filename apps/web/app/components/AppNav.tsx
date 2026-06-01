@@ -387,49 +387,49 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
       {open ? (
         loggedIn ? (
-          <nav className="mx-auto mt-3 max-w-[390px] rounded-[22px] border border-villa-primary-light bg-white/96 p-4 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur lg:hidden">
+          <nav className="mx-auto mt-3 max-h-[calc(100svh-112px)] max-w-[390px] overflow-y-auto overscroll-contain rounded-[22px] border border-villa-primary-light bg-white/96 p-3 pb-24 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
             <div className="mb-2 flex items-center gap-3 px-1">
-              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
+              <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
                 <img src={userAvatar} alt="" className="h-full w-full object-cover" />
               </div>
               <div>
                 <p className="m-0 text-xs font-bold text-villa-text-muted">{t({ en: "Welcome back", zh: "欢迎回来" })}</p>
-                <h2 className="m-0 font-title text-xl font-black leading-tight text-villa-text-primary">{userName || "Pet Villa"}</h2>
+                <h2 className="m-0 font-title text-lg font-black leading-tight text-villa-text-primary">{userName || "Pet Villa"}</h2>
               </div>
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               {privateMenu.map((item) => (
-                <a key={item.href} className="flex items-center gap-3 rounded-[16px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-3 py-2.5 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-white">
+                <a key={item.href} className="flex items-center gap-2.5 rounded-[15px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-2.5 py-2 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[12px] bg-white">
                     <MenuItemIcon name={item.icon} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block text-sm font-black leading-tight text-villa-text-primary">{t({ en: item.en, zh: item.zh })}</strong>
-                    <span className="block text-[11px] font-bold leading-tight text-villa-text-muted">{t({ en: item.descEn, zh: item.descZh })}</span>
+                    <strong className="block text-[13px] font-black leading-tight text-villa-text-primary">{t({ en: item.en, zh: item.zh })}</strong>
+                    <span className="block text-[10px] font-bold leading-tight text-villa-text-muted">{t({ en: item.descEn, zh: item.descZh })}</span>
                   </span>
                   <span className="text-villa-text-muted"><ChevronIcon /></span>
                 </a>
               ))}
             </div>
 
-            <div className="mt-2 rounded-[16px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-2.5">
+            <div className="mt-1.5 rounded-[15px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-2">
               <div className="mb-2 flex items-center gap-3 px-1">
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-villa-text-primary">
-                  <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden="true">
+                  <svg viewBox="0 0 32 32" className="h-4 w-4" aria-hidden="true">
                     <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" strokeWidth="2.5" />
                     <path d="M4 16h24M16 4c4 4 6 8 6 12s-2 8-6 12M16 4c-4 4-6 8-6 12s2 8 6 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
                   </svg>
                 </span>
-                <strong className="text-sm font-black text-villa-text-primary">{t({ en: "Language", zh: "语言" })}</strong>
+                <strong className="text-[13px] font-black text-villa-text-primary">{t({ en: "Language", zh: "语言" })}</strong>
               </div>
-              <div className="grid grid-cols-2 gap-2 rounded-full bg-white/80 p-1">
-                <button type="button" className={`min-h-[34px] rounded-full text-xs font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("en")}>EN</button>
-                <button type="button" className={`min-h-[34px] rounded-full text-xs font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("zh")}>中文</button>
+              <div className="grid grid-cols-2 gap-1 rounded-full bg-white/80 p-1">
+                <button type="button" className={`min-h-[28px] rounded-full text-[11px] font-black ${lang === "en" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("en")}>EN</button>
+                <button type="button" className={`min-h-[28px] rounded-full text-[11px] font-black ${lang === "zh" ? "bg-villa-primary text-white shadow-md" : "text-villa-text-secondary"}`} onClick={() => setLang("zh")}>中文</button>
               </div>
             </div>
 
-            <button type="button" className="mt-2 flex min-h-[44px] w-full items-center gap-3 rounded-[16px] border border-villa-primary-light bg-white px-4 text-left text-sm font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
+            <button type="button" className="mt-1.5 flex min-h-[38px] w-full items-center gap-2.5 rounded-[15px] border border-villa-primary-light bg-white px-3 text-left text-[13px] font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
               <LogoutIcon />
               {t({ en: "Logout", zh: "退出登录" })}
             </button>

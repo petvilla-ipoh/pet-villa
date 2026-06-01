@@ -136,6 +136,17 @@ export default function BookingPage() {
     if (serviceParam === "daycare" || serviceParam === "overnight") {
       chooseService(serviceParam);
     }
+    const dateParam = params.get("date");
+    if (dateParam) {
+      const [year, month, day] = dateParam.split("-").map(Number);
+      const nextDate = createLocalDate(year, (month || 1) - 1, day || 1);
+      if (!Number.isNaN(nextDate.getTime()) && nextDate >= today) {
+        setStartDate(nextDate);
+        setEndDate(nextDate);
+        setVisibleMonth(createLocalDate(nextDate.getFullYear(), nextDate.getMonth(), 1));
+        setDateTouched(true);
+      }
+    }
   }, []);
 
   const selectedPetObjects = pets.filter((pet) => selectedPets.includes(pet.id));

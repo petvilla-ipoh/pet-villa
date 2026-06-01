@@ -108,20 +108,19 @@ function writeReferralMap(map: Record<string, string>) {
   window.localStorage.setItem(referralMapKey(), JSON.stringify(map));
 }
 
-function makeInitials(name: string) {
-  const cleaned = name.trim().replace(/[^a-zA-Z\s]/g, "");
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  if (parts[0]) return parts[0].slice(0, 2).toUpperCase().padEnd(2, "X");
-  return "PV";
+function makeNamePrefix(name: string) {
+  const cleaned = name.trim().replace(/[^a-zA-Z]/g, "");
+  if (!cleaned) return "PV";
+  return cleaned.slice(0, 3).toUpperCase();
 }
 
 export function getReferralCode(userId = getCurrentUserId()) {
   const user = getSessionUser();
   const name = user?.name || user?.fullName || "";
-  const source = `${user?.phone || user?.email || userId || "123"}`.replace(/\D/g, "");
-  const suffix = (source || "123").slice(-3).padStart(3, "1");
-  const code = `PETVILLA-${makeInitials(name)}${suffix}`;
+  const phoneDigits = `${user?.phone || ""}`.replace(/\D/g, "");
+  const fallbackSource = `${userId || "0000"}`.replace(/[^a-zA-Z0-9]/g, "");
+  const suffix = phoneDigits ? phoneDigits.slice(-4).padStart(4, "0") : fallbackSource.slice(-4).toUpperCase().padStart(4, "0");
+  const code = `PETVILLA-${makeNamePrefix(name)}${suffix}`;
   const map = readReferralMap();
   if (userId && userId !== "guest" && map[code] !== userId) {
     writeReferralMap({ ...map, [code]: userId });
