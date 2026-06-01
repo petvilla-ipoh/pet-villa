@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUserId, type PetProfile } from "./petProfiles";
+import { markVoucherUsed } from "./vouchers";
 
 export type BookingDraft = {
   id: string;
@@ -13,6 +14,11 @@ export type BookingDraft = {
   hours: number;
   pets: Array<Pick<PetProfile, "id" | "name" | "breed" | "weight" | "photoDataUrl">>;
   total: number;
+  subtotal?: number;
+  voucherId?: string;
+  voucherCode?: string;
+  voucherTitle?: string;
+  voucherDiscount?: number;
   deposit: number;
   balance: number;
   specialRequest: string;
@@ -22,7 +28,7 @@ export type BookingDraft = {
 export type VillaOrder = BookingDraft & {
   orderId: string;
   paid: number;
-  status: "balance" | "active" | "confirmed" | "completed" | "cancelled";
+  status: "balance" | "active" | "confirmed" | "staying" | "awaiting_checkout" | "ready_pickup" | "completed" | "cancelled";
   cancelledAt?: string;
   photosAvailable: number;
   review?: {
@@ -70,15 +76,19 @@ export function writeOrders(orders: VillaOrder[], userId = getCurrentUserId()) {
 
 export function createOrderFromDraft(draft: BookingDraft, paid: number, userId = getCurrentUserId()) {
   const orders = readOrders(userId);
+  const orderId = `order-${Date.now()}`;
   const order: VillaOrder = {
     ...draft,
-    orderId: `order-${Date.now()}`,
+    orderId,
     paid,
     balance: Math.max(0, draft.total - paid),
     status: paid > 0 ? "confirmed" : "balance",
     photosAvailable: 0
   };
   writeOrders([order, ...orders], userId);
+  if (draft.voucherId && (draft.voucherDiscount || 0) > 0 && paid > 0) {
+    markVoucherUsed(draft.voucherId, orderId, draft.voucherDiscount || 0, draft.dateLabel, userId);
+  }
   return order;
 }
 

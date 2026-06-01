@@ -6,6 +6,7 @@ import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { saveBookingDraft } from "../lib/orderFlow";
+import { getVoucherDiscount, getVoucherIneligibility, readVouchers, type UserVoucher } from "../lib/vouchers";
 import {
   availableSlotsForDate,
   buildCapacityMap,
@@ -107,16 +108,26 @@ export default function BookingPage() {
   const [startTime, setStartTime] = useState("10:00am");
   const [endTime, setEndTime] = useState("2:00pm");
   const [specialRequest, setSpecialRequest] = useState("");
+  const [vouchers, setVouchers] = useState<UserVoucher[]>([]);
+  const [selectedVoucherId, setSelectedVoucherId] = useState("");
 
   useEffect(() => {
     setPets(readPetProfiles());
+    setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
     function syncPets() {
       const nextPets = readPetProfiles();
       setPets(nextPets);
       setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
     }
+    function syncVouchers() {
+      setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
+    }
     window.addEventListener("pet-villa-pets", syncPets);
-    return () => window.removeEventListener("pet-villa-pets", syncPets);
+    window.addEventListener("pet-villa-vouchers", syncVouchers);
+    return () => {
+      window.removeEventListener("pet-villa-pets", syncPets);
+      window.removeEventListener("pet-villa-vouchers", syncVouchers);
+    };
   }, []);
 
   useEffect(() => {
@@ -133,7 +144,12 @@ export default function BookingPage() {
   const daycareHours = Math.max(1, hourIndex(endTime) - hourIndex(startTime));
   const overnightNights = daysInclusive(startDate, endDate);
   const unitTotal = service === "overnight" ? overnightNights * 40 : daycareHours * 5;
-  const total = selectedPets.length > 0 ? unitTotal * petCount : 0;
+  const subtotal = selectedPets.length > 0 ? unitTotal * petCount : 0;
+  const selectedVoucher = vouchers.find((voucher) => voucher.id === selectedVoucherId) || null;
+  const voucherDiscount = getVoucherDiscount(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
+  const total = Math.max(0, subtotal - voucherDiscount);
+  const deposit = Math.ceil(total / 2);
+  const balance = Math.max(0, total - deposit);
   const capacityUsage = useMemo(() => buildCapacityMap(), [dateTouched, selectedPets.length]);
   const capacityIssue = selectedPets.length > 0 ? firstCapacityIssue(startDate, endDate, selectedPets.length, capacityUsage) : null;
 
@@ -216,8 +232,13 @@ export default function BookingPage() {
         photoDataUrl: pet.photoDataUrl
       })),
       total,
-      deposit: total / 2,
-      balance: total / 2,
+      subtotal,
+      voucherId: selectedVoucher?.id,
+      voucherCode: selectedVoucher?.code,
+      voucherTitle: selectedVoucher?.title.en,
+      voucherDiscount,
+      deposit,
+      balance,
       specialRequest,
       createdAt: new Date().toISOString()
     });
@@ -439,17 +460,49 @@ export default function BookingPage() {
 
               <div className="my-4 h-px bg-villa-primary-light" />
               <div className="grid gap-3">
+                <div className="rounded-[16px] border border-villa-primary-light bg-white p-3">
+                  <label className="villa-label" htmlFor="booking-voucher">{t({ en: "Apply Voucher", zh: "使用优惠券" })}</label>
+                  <select
+                    id="booking-voucher"
+                    className="villa-input mt-2"
+                    value={selectedVoucherId}
+                    onChange={(event) => setSelectedVoucherId(event.target.value)}
+                  >
+                    <option value="">{t({ en: "No voucher", zh: "不使用优惠券" })}</option>
+                    {vouchers.map((voucher) => {
+                      const unavailable = getVoucherIneligibility(voucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
+                      return (
+                        <option key={voucher.id} value={voucher.id}>
+                          {t(voucher.title)}{unavailable ? ` - ${unavailable}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedVoucher && voucherDiscount <= 0 ? (
+                    <p className="m-0 mt-2 text-[11px] font-bold text-villa-primary">{getVoucherIneligibility(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal })}</p>
+                  ) : null}
+                </div>
+                <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
+                  <span>{t({ en: "Subtotal", zh: "小计" })}</span>
+                  <span>RM{subtotal}</span>
+                </div>
+                {voucherDiscount > 0 ? (
+                  <div className="flex justify-between text-sm font-black text-villa-accent-green">
+                    <span>{selectedVoucher?.code}</span>
+                    <span>-RM{voucherDiscount}</span>
+                  </div>
+                ) : null}
                 <div className="flex items-end justify-between">
                   <span className="text-base font-black text-villa-text-primary">{t({ en: "Total", zh: "总计" })}</span>
                   <span className="text-2xl font-black text-villa-text-primary">RM{total}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black">
                   <span className="text-villa-text-secondary">{t({ en: "Deposit Today (50%)", zh: "今日订金（50%）" })}</span>
-                  <span className="text-villa-primary">RM{(total / 2).toFixed(0)}</span>
+                  <span className="text-villa-primary">RM{deposit}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
                   <span>{t({ en: "Balance Later", zh: "尾款稍后支付" })}</span>
-                  <span>RM{(total / 2).toFixed(0)}</span>
+                  <span>RM{balance}</span>
                 </div>
               </div>
               <div className="my-4 h-px bg-villa-primary-light" />

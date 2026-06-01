@@ -6,6 +6,7 @@ import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { readOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
 import { daysInclusive, formatDateRange, getOrderDateRange, startOfLocalDay } from "../lib/bookingCapacity";
+import { restoreVoucherForOrder } from "../lib/vouchers";
 
 type Filter = "all" | "active" | "balance" | "completed" | "cancelled";
 
@@ -13,6 +14,9 @@ const statusStyles: Record<VillaOrder["status"], string> = {
   balance: "bg-orange-50 text-orange-600",
   active: "bg-sky-50 text-sky-600",
   confirmed: "bg-emerald-50 text-emerald-700",
+  staying: "bg-sky-50 text-sky-600",
+  awaiting_checkout: "bg-purple-50 text-purple-600",
+  ready_pickup: "bg-villa-primary-bg text-villa-primary",
   completed: "bg-gray-100 text-gray-600",
   cancelled: "bg-red-50 text-red-600"
 };
@@ -42,6 +46,7 @@ export default function OrdersPage() {
   const [reviewStars, setReviewStars] = useState(0);
   const [reviewBody, setReviewBody] = useState("");
   const [message, setMessage] = useState("");
+  const [cancelTarget, setCancelTarget] = useState<VillaOrder | null>(null);
 
   useEffect(() => {
     function syncOrders() {
@@ -56,22 +61,18 @@ export default function OrdersPage() {
     return orders.filter((order) => {
       if (filter === "all") return true;
       if (filter === "balance") return order.balance > 0 && order.status !== "cancelled";
-      if (filter === "active") return order.status === "active" || order.status === "confirmed";
+      if (filter === "active") return order.status === "active" || order.status === "confirmed" || order.status === "staying" || order.status === "awaiting_checkout" || order.status === "ready_pickup";
       return order.status === filter;
     });
   }, [filter, orders]);
 
   function payBalance(order: VillaOrder) {
     const nextOrders = updateOrder(order.orderId, (current) => {
-      const range = getOrderDateRange(current);
-      const today = startOfLocalDay(new Date());
-      const checkOut = range ? startOfLocalDay(range.end) : null;
-      const checkoutPassed = checkOut ? today > checkOut : false;
       return {
         ...current,
         paid: current.total,
         balance: 0,
-        status: checkoutPassed ? "completed" : "confirmed"
+        status: "ready_pickup"
       };
     });
     setOrders(nextOrders);
@@ -80,8 +81,10 @@ export default function OrdersPage() {
 
   function cancelOrder(order: VillaOrder) {
     const nextOrders = updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled", cancelledAt: new Date().toISOString() }));
+    restoreVoucherForOrder(order.orderId);
     setOrders(nextOrders);
     setMessage(t({ en: "Booking cancelled.", zh: "é¢„çº¦å·²å–æ¶ˆã€‚" }));
+    setCancelTarget(null);
   }
 
   function openReview(order: VillaOrder) {
@@ -177,7 +180,13 @@ export default function OrdersPage() {
                 ? "Balance Due"
                 : order.status === "active"
                   ? "Staying"
-                  : order.status.charAt(0).toUpperCase() + order.status.slice(1);
+                  : order.status === "ready_pickup"
+                    ? "Ready Pickup"
+                    : order.status === "awaiting_checkout"
+                      ? "Awaiting Checkout"
+                      : order.status === "staying"
+                        ? "Staying"
+                        : order.status.charAt(0).toUpperCase() + order.status.slice(1);
               return (
                 <article key={order.orderId} className="villa-card p-4">
                   <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="w-full text-left">
@@ -203,7 +212,7 @@ export default function OrdersPage() {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {order.balance > 0 && order.status !== "cancelled" && order.status !== "completed" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "ä»˜å°¾æ¬¾" })}</button> : null}
-                    {order.status === "confirmed" ? <button type="button" onClick={() => cancelOrder(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "å–æ¶ˆ" })}</button> : null}
+                    {order.status === "confirmed" ? <button type="button" onClick={() => setCancelTarget(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "取消" })}</button> : null}
                     {order.status === "completed" ? <button type="button" onClick={() => openReview(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{order.review ? t({ en: "Reviewed", zh: "已评价" }) : `★★★★★ ${t({ en: "Leave Review", zh: "留下评价" })}`}</button> : null}
                     <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "æ”¶èµ·è¯¦æƒ…" }) : t({ en: "Order Details", zh: "è®¢å•è¯¦æƒ…" })}</button>
                   </div>
@@ -255,6 +264,23 @@ export default function OrdersPage() {
             })}
           </div>
         </section>
+        {cancelTarget ? (
+          <div className="fixed inset-0 z-50 grid place-items-end bg-villa-text-primary/35 p-4 sm:place-items-center">
+            <div className="w-full max-w-[420px] rounded-[28px] border border-villa-primary-light bg-white p-5 shadow-[0_24px_70px_rgba(61,31,13,0.24)]">
+              <h2 className="section-title">{t({ en: "Cancel Booking?", zh: "取消预约？" })}</h2>
+              <p className="body-copy mt-2">
+                {t({
+                  en: "This will release the reserved capacity and restore any used voucher when eligible.",
+                  zh: "取消后会释放名额；符合条件的优惠券会恢复可用。"
+                })}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button type="button" className="villa-button-outline w-full" onClick={() => setCancelTarget(null)}>{t({ en: "Keep Booking", zh: "保留预约" })}</button>
+                <button type="button" className="villa-button w-full" onClick={() => cancelOrder(cancelTarget)}>{t({ en: "Cancel Booking", zh: "确认取消" })}</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </OwnerSidebar>
     </ProtectedPage>
   );

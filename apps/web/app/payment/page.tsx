@@ -54,6 +54,8 @@ export default function PaymentPage() {
 
   const booking = draft;
   const total = booking?.total || 0;
+  const subtotal = booking?.subtotal ?? total;
+  const voucherDiscount = booking?.voucherDiscount || 0;
   const amount = booking ? (amountMode === "deposit" ? booking.deposit : total) : 0;
   const balance = Math.max(0, total - amount);
   const petNames = booking?.pets.map((pet) => pet.name).join(", ") || "";
@@ -238,6 +240,19 @@ export default function PaymentPage() {
             <aside className="villa-card h-fit lg:sticky lg:top-24">
               <h2 className="section-title">{t({ en: "Payment Details", zh: "付款明细" })}</h2>
               <div className="mt-4 rounded-[18px] border border-villa-primary-light bg-white p-4">
+                {voucherDiscount > 0 ? (
+                  <>
+                    <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
+                      <span>{t({ en: "Subtotal", zh: "小计" })}</span>
+                      <span className="text-base font-black text-villa-text-primary">RM{subtotal}</span>
+                    </div>
+                    <div className="mt-3 flex justify-between text-sm font-bold text-villa-accent-green">
+                      <span>{booking?.voucherCode || t({ en: "Voucher", zh: "优惠券" })}</span>
+                      <span>-RM{voucherDiscount}</span>
+                    </div>
+                    <div className="my-4 border-t border-dashed border-villa-primary-light" />
+                  </>
+                ) : null}
                 <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
                   <span>{t({ en: "Booking Total", zh: "预约总额" })}</span>
                   <span className="text-lg font-black text-villa-text-primary">RM{total}</span>

@@ -6,13 +6,14 @@ import { LanguageToggle } from "./LanguageToggle";
 import { useLanguage } from "./LanguageProvider";
 
 const items = [
-  { href: "/", icon: "🏡", en: "Home", zh: "首页" },
-  { href: "/pets", icon: "🐶", en: "My Pets", zh: "宠物" },
-  { href: "/booking", icon: "📅", en: "Bookings", zh: "预约" },
-  { href: "/payment", icon: "💳", en: "Payment", zh: "付款" },
-  { href: "/orders", icon: "📦", en: "Orders", zh: "订单" },
-  { href: "/diary", icon: "📸", en: "Diary", zh: "日记" },
-  { href: "/account", icon: "🔐", en: "Account", zh: "账号" }
+  { href: "/", icon: "⌂", en: "Home", zh: "首页" },
+  { href: "/pets", icon: "◉", en: "My Pets", zh: "宠物" },
+  { href: "/booking", icon: "▣", en: "Bookings", zh: "预约" },
+  { href: "/payment", icon: "▤", en: "Payment", zh: "付款" },
+  { href: "/orders", icon: "□", en: "Orders", zh: "订单" },
+  { href: "/diary", icon: "◍", en: "Diary", zh: "日记" },
+  { href: "/account", icon: "○", en: "Account", zh: "账号" },
+  { href: "/vouchers", icon: "◇", en: "My Vouchers", zh: "优惠券" }
 ];
 
 export function OwnerSidebar({ children }: { children: React.ReactNode }) {
@@ -35,11 +36,11 @@ export function OwnerSidebar({ children }: { children: React.ReactNode }) {
               <a
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-[16px] px-3 py-3 text-sm font-bold transition duration-200 ${
+                className={`flex min-h-[48px] items-center gap-2 rounded-[16px] px-3 py-3 text-sm font-bold transition duration-200 ${
                   active ? "bg-villa-primary text-villa-text-primary shadow-sm" : "bg-villa-primary-bg text-villa-text-secondary hover:bg-villa-primary-light/40"
                 }`}
               >
-                <span>{item.icon}</span>
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-white/70 text-xs font-black">{item.icon}</span>
                 <span>{t({ en: item.en, zh: item.zh })}</span>
               </a>
             );

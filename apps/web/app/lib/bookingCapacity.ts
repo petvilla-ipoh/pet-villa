@@ -4,7 +4,7 @@ import { readOrders, type VillaOrder } from "./orderFlow";
 
 export const MAX_DOGS_PER_DAY = 3;
 
-const OCCUPYING_STATUSES = new Set<VillaOrder["status"]>(["balance", "confirmed", "active"]);
+const OCCUPYING_STATUSES = new Set<VillaOrder["status"]>(["confirmed", "active", "staying", "awaiting_checkout", "ready_pickup"]);
 
 export function toDateKey(date: Date) {
   const year = date.getFullYear();
