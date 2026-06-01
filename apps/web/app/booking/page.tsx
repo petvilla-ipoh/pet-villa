@@ -213,6 +213,7 @@ export default function BookingPage() {
       specialRequest,
       createdAt: new Date().toISOString()
     });
+    window.location.href = "/payment";
   }
 
   const steps = [
@@ -455,7 +456,7 @@ export default function BookingPage() {
               {pets.length === 0 ? (
                 <a href="/pets?mode=add" className="villa-button w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
               ) : (
-                <a href={confirmCompleted ? "/payment" : "#"} onClick={saveDraftForPayment} className={`villa-button w-full ${confirmCompleted ? "" : "pointer-events-none opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</a>
+                <button type="button" onClick={saveDraftForPayment} disabled={!confirmCompleted} className={`villa-button w-full ${confirmCompleted ? "" : "opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</button>
               )}
               <p className="mt-3 text-center text-[11px] font-bold leading-relaxed text-villa-text-muted">{t({ en: "Your booking is only confirmed after deposit payment.", zh: "付款订金后，预约才会确认。" })}</p>
             </aside>

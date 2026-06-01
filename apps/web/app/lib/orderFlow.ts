@@ -75,7 +75,7 @@ export function createOrderFromDraft(draft: BookingDraft, paid: number, userId =
     orderId: `order-${Date.now()}`,
     paid,
     balance: Math.max(0, draft.total - paid),
-    status: paid >= draft.total ? "confirmed" : "balance",
+    status: paid > 0 ? "confirmed" : "balance",
     photosAvailable: 0
   };
   writeOrders([order, ...orders], userId);

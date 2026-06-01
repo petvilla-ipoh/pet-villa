@@ -9,21 +9,6 @@ import { createOrderFromDraft, readBookingDraft, type BookingDraft } from "../li
 
 type AmountMode = "deposit" | "full";
 
-const fallbackDraft: BookingDraft = {
-  id: "fallback",
-  service: "overnight",
-  serviceLabel: "Overnight Boarding",
-  dateLabel: "Jun 4 - Jun 7",
-  nights: 3,
-  hours: 0,
-  pets: [{ id: "pet-fallback", name: "Mochi", breed: "Toy Poodle", weight: "6.2kg" }],
-  total: 120,
-  deposit: 60,
-  balance: 60,
-  specialRequest: "",
-  createdAt: new Date().toISOString()
-};
-
 function CalendarIcon() {
   return (
     <svg viewBox="0 0 40 40" className="h-5 w-5" aria-hidden="true">
@@ -67,12 +52,12 @@ export default function PaymentPage() {
     setLoaded(true);
   }, []);
 
-  const booking = draft || fallbackDraft;
-  const total = booking.total;
-  const amount = amountMode === "deposit" ? booking.deposit : total;
+  const booking = draft;
+  const total = booking?.total || 0;
+  const amount = booking ? (amountMode === "deposit" ? booking.deposit : total) : 0;
   const balance = Math.max(0, total - amount);
-  const petNames = booking.pets.map((pet) => pet.name).join(", ");
-  const stayLabel = booking.service === "overnight"
+  const petNames = booking?.pets.map((pet) => pet.name).join(", ") || "";
+  const stayLabel = !booking ? "" : booking.service === "overnight"
     ? t({ en: `${booking.nights} Nights Stay`, zh: `${booking.nights} 晚寄宿` })
     : t({ en: `${booking.hours} Hours Daycare`, zh: `${booking.hours} 小时日托` });
 
@@ -95,7 +80,21 @@ export default function PaymentPage() {
     }, 600);
   }
 
-  if (loaded && !draft) {
+  if (!loaded) {
+    return (
+      <ProtectedPage>
+        <OwnerSidebar>
+          <section className="p-4 lg:p-8">
+            <div className="villa-card text-center">
+              <h1 className="section-title">{t({ en: "Loading payment...", zh: "正在载入付款资料..." })}</h1>
+            </div>
+          </section>
+        </OwnerSidebar>
+      </ProtectedPage>
+    );
+  }
+
+  if (!draft) {
     return (
       <ProtectedPage>
         <OwnerSidebar>
@@ -119,8 +118,8 @@ export default function PaymentPage() {
             <p className="m-0 text-xs font-black uppercase tracking-[0.08em] text-villa-primary">{t({ en: "Booking Summary", zh: "预约摘要" })}</p>
             <div className="mt-3 grid gap-2 text-sm font-black text-villa-text-primary">
               <div className="flex items-center gap-2"><DogIcon /> {petNames}</div>
-              <div className="flex items-center gap-2"><MoonIcon /> {booking.serviceLabel}</div>
-              <div className="flex items-center gap-2"><CalendarIcon /> {booking.dateLabel}</div>
+              <div className="flex items-center gap-2"><MoonIcon /> {draft.serviceLabel}</div>
+              <div className="flex items-center gap-2"><CalendarIcon /> {draft.dateLabel}</div>
               <div className="rounded-full bg-white px-3 py-2 text-xs font-black text-villa-text-secondary">{stayLabel}</div>
             </div>
           </div>
@@ -141,7 +140,7 @@ export default function PaymentPage() {
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <div>
                         <h2 className="card-title">{t({ en: "Pay Deposit 50%", zh: "支付 50% 订金" })}</h2>
-                        <p className="muted-copy m-0">{t({ en: `Today: RM${booking.deposit} · Later: RM${booking.balance}`, zh: `今天：RM${booking.deposit} · 之后：RM${booking.balance}` })}</p>
+                        <p className="muted-copy m-0">{t({ en: `Today: RM${draft.deposit} · Later: RM${draft.balance}`, zh: `今天：RM${draft.deposit} · 之后：RM${draft.balance}` })}</p>
                       </div>
                       <span className={`grid h-7 w-7 place-items-center rounded-full ${amountMode === "deposit" ? "bg-villa-primary text-white" : "border border-villa-primary-light text-transparent"}`}>✓</span>
                     </div>

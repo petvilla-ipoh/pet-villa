@@ -251,24 +251,31 @@ export default function AuthPage() {
       return;
     }
     const registered = readRegisteredUser();
-    const storedName = window.localStorage.getItem("pet-villa-last-full-name") || "";
-    const nextName = registered && (registered.email === emailOrPhone || registered.phone === emailOrPhone) ? registered.fullName : storedName;
+    const matched = registered && (registered.email === emailOrPhone || registered.phone === emailOrPhone);
+    if (!registered || !matched) {
+      setErrorMessage(t({ en: "No account found. Please register first.", zh: "找不到账号，请先注册。" }));
+      return;
+    }
+    if (registered.password !== password) {
+      setErrorMessage(t({ en: "Incorrect password. Please try again.", zh: "密码不正确，请重试。" }));
+      return;
+    }
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
       user: {
         id: "demo-owner",
         role: "owner",
-        name: nextName,
-        email: registered?.email || emailOrPhone || "owner@example.com",
-        phone: registered?.phone || "",
-        phoneVerified: Boolean(registered?.phoneVerified),
-        emailVerified: false
+        name: registered.fullName,
+        email: registered.email,
+        phone: registered.phone,
+        phoneVerified: Boolean(registered.phoneVerified),
+        emailVerified: Boolean(registered.emailVerified)
       }
     }));
     window.dispatchEvent(new Event("pet-villa-auth"));
     window.location.href = redirect || "/";
   }
 
-  function readRegisteredUser(): { fullName: string; phone: string; email: string; phoneVerified: boolean } | null {
+  function readRegisteredUser(): { fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean } | null {
     try {
       return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
     } catch {
@@ -291,7 +298,9 @@ export default function AuthPage() {
       fullName: pendingUser.fullName,
       phone: pendingUser.phone,
       email: pendingUser.email,
-      phoneVerified: true
+      password: pendingUser.password,
+      phoneVerified: true,
+      emailVerified: false
     };
     window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
     window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
@@ -349,6 +358,14 @@ export default function AuthPage() {
     if (!newPassword.trim()) {
       setErrorMessage(t({ en: "Please enter a new password.", zh: "请输入新密码。" }));
       return;
+    }
+    if (newPassword.trim().length < 6) {
+      setErrorMessage(t({ en: "Password must be at least 6 characters.", zh: "密码至少需要 6 个字符。" }));
+      return;
+    }
+    const registered = readRegisteredUser();
+    if (registered && registered.phone === forgotPhone.trim()) {
+      window.localStorage.setItem("pet-villa-registered-user", JSON.stringify({ ...registered, password: newPassword.trim() }));
     }
     setStage("form");
     setOtpValue("");

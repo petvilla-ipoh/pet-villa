@@ -30,8 +30,7 @@ function DogIcon() {
 }
 
 function detailLabel(order: VillaOrder) {
-  if (order.service === "overnight") return `${order.serviceLabel} Â· ${order.dateLabel}`;
-  return `${order.serviceLabel} Â· ${order.dateLabel}`;
+  return `${order.serviceLabel} · ${order.dateLabel}`;
 }
 
 export default function OrdersPage() {
@@ -56,19 +55,25 @@ export default function OrdersPage() {
   const filtered = useMemo(() => {
     return orders.filter((order) => {
       if (filter === "all") return true;
-      if (filter === "balance") return order.status === "balance";
+      if (filter === "balance") return order.balance > 0 && order.status !== "cancelled";
       if (filter === "active") return order.status === "active" || order.status === "confirmed";
       return order.status === filter;
     });
   }, [filter, orders]);
 
   function payBalance(order: VillaOrder) {
-    const nextOrders = updateOrder(order.orderId, (current) => ({
-      ...current,
-      paid: current.total,
-      balance: 0,
-      status: "completed"
-    }));
+    const nextOrders = updateOrder(order.orderId, (current) => {
+      const range = getOrderDateRange(current);
+      const today = startOfLocalDay(new Date());
+      const checkOut = range ? startOfLocalDay(range.end) : null;
+      const checkoutPassed = checkOut ? today > checkOut : false;
+      return {
+        ...current,
+        paid: current.total,
+        balance: 0,
+        status: checkoutPassed ? "completed" : "confirmed"
+      };
+    });
     setOrders(nextOrders);
     setMessage(t({ en: "Demo Payment Success. Balance paid successfully.", zh: "æµ‹è¯•ä»˜æ¬¾æˆåŠŸã€‚å°¾æ¬¾å·²æˆåŠŸæ”¯ä»˜ã€‚" }));
   }
@@ -197,10 +202,9 @@ export default function OrdersPage() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {order.status === "balance" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "ä»˜å°¾æ¬¾" })}</button> : null}
-                    {order.status === "active" ? <button type="button" onClick={() => payBalance(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Early", zh: "æå‰ä»˜æ¬¾" })}</button> : null}
+                    {order.balance > 0 && order.status !== "cancelled" && order.status !== "completed" ? <button type="button" onClick={() => payBalance(order)} className="villa-button min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Pay Balance", zh: "ä»˜å°¾æ¬¾" })}</button> : null}
                     {order.status === "confirmed" ? <button type="button" onClick={() => cancelOrder(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{t({ en: "Cancel", zh: "å–æ¶ˆ" })}</button> : null}
-                    {order.status === "completed" ? <button type="button" onClick={() => openReview(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{order.review ? t({ en: "Reviewed", zh: "å·²è¯„ä»·" }) : `â˜…â˜…â˜…â˜…â˜… ${t({ en: "Leave Review", zh: "ç•™ä¸‹è¯„ä»·" })}`}</button> : null}
+                    {order.status === "completed" ? <button type="button" onClick={() => openReview(order)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{order.review ? t({ en: "Reviewed", zh: "已评价" }) : `★★★★★ ${t({ en: "Leave Review", zh: "留下评价" })}`}</button> : null}
                     <button type="button" onClick={() => setExpanded(open ? null : order.orderId)} className="villa-button-outline min-h-[38px] flex-1 px-4 py-2 text-xs">{open ? t({ en: "Hide Details", zh: "æ”¶èµ·è¯¦æƒ…" }) : t({ en: "Order Details", zh: "è®¢å•è¯¦æƒ…" })}</button>
                   </div>
 
@@ -209,7 +213,7 @@ export default function OrdersPage() {
                       <div className="flex gap-1 text-2xl text-villa-primary">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button key={star} type="button" aria-label={`${star} stars`} onClick={() => setReviewStars(star)} className="leading-none">
-                            {star <= reviewStars ? "â˜…" : "â˜†"}
+                            {star <= reviewStars ? "★" : "☆"}
                           </button>
                         ))}
                       </div>
@@ -225,7 +229,7 @@ export default function OrdersPage() {
                     <div className="mt-3 grid gap-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
                       <button type="button" onClick={() => window.location.href = "/diary"} className="flex items-center justify-between rounded-[14px] bg-white p-3 text-left text-sm font-black text-villa-text-primary">
                         <span>{order.photosAvailable ? `${order.photosAvailable} ${t({ en: "Photos Available", zh: "å¼ ç…§ç‰‡å¯æŸ¥çœ‹" })}` : t({ en: "No diary photos yet", zh: "è¿˜æ²¡æœ‰æ—¥è®°ç…§ç‰‡" })}</span>
-                        <span>â€º</span>
+                        <span>›</span>
                       </button>
                       <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
                         <div className="flex justify-between"><span>{t({ en: "Booking Total", zh: "é¢„çº¦æ€»é¢" })}</span><strong>RM{order.total}</strong></div>
@@ -237,7 +241,13 @@ export default function OrdersPage() {
                         <p className="m-0 mt-1">{order.dateLabel}</p>
                         <p className="m-0 mt-1">{order.specialRequest || t({ en: "No special request.", zh: "æ²¡æœ‰ç‰¹åˆ«è¦æ±‚ã€‚" })}</p>
                       </div>
-                      {order.review ? <p className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">{"â˜…".repeat(order.review.stars)}{"â˜†".repeat(5 - order.review.stars)} {order.review.body}</p> : null}
+                      {order.review ? (
+                        <div className="rounded-[14px] bg-white p-3 text-xs font-bold text-villa-text-secondary">
+                          <p className="m-0 text-villa-text-primary">{t({ en: "Your Review", zh: "你的评价" })}</p>
+                          <p className="m-0 mt-1 text-base text-villa-primary">{"★".repeat(order.review.stars)}{"☆".repeat(5 - order.review.stars)}</p>
+                          <p className="m-0 mt-1">{order.review.body}</p>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </article>

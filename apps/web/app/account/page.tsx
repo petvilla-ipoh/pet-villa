@@ -35,6 +35,18 @@ function saveUser(user: SessionUser) {
   window.dispatchEvent(new Event("pet-villa-auth"));
 }
 
+function readRegisteredUser(): { fullName: string; phone: string; email: string; password?: string; phoneVerified?: boolean; emailVerified?: boolean } | null {
+  try {
+    return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveRegisteredUser(user: { fullName: string; phone: string; email: string; password?: string; phoneVerified?: boolean; emailVerified?: boolean }) {
+  window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(user));
+}
+
 function Chevron() {
   return <span className="text-xl font-black text-villa-text-muted">›</span>;
 }
@@ -62,6 +74,8 @@ export default function AccountPage() {
   const [verifyTarget, setVerifyTarget] = useState<VerifyTarget>(null);
   const [otpValue, setOtpValue] = useState("");
   const [message, setMessage] = useState("");
+  const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
+  const [passwordError, setPasswordError] = useState("");
   const [notifications, setNotifications] = useState({
     booking: true,
     diary: true,
@@ -87,6 +101,17 @@ export default function AccountPage() {
 
   function saveProfile(nextUser = user) {
     saveUser(nextUser);
+    const registered = readRegisteredUser();
+    if (registered) {
+      saveRegisteredUser({
+        ...registered,
+        fullName: nextUser.name || registered.fullName,
+        phone: nextUser.phone || registered.phone,
+        email: nextUser.email || registered.email,
+        phoneVerified: Boolean(nextUser.phoneVerified),
+        emailVerified: Boolean(nextUser.emailVerified)
+      });
+    }
     setUser(nextUser);
     setMessage(t({ en: "Profile saved.", zh: "资料已保存。" }));
   }
@@ -132,6 +157,31 @@ export default function AccountPage() {
     setVerifyTarget(null);
     setOtpValue("");
     setMessage(t({ en: "Verification completed.", zh: "验证已完成。" }));
+  }
+
+  function changePassword() {
+    setPasswordError("");
+    setMessage("");
+    const registered = readRegisteredUser();
+    if (!registered || !registered.password) {
+      setPasswordError(t({ en: "No saved account password found. Please register or reset password again.", zh: "找不到已保存的账号密码，请重新注册或重设密码。" }));
+      return;
+    }
+    if (passwordForm.current !== registered.password) {
+      setPasswordError(t({ en: "Current password is incorrect.", zh: "当前密码不正确。" }));
+      return;
+    }
+    if (passwordForm.next.length < 6) {
+      setPasswordError(t({ en: "New password must be at least 6 characters.", zh: "新密码至少需要 6 个字符。" }));
+      return;
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordError(t({ en: "New password and confirmation do not match.", zh: "新密码和确认密码不一致。" }));
+      return;
+    }
+    saveRegisteredUser({ ...registered, password: passwordForm.next });
+    setPasswordForm({ current: "", next: "", confirm: "" });
+    setMessage(t({ en: "Password changed successfully.", zh: "密码已成功更改。" }));
   }
 
   function logout() {
@@ -207,9 +257,11 @@ export default function AccountPage() {
               </button>
               {passwordOpen ? (
                 <div className="mt-4 grid gap-3 border-t border-villa-primary-light pt-4">
-                  <input className="villa-input" type="password" placeholder={t({ en: "Current password", zh: "当前密码" })} />
-                  <input className="villa-input" type="password" placeholder={t({ en: "New password", zh: "新密码" })} />
-                  <button type="button" className="villa-button-outline w-full" onClick={() => setMessage(t({ en: "Password change is saved locally for demo. Connect backend for production.", zh: "密码更改目前为本地演示，正式上线需连接后端。" }))}>{t({ en: "Change Password", zh: "更改密码" })}</button>
+                  <input className="villa-input" type="password" value={passwordForm.current} onChange={(event) => setPasswordForm((current) => ({ ...current, current: event.target.value }))} placeholder={t({ en: "Current password", zh: "当前密码" })} />
+                  <input className="villa-input" type="password" value={passwordForm.next} onChange={(event) => setPasswordForm((current) => ({ ...current, next: event.target.value }))} placeholder={t({ en: "New password", zh: "新密码" })} />
+                  <input className="villa-input" type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm((current) => ({ ...current, confirm: event.target.value }))} placeholder={t({ en: "Confirm new password", zh: "确认新密码" })} />
+                  {passwordError ? <p className="m-0 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{passwordError}</p> : null}
+                  <button type="button" className="villa-button-outline w-full" onClick={changePassword}>{t({ en: "Change Password", zh: "更改密码" })}</button>
                 </div>
               ) : null}
             </section>
