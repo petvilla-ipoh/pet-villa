@@ -4,25 +4,26 @@ import { useEffect, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { readMessages, sendMessage, type VillaMessage } from "../lib/messages";
+import { getCurrentThreadId, readMessages, sendMessage, type VillaMessage } from "../lib/messages";
 
 export default function ChatPage() {
   const { t } = useLanguage();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<VillaMessage[]>([]);
+  const threadId = getCurrentThreadId();
 
   useEffect(() => {
-    const sync = () => setMessages(readMessages());
+    const sync = () => setMessages(readMessages(threadId));
     sync();
     window.addEventListener("pet-villa-messages", sync);
     return () => window.removeEventListener("pet-villa-messages", sync);
-  }, []);
+  }, [threadId]);
 
   function send() {
     if (!message.trim()) return;
-    sendMessage("owner", message);
+    sendMessage("owner", message, threadId);
     setMessage("");
-    setMessages(readMessages());
+    setMessages(readMessages(threadId));
   }
 
   return (

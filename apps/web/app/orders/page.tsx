@@ -109,6 +109,7 @@ export default function OrdersPage() {
       review: { stars: reviewStars, body: reviewBody || "Loved by Pet Villa.", createdAt: new Date().toISOString() }
     }));
     setOrders(nextOrders);
+    window.dispatchEvent(new Event("pet-villa-reviews"));
     closeReview();
     setMessage(t({ en: "Review saved. Thank you!", zh: "评价已保存，谢谢你！" }));
   }

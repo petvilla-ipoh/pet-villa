@@ -7,7 +7,7 @@ import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocal
 import { getCurrentUserId } from "./lib/petProfiles";
 import { readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
 import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
-import { readHostReviews, type HostReview } from "./lib/reviews";
+import { readPublicReviews, type PublicReview } from "./lib/reviews";
 import { claimVoucher, getReferralCode, readVouchers } from "./lib/vouchers";
 
 const phone = "+60165236409";
@@ -52,7 +52,7 @@ const services = [
       zh: ["不关笼", "晚上一起睡", "24小时陪伴", "每日照片更新"]
     },
     href: "/booking?service=overnight",
-    cta: { en: "Book Boarding", zh: "立即预约寄宿" }
+    cta: { en: "Book Now", zh: "立即预约" }
   },
   {
     id: "daycare",
@@ -64,7 +64,7 @@ const services = [
       zh: ["白天照顾", "9:00am - 8:00pm", "安全活动空间"]
     },
     href: "/booking?service=daycare",
-    cta: { en: "Book Daycare", zh: "立即预约日托" }
+    cta: { en: "Book Now", zh: "立即预约" }
   }
 ] satisfies Array<{
   id: string;
@@ -388,7 +388,7 @@ export default function HomePage() {
   const [capacityMap, setCapacityMap] = useState<Record<string, number>>({});
   const [offDays, setOffDays] = useState<string[]>([]);
   const [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
-  const [hostReviews, setHostReviews] = useState<HostReview[]>([]);
+  const [publicReviews, setPublicReviews] = useState<PublicReview[]>([]);
   const [referralCode, setReferralCode] = useState("PETVILLA-PV123");
   const [couponMessage, setCouponMessage] = useState("");
   const [referralCopied, setReferralCopied] = useState(false);
@@ -397,7 +397,7 @@ export default function HomePage() {
     setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
     setReferralCode(getReferralCode());
     setGuestPhotos(readHomeGuestPhotos(6));
-    setHostReviews(readHostReviews());
+    setPublicReviews(readPublicReviews());
     setCapacityMap(buildCapacityMap());
     setOffDays(readHostOffDays());
     const sync = () => {
@@ -406,7 +406,7 @@ export default function HomePage() {
     };
     const syncVouchers = () => setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
     const syncGallery = () => setGuestPhotos(readHomeGuestPhotos(6));
-    const syncReviews = () => setHostReviews(readHostReviews());
+    const syncReviews = () => setPublicReviews(readPublicReviews());
     window.addEventListener("pet-villa-orders", sync);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
     window.addEventListener("pet-villa-gallery", syncGallery);
@@ -424,7 +424,7 @@ export default function HomePage() {
   const today = startOfLocalDay(new Date());
   const availabilityDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today.getTime()]);
   const todaySlots = isHostOffDay(localDateKey(today), offDays) ? 0 : availableSlotsForDate(today, capacityMap);
-  const displayReviews = hostReviews.length ? [...hostReviews, ...reviews] : reviews;
+  const displayReviews = publicReviews.length ? [...publicReviews, ...reviews] : reviews;
   const activeReview = displayReviews[reviewIndex % displayReviews.length];
 
   function claimCoupon(code: string) {
@@ -447,7 +447,7 @@ export default function HomePage() {
       setReferralCopied(true);
       setCouponMessage(t({
         en: "Referral code copied. You and your friend will each receive RM10 after your friend completes their first registration.",
-        zh: "推荐码已复制。好友完成首次注册后，你们双方都会获得 RM10。"
+        zh: "推荐码已复制。好友完成首次注册后，你和好友都会获得 RM10。"
       }));
       window.setTimeout(() => setReferralCopied(false), 1500);
     } catch {
@@ -493,8 +493,8 @@ export default function HomePage() {
                   The Pet Villa · Ipoh · Pet Boarding
                 </div>
                 <h1 className="mt-4 max-w-[250px] font-title text-[25px] font-black leading-[1.05] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
-                  {t({ en: "不关笼 · 24小时陪伴", zh: "不关笼 · 24小时陪伴" })}
-                  <span className="ml-2 text-villa-primary">♡</span>
+                  {t({ en: "Cage Free · 24h Care", zh: "不关笼 · 24小时陪伴" })}
+                  <span className="ml-1 inline-block align-middle text-[0.72em] font-normal leading-none text-villa-primary">♡</span>
                 </h1>
                 <p className="mt-3 text-[15px] font-black text-villa-text-primary sm:text-lg">
                   {t({ en: "Premium small dog boarding in Ipoh", zh: "怡保精品小型犬寄宿" })}
@@ -541,10 +541,10 @@ export default function HomePage() {
 
                 <div className="mt-3 grid grid-cols-2 gap-2 lg:max-w-[560px]">
                   <a className="villa-button min-h-[40px] text-xs sm:min-h-[46px] sm:text-sm" href="/booking?service=overnight">
-                    {t({ en: "Book Boarding", zh: "立即预约寄宿" })}
+                    {t({ en: "Book Now", zh: "立即预约" })}
                   </a>
                   <a className="villa-button-outline min-h-[40px] bg-white/65 text-xs sm:min-h-[46px] sm:text-sm" href={whatsappUrl} target="_blank" rel="noreferrer">
-                    WhatsApp {t({ en: "Ask", zh: "咨询" })}
+                    WhatsApp
                   </a>
                 </div>
               </div>
@@ -805,10 +805,10 @@ export default function HomePage() {
 
       <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-villa-primary-light bg-villa-background/95 p-3 shadow-[0_-10px_28px_rgba(61,31,13,0.10)] backdrop-blur lg:hidden">
         <a href={whatsappUrl} target="_blank" rel="noreferrer" className="villa-button-outline min-h-[44px] bg-white text-xs">
-          WhatsApp {t({ en: "Ask", zh: "咨询" })}
+          WhatsApp
         </a>
         <a href="/booking?service=overnight" className="villa-button min-h-[44px] text-xs">
-          {t({ en: "Book Boarding", zh: "立即预约寄宿" })}
+          {t({ en: "Book Now", zh: "立即预约" })}
         </a>
       </div>
 

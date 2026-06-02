@@ -5,9 +5,9 @@ import { AppNav } from "../components/AppNav";
 import { useLanguage } from "../components/LanguageProvider";
 import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, toDateKey } from "../lib/bookingCapacity";
 import { readGuestPhotos, saveGuestPhoto, deleteGuestPhoto, type GuestPhoto } from "../lib/gallery";
-import { readMessages, sendMessage, type VillaMessage } from "../lib/messages";
-import { readOrders, type VillaOrder } from "../lib/orderFlow";
-import { deleteHostReview, readHostReviews, saveHostReview, type HostReview } from "../lib/reviews";
+import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
+import { type VillaOrder } from "../lib/orderFlow";
+import { deleteHostReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
 import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 
 const hostPhotoPlaceholder = "/hero-dogs.png";
@@ -17,30 +17,50 @@ function todayLocal() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+function monthDays(month: Date) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const days: Date[] = [];
+  for (let date = first; date.getMonth() === first.getMonth(); date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)) {
+    days.push(date);
+  }
+  return days;
+}
+
+function readAllOrders(): VillaOrder[] {
+  if (typeof window === "undefined") return [];
+  const orders: VillaOrder[] = [];
+  Object.keys(window.localStorage)
+    .filter((key) => key.startsWith("pet-villa-orders:"))
+    .forEach((key) => {
+      try {
+        orders.push(...(JSON.parse(window.localStorage.getItem(key) || "[]") as VillaOrder[]));
+      } catch {
+        // Ignore broken old demo data.
+      }
+    });
+  return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 function countRegisteredUsers() {
   if (typeof window === "undefined") return 0;
-  const keys = Object.keys(window.localStorage);
-  const petOwners = keys.filter((key) => key.startsWith("pet-villa-pets:")).length;
+  const petOwners = Object.keys(window.localStorage).filter((key) => key.startsWith("pet-villa-pets:")).length;
   return Math.max(petOwners, window.localStorage.getItem("pet-villa-session") ? 1 : 0);
 }
 
-function countOrderCustomers(orders: VillaOrder[]) {
-  return new Set(orders.flatMap((order) => order.pets.map((pet) => pet.name))).size;
+function money(value: number) {
+  return `RM${Math.round(value)}`;
 }
 
 export default function HostPage() {
   const { t } = useLanguage();
   const [orders, setOrders] = useState<VillaOrder[]>([]);
   const [photos, setPhotos] = useState<GuestPhoto[]>([]);
-  const [reviews, setReviews] = useState<HostReview[]>([]);
+  const [reviews, setReviews] = useState<PublicReview[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState("");
   const [messages, setMessages] = useState<VillaMessage[]>([]);
   const [offDays, setOffDays] = useState<string[]>([]);
+  const [visibleMonth, setVisibleMonth] = useState(todayLocal());
   const [reply, setReply] = useState("");
   const [photoForm, setPhotoForm] = useState({ petName: "", breed: "", caption: "", imageUrl: "" });
   const [reviewForm, setReviewForm] = useState({ name: "", pet: "", rating: 5, en: "", zh: "" });
@@ -48,10 +68,14 @@ export default function HostPage() {
 
   useEffect(() => {
     const sync = () => {
-      setOrders(readOrders());
+      const nextThreads = readChatThreads();
+      const nextSelected = selectedThreadId || nextThreads[0]?.id || "";
+      setOrders(readAllOrders());
       setPhotos(readGuestPhotos());
-      setReviews(readHostReviews());
-      setMessages(readMessages());
+      setReviews(readPublicReviews({ includeHidden: true }));
+      setThreads(nextThreads);
+      setSelectedThreadId(nextSelected);
+      setMessages(nextSelected ? readMessages(nextSelected) : []);
       setOffDays(readHostOffDays());
     };
     sync();
@@ -67,12 +91,20 @@ export default function HostPage() {
       window.removeEventListener("pet-villa-messages", sync);
       window.removeEventListener("pet-villa-availability", sync);
     };
-  }, []);
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    setMessages(selectedThreadId ? readMessages(selectedThreadId) : []);
+  }, [selectedThreadId]);
 
   const capacityMap = useMemo(() => buildCapacityMap(orders), [orders]);
-  const nextDays = useMemo(() => Array.from({ length: 14 }, (_, index) => addDays(todayLocal(), index)), []);
   const activeOrders = orders.filter((order) => !["cancelled", "completed"].includes(order.status));
   const balanceDue = orders.reduce((sum, order) => sum + Math.max(0, order.balance || 0), 0);
+  const totalSales = orders.reduce((sum, order) => sum + Math.max(0, order.paid || 0), 0);
+  const completedSales = orders.filter((order) => order.status === "completed").reduce((sum, order) => sum + Math.max(0, order.paid || 0), 0);
+  const customersWithOrders = new Set(orders.map((order) => order.orderId.split("-")[0] || order.orderId)).size;
+  const days = useMemo(() => monthDays(visibleMonth), [visibleMonth]);
+  const monthLabel = visibleMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   function toggleOffDay(date: Date) {
     const key = toDateKey(date);
@@ -124,11 +156,23 @@ export default function HostPage() {
     setNotice(t({ en: "Review published to Home.", zh: "评价已同步到首页。" }));
   }
 
+  function toggleReviewVisibility(review: PublicReview) {
+    if (review.hidden) {
+      showReview(review.id);
+      setNotice(t({ en: "Review is visible on Home again.", zh: "评价已重新显示在首页。" }));
+    } else {
+      hideReview(review.id);
+      setNotice(t({ en: "Review hidden from Home.", zh: "评价已从首页隐藏。" }));
+    }
+    setReviews(readPublicReviews({ includeHidden: true }));
+  }
+
   function sendHostReply() {
-    if (!reply.trim()) return;
-    sendMessage("host", reply);
+    if (!reply.trim() || !selectedThreadId) return;
+    sendMessage("host", reply, selectedThreadId);
     setReply("");
-    setMessages(readMessages());
+    setMessages(readMessages(selectedThreadId));
+    setThreads(readChatThreads());
   }
 
   return (
@@ -139,6 +183,7 @@ export default function HostPage() {
           <nav className="grid grid-cols-2 gap-2 lg:grid-cols-1">
             {[
               ["Dashboard", "仪表盘"],
+              ["Sales", "销售"],
               ["Calendar", "档期"],
               ["Happy Guests", "客人照片"],
               ["Reviews", "评价"],
@@ -157,7 +202,7 @@ export default function HostPage() {
             <div>
               <span className="rounded-pill bg-villa-peach px-4 py-2 text-xs font-black uppercase">HOST PANEL</span>
               <h1 className="page-title mt-4">{t({ en: "Pet Villa Backoffice", zh: "Pet Villa 后台" })}</h1>
-              <p className="body-copy mt-1">{t({ en: "Simple daily controls for bookings, capacity, reviews, gallery, and customer chat.", zh: "管理预约、名额、评价、照片和顾客聊天。" })}</p>
+              <p className="body-copy mt-1">{t({ en: "Simple daily controls for sales, capacity, reviews, gallery, and customer chat.", zh: "管理销售、名额、评价、照片和顾客聊天。" })}</p>
             </div>
             <a href="/booking" className="villa-button">{t({ en: "Open Booking", zh: "打开预约页" })}</a>
           </div>
@@ -167,9 +212,9 @@ export default function HostPage() {
           <div id="dashboard" className="mt-6 grid gap-4 md:grid-cols-4">
             {[
               [t({ en: "Registered owners", zh: "注册宠主" }), String(countRegisteredUsers())],
-              [t({ en: "Customers with orders", zh: "下单顾客" }), String(countOrderCustomers(orders))],
+              [t({ en: "Customers with orders", zh: "下单顾客" }), String(customersWithOrders)],
               [t({ en: "Active bookings", zh: "进行中订单" }), String(activeOrders.length)],
-              [t({ en: "Balance due", zh: "待收尾款" }), `RM${balanceDue}`]
+              [t({ en: "Balance due", zh: "待收尾款" }), money(balanceDue)]
             ].map(([label, value]) => (
               <div key={label} className="villa-card p-5">
                 <p className="m-0 text-sm font-black text-villa-text-secondary">{label}</p>
@@ -178,13 +223,46 @@ export default function HostPage() {
             ))}
           </div>
 
+          <section id="sales" className="mt-6 villa-card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="section-title">{t({ en: "Sales Overview", zh: "销售总览" })}</h2>
+                <p className="body-copy mt-1">{t({ en: "Tracks paid amounts from customer orders.", zh: "根据顾客订单付款金额统计。" })}</p>
+              </div>
+              <a className="villa-button-outline bg-white" href="/orders">{t({ en: "View Orders", zh: "查看订单" })}</a>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[18px] bg-villa-primary-bg p-4">
+                <p className="text-xs font-black text-villa-text-secondary">{t({ en: "Total collected", zh: "已收款总额" })}</p>
+                <strong className="mt-1 block text-3xl font-black text-villa-text-primary">{money(totalSales)}</strong>
+              </div>
+              <div className="rounded-[18px] bg-villa-primary-bg p-4">
+                <p className="text-xs font-black text-villa-text-secondary">{t({ en: "Completed sales", zh: "已完成收入" })}</p>
+                <strong className="mt-1 block text-3xl font-black text-villa-text-primary">{money(completedSales)}</strong>
+              </div>
+              <div className="rounded-[18px] bg-villa-primary-bg p-4">
+                <p className="text-xs font-black text-villa-text-secondary">{t({ en: "Remaining balance", zh: "待收余额" })}</p>
+                <strong className="mt-1 block text-3xl font-black text-villa-primary">{money(balanceDue)}</strong>
+              </div>
+            </div>
+          </section>
+
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="grid gap-6">
               <div id="calendar" className="villa-card p-5">
-                <h2 className="section-title">{t({ en: "Calendar Capacity", zh: "日历名额" })}</h2>
-                <p className="body-copy mt-1">{t({ en: "System counts dogs, not orders. Tap a day to mark or release an off day.", zh: "系统按狗狗数量计算名额，不按订单数。点击日期可设置或取消休息日。" })}</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="section-title">{t({ en: "Calendar Capacity", zh: "日历名额" })}</h2>
+                    <p className="body-copy mt-1">{t({ en: "Capacity counts dogs, not orders. Tap a day to set or release an off day.", zh: "名额按狗狗数量计算，不按订单数。点击日期可设置或取消休息日。" })}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="villa-button-outline h-10 bg-white px-4" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>‹</button>
+                    <strong className="min-w-[150px] text-center text-sm font-black">{monthLabel}</strong>
+                    <button type="button" className="villa-button-outline h-10 bg-white px-4" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>›</button>
+                  </div>
+                </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                  {nextDays.map((date) => {
+                  {days.map((date) => {
                     const key = toDateKey(date);
                     const slots = availableSlotsForDate(date, capacityMap);
                     const off = offDays.includes(key);
@@ -208,6 +286,7 @@ export default function HostPage() {
 
               <div id="happy-guests" className="villa-card p-5">
                 <h2 className="section-title">{t({ en: "Happy Guests Gallery", zh: "Happy Guests 照片" })}</h2>
+                <p className="body-copy mt-1">{t({ en: "Host uploads appear on Home. Customers can view only.", zh: "Host 上传后会显示在首页，顾客只可以查看。" })}</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-[220px_1fr]">
                   <div className="grid gap-3">
                     <label className="grid h-40 cursor-pointer place-items-center overflow-hidden rounded-[18px] border-2 border-dashed border-villa-primary-light bg-villa-primary-bg text-center text-sm font-black text-villa-primary">
@@ -235,7 +314,8 @@ export default function HostPage() {
               </div>
 
               <div id="reviews" className="villa-card p-5">
-                <h2 className="section-title">{t({ en: "Pet Owner Reviews", zh: "宠主评价" })}</h2>
+                <h2 className="section-title">{t({ en: "Live Pet Owner Reviews", zh: "首页 Live 评价" })}</h2>
+                <p className="body-copy mt-1">{t({ en: "Customer reviews and host-published reviews can appear on Home. Hide any review you do not want to show publicly.", zh: "顾客评价和 Host 发布评价都会同步到首页；你可以隐藏不想公开的评价。" })}</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div className="grid gap-3">
                     <input className="villa-input" value={reviewForm.name} onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })} placeholder={t({ en: "Owner name", zh: "宠主名字" })} />
@@ -247,15 +327,21 @@ export default function HostPage() {
                     <textarea className="villa-input h-24 py-3" value={reviewForm.zh} onChange={(event) => setReviewForm({ ...reviewForm, zh: event.target.value })} placeholder="中文评价（可选）" />
                     <button type="button" className="villa-button" onClick={publishReview}>{t({ en: "Publish Review", zh: "发布评价" })}</button>
                   </div>
-                  <div className="grid content-start gap-3">
+                  <div className="grid max-h-[520px] content-start gap-3 overflow-auto pr-1">
                     {reviews.map((review) => (
-                      <article key={review.id} className="rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
+                      <article key={review.id} className={`rounded-[18px] border p-3 ${review.hidden ? "border-villa-primary-light bg-villa-primary-bg opacity-70" : "border-villa-primary-light bg-white"}`}>
                         <div className="text-sm font-black text-[#f5a623]">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</div>
                         <p className="mt-2 text-sm font-bold text-villa-text-primary">{review.quote.en}</p>
-                        <p className="mt-2 text-xs font-black text-villa-text-secondary">{review.name} · {review.pet}</p>
-                        <button type="button" className="mt-2 text-xs font-black text-villa-primary" onClick={() => deleteHostReview(review.id)}>{t({ en: "Delete", zh: "删除" })}</button>
+                        <p className="mt-2 text-xs font-black text-villa-text-secondary">{review.name} · {review.pet} · {review.source}</p>
+                        <div className="mt-2 flex gap-2">
+                          <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => toggleReviewVisibility(review)}>
+                            {review.hidden ? t({ en: "Show on Home", zh: "显示到首页" }) : t({ en: "Hide from Home", zh: "从首页隐藏" })}
+                          </button>
+                          {review.source === "host" ? <button type="button" className="text-xs font-black text-red-500" onClick={() => deleteHostReview(review.id)}>{t({ en: "Delete", zh: "删除" })}</button> : null}
+                        </div>
                       </article>
                     ))}
+                    {reviews.length === 0 ? <p className="body-copy">{t({ en: "No reviews yet.", zh: "还没有评价。" })}</p> : null}
                   </div>
                 </div>
               </div>
@@ -264,16 +350,29 @@ export default function HostPage() {
             <aside className="grid h-fit gap-6 xl:sticky xl:top-8">
               <div id="messages" className="villa-card p-5">
                 <h2 className="section-title">{t({ en: "Customer Chat", zh: "顾客聊天" })}</h2>
-                <div className="mt-4 grid max-h-[360px] gap-3 overflow-auto rounded-[18px] bg-villa-primary-bg p-3">
-                  {messages.map((message) => (
-                    <div key={message.id} className={`max-w-[86%] rounded-[18px] p-3 text-sm font-bold ${message.from === "host" ? "justify-self-end bg-villa-primary text-white" : "bg-white text-villa-text-primary"}`}>
-                      {message.text}
+                <div className="mt-4 grid gap-3 md:grid-cols-[150px_1fr]">
+                  <div className="grid max-h-[360px] content-start gap-2 overflow-auto">
+                    {threads.map((thread) => (
+                      <button key={thread.id} type="button" className={`rounded-[14px] border p-2 text-left text-xs font-black ${thread.id === selectedThreadId ? "border-villa-primary bg-villa-primary-bg text-villa-primary" : "border-villa-primary-light bg-white text-villa-text-primary"}`} onClick={() => setSelectedThreadId(thread.id)}>
+                        <span className="block truncate">{thread.userName}</span>
+                        <span className="block truncate text-[10px] text-villa-text-muted">{thread.messages[thread.messages.length - 1]?.text || "No message"}</span>
+                      </button>
+                    ))}
+                    {threads.length === 0 ? <p className="text-xs font-bold text-villa-text-secondary">{t({ en: "No customer chats yet.", zh: "还没有顾客聊天。" })}</p> : null}
+                  </div>
+                  <div>
+                    <div className="grid max-h-[360px] gap-3 overflow-auto rounded-[18px] bg-villa-primary-bg p-3">
+                      {messages.map((message) => (
+                        <div key={message.id} className={`max-w-[86%] rounded-[18px] p-3 text-sm font-bold ${message.from === "host" ? "justify-self-end bg-villa-primary text-white" : "bg-white text-villa-text-primary"}`}>
+                          {message.text}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <input className="villa-input" value={reply} onChange={(event) => setReply(event.target.value)} placeholder={t({ en: "Reply as host...", zh: "以寄宿主身份回复..." })} />
-                  <button type="button" className="villa-button px-5" onClick={sendHostReply}>{t({ en: "Send", zh: "发送" })}</button>
+                    <div className="mt-3 flex gap-2">
+                      <input className="villa-input" value={reply} onChange={(event) => setReply(event.target.value)} placeholder={t({ en: "Reply as host...", zh: "以寄宿主身份回复..." })} />
+                      <button type="button" className="villa-button px-5" onClick={sendHostReply}>{t({ en: "Send", zh: "发送" })}</button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -286,7 +385,7 @@ export default function HostPage() {
                       <span className="text-xs font-bold text-villa-text-secondary">{order.serviceLabel} · {order.dateLabel}</span>
                       <div className="mt-2 flex justify-between text-xs font-black">
                         <span>{order.status}</span>
-                        <span>RM{order.total}</span>
+                        <span>{money(order.total)}</span>
                       </div>
                     </article>
                   ))}

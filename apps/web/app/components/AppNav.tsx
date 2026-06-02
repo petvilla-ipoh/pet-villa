@@ -51,6 +51,7 @@ const privateNav = [
   { href: "/orders", en: "Orders", zh: "订单" },
   { href: "/payment", en: "Payment", zh: "付款" },
   { href: "/diary", en: "Pet Diary", zh: "宠物日记" },
+  { href: "/chat", en: "Chat", zh: "聊天" },
   { href: "/vouchers", en: "My Vouchers", zh: "优惠券" }
 ];
 
@@ -61,6 +62,7 @@ const privateMenu = [
   { href: "/orders", icon: "orders", en: "Orders", zh: "订单", descEn: "Payment history", descZh: "付款与订单记录" },
   { href: "/payment", icon: "payment", en: "Payment", zh: "付款", descEn: "Continue payment", descZh: "继续付款" },
   { href: "/diary", icon: "diary", en: "Pet Diary", zh: "宠物日记", descEn: "Daily updates & photos", descZh: "照片和每日更新" },
+  { href: "/chat", icon: "chat", en: "Chat", zh: "聊天", descEn: "Message Pet Villa", descZh: "联系 Pet Villa" },
   { href: "/vouchers", icon: "vouchers", en: "My Vouchers", zh: "优惠券", descEn: "Available rewards", descZh: "查看可用优惠" },
   { href: "/account", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
 ];
@@ -175,6 +177,14 @@ function MenuItemIcon({ name }: { name: string }) {
       <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
         <path d="M11 18h7l3-5h7l3 5h6a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V23a5 5 0 0 1 5-5Z" fill="#fff8f5" stroke={stroke} strokeWidth="3" />
         <circle cx="24" cy="30" r="8" fill="#f5c4b3" stroke={coral} strokeWidth="3" />
+      </svg>
+    );
+  }
+  if (name === "chat") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+        <path d="M9 12h30a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6H22l-9 6v-6H9a6 6 0 0 1-6-6V18a6 6 0 0 1 6-6Z" fill="#fff8f5" stroke={coral} strokeWidth="3" strokeLinejoin="round" />
+        <path d="M14 22h20M14 29h13" stroke="#3d1f0d" strokeWidth="3" strokeLinecap="round" />
       </svg>
     );
   }

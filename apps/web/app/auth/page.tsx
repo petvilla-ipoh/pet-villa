@@ -7,6 +7,7 @@ import { savePendingReferralCode } from "../lib/vouchers";
 type AuthMode = "login" | "register";
 type FieldIconType = "mail" | "lock" | "user" | "phone" | "eye";
 type AuthStage = "form" | "otp" | "forgot-phone" | "forgot-otp";
+type ResetMethod = "phone" | "email";
 type PendingUser = {
   fullName: string;
   phone: string;
@@ -18,6 +19,10 @@ type PendingUser = {
 };
 
 const DEMO_OTP = "123456";
+
+function makeUserId(emailOrPhone: string) {
+  return `owner-${emailOrPhone.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || Date.now()}`;
+}
 
 function BackIcon() {
   return (
@@ -171,6 +176,8 @@ export default function AuthPage() {
   const [otpValue, setOtpValue] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [forgotPhone, setForgotPhone] = useState("");
+  const [forgotMethod, setForgotMethod] = useState<ResetMethod>("phone");
+  const [legalModal, setLegalModal] = useState<"terms" | "privacy" | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -266,7 +273,7 @@ export default function AuthPage() {
     }
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
       user: {
-        id: "demo-owner",
+        id: registered.id || makeUserId(registered.email || registered.phone),
         role: "owner",
         name: registered.fullName,
         email: registered.email,
@@ -279,7 +286,7 @@ export default function AuthPage() {
     window.location.href = redirect || "/";
   }
 
-  function readRegisteredUser(): { fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean } | null {
+  function readRegisteredUser(): { id?: string; fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean } | null {
     try {
       return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
     } catch {
@@ -299,6 +306,7 @@ export default function AuthPage() {
       return;
     }
     const registeredUser = {
+      id: makeUserId(pendingUser.email || pendingUser.phone),
       fullName: pendingUser.fullName,
       phone: pendingUser.phone,
       email: pendingUser.email,
@@ -309,11 +317,11 @@ export default function AuthPage() {
     window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
     window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
     if (pendingUser.referralCode) {
-      savePendingReferralCode(pendingUser.referralCode, "demo-owner");
+      savePendingReferralCode(pendingUser.referralCode, registeredUser.id);
     }
     window.localStorage.setItem("pet-villa-session", JSON.stringify({
       user: {
-        id: "demo-owner",
+        id: registeredUser.id,
         role: "owner",
         name: pendingUser.fullName,
         email: pendingUser.email,
@@ -348,7 +356,7 @@ export default function AuthPage() {
 
   function sendForgotOtp() {
     if (!forgotPhone.trim()) {
-      setErrorMessage(t({ en: "Please enter your phone number.", zh: "请输入电话号码。" }));
+      setErrorMessage(t({ en: `Please enter your ${forgotMethod === "phone" ? "phone number" : "email address"}.`, zh: forgotMethod === "phone" ? "请输入电话号码。" : "请输入邮箱。" }));
       return;
     }
     setStage("forgot-otp");
@@ -371,7 +379,8 @@ export default function AuthPage() {
       return;
     }
     const registered = readRegisteredUser();
-    if (registered && registered.phone === forgotPhone.trim()) {
+    const matched = registered && (forgotMethod === "phone" ? registered.phone === forgotPhone.trim() : registered.email === forgotPhone.trim());
+    if (matched) {
       window.localStorage.setItem("pet-villa-registered-user", JSON.stringify({ ...registered, password: newPassword.trim() }));
     }
     setStage("form");
@@ -440,12 +449,28 @@ export default function AuthPage() {
           </header>
           <section className="mt-10">
             <h1 className="font-title text-[30px] font-black leading-tight">{t({ en: "Reset Password", zh: "重设密码" })} <HeartMark /></h1>
-            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Use phone OTP to reset your password.", zh: "使用手机 OTP 重设你的密码。" })}</p>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Use phone or email OTP to reset your password.", zh: "你可以使用手机或邮箱 OTP 重设密码。" })}</p>
             {stage === "forgot-phone" ? (
               <div className="mt-8 grid gap-4">
+                <div className="grid grid-cols-2 rounded-pill bg-villa-primary-bg p-1 text-sm font-black">
+                  {(["phone", "email"] as const).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => {
+                        setForgotMethod(method);
+                        setForgotPhone("");
+                        setErrorMessage("");
+                      }}
+                      className={`rounded-pill px-4 py-3 transition ${forgotMethod === method ? "bg-villa-primary text-white shadow-sm" : "text-villa-text-secondary"}`}
+                    >
+                      {method === "phone" ? t({ en: "Phone", zh: "手机" }) : t({ en: "Email", zh: "邮箱" })}
+                    </button>
+                  ))}
+                </div>
                 <label className="grid gap-2">
-                  <span className="text-sm font-black">{t({ en: "Phone Number", zh: "电话号码" })}</span>
-                  <input className="villa-input" value={forgotPhone} onChange={(event) => setForgotPhone(event.target.value)} placeholder="+60..." />
+                  <span className="text-sm font-black">{forgotMethod === "phone" ? t({ en: "Phone Number", zh: "电话号码" }) : t({ en: "Email Address", zh: "邮箱" })}</span>
+                  <input className="villa-input" value={forgotPhone} onChange={(event) => setForgotPhone(event.target.value)} placeholder={forgotMethod === "phone" ? "+60..." : "you@example.com"} type={forgotMethod === "phone" ? "tel" : "email"} />
                 </label>
                 <button type="button" onClick={sendForgotOtp} className="villa-button w-full">{t({ en: "Send OTP", zh: "发送 OTP" })}</button>
               </div>
@@ -542,16 +567,16 @@ export default function AuthPage() {
                       <AuthInput icon="phone" name="phone" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
                     </div>
                     <AuthInput icon="mail" name="email" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
-                    <AuthInput icon="user" name="referralCode" label={t({ en: "Referral Code (Optional)", zh: "推荐码（可选）" })} placeholder="PETVILLA-JJ123" />
+                    <AuthInput icon="user" name="referralCode" label={t({ en: "Referral Code (Optional)", zh: "推荐码（可选）" })} placeholder="PETVILLA-PVI0000" />
                     <AuthInput icon="lock" name="password" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
                     <AuthInput icon="lock" name="confirmPassword" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
                     <label className="flex items-center gap-3 text-sm font-semibold text-villa-text-secondary">
                       <input type="checkbox" defaultChecked className="h-5 w-5 accent-villa-primary" />
                       <span>
                         {t({ en: "I agree to the", zh: "我同意" })}{" "}
-                        <a href="#" className="font-bold text-villa-primary">{t({ en: "Terms of Service", zh: "服务条款" })}</a>{" "}
+                        <button type="button" onClick={() => setLegalModal("terms")} className="font-bold text-villa-primary">{t({ en: "Terms of Service", zh: "服务条款" })}</button>{" "}
                         {t({ en: "and", zh: "和" })}{" "}
-                        <a href="#" className="font-bold text-villa-primary">{t({ en: "Privacy Policy", zh: "隐私政策" })}</a>
+                        <button type="button" onClick={() => setLegalModal("privacy")} className="font-bold text-villa-primary">{t({ en: "Privacy Policy", zh: "隐私政策" })}</button>
                       </span>
                     </label>
                   </>
@@ -610,6 +635,33 @@ export default function AuthPage() {
           </section>
         </div>
       </main>
+      {legalModal ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/45 p-4">
+          <div className="max-h-[82vh] w-full max-w-[520px] overflow-auto rounded-[24px] bg-white p-6 shadow-[0_24px_70px_rgba(61,31,13,0.22)]">
+            <div className="flex items-start justify-between gap-4">
+              <h2 className="font-title text-2xl font-black text-villa-text-primary">
+                {legalModal === "terms" ? t({ en: "Terms of Service", zh: "服务条款" }) : t({ en: "Privacy Policy", zh: "隐私政策" })}
+              </h2>
+              <button type="button" onClick={() => setLegalModal(null)} className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black">×</button>
+            </div>
+            <div className="mt-4 grid gap-3 text-sm font-semibold leading-relaxed text-villa-text-secondary">
+              {legalModal === "terms" ? (
+                <>
+                  <p>{t({ en: "Pet Villa accepts small dogs from 1-12kg only. Aggressive dogs, dogs with fleas, or dogs without basic health information may be refused for safety.", zh: "Pet Villa 仅接待 1-12kg 小型犬。为了安全，我们可能拒绝攻击性犬只、有跳蚤或缺少基本健康资料的狗狗。" })}</p>
+                  <p>{t({ en: "A booking is confirmed only after the required deposit is paid. Check-in is from 9:00am to 8:00pm and check-out is before 12:00pm.", zh: "预约需支付订金后才算确认。入住时间为 9:00am 至 8:00pm，退房需在 12:00pm 前完成。" })}</p>
+                  <p>{t({ en: "Owners must provide food, care instructions, emergency contacts, and disclose allergies, medication, or special needs before boarding.", zh: "宠主需自备狗粮，并在寄宿前提供照顾说明、紧急联系人、过敏、药物或特殊需求资料。" })}</p>
+                </>
+              ) : (
+                <>
+                  <p>{t({ en: "We collect your name, phone number, email, pet profile, booking details, and messages so we can manage your stay and contact you when needed.", zh: "我们会收集姓名、电话、邮箱、宠物资料、预约资料和聊天记录，用于安排寄宿服务和必要联系。" })}</p>
+                  <p>{t({ en: "Your information is used for Pet Villa service only. We do not sell your personal information.", zh: "你的资料仅用于 Pet Villa 服务，我们不会出售你的个人资料。" })}</p>
+                  <p>{t({ en: "You may request profile updates or removal of stored demo data by contacting Pet Villa.", zh: "如需更新资料或移除测试资料，可联系 Pet Villa 处理。" })}</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

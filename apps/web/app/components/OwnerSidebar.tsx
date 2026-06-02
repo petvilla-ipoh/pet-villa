@@ -12,6 +12,7 @@ const items = [
   { href: "/orders", icon: "📦", en: "Orders", zh: "订单" },
   { href: "/payment", icon: "💳", en: "Payment", zh: "付款" },
   { href: "/diary", icon: "📸", en: "Pet Diary", zh: "日记" },
+  { href: "/chat", icon: "💬", en: "Chat", zh: "聊天" },
   { href: "/vouchers", icon: "🎟", en: "My Vouchers", zh: "优惠券" },
   { href: "/account", icon: "🔐", en: "Account", zh: "账号" }
 ];
