@@ -294,6 +294,21 @@ export default function AuthPage() {
     }
   }
 
+  function upsertRegisteredUserList(user: { id?: string; fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean }) {
+    try {
+      const raw = window.localStorage.getItem("pet-villa-registered-users");
+      const list = raw ? JSON.parse(raw) as Array<typeof user & { registeredAt?: string }> : [];
+      const userId = user.id || user.email || user.phone;
+      const existing = list.find((item) => (item.id || item.email || item.phone) === userId);
+      const nextUser = { ...existing, ...user, registeredAt: existing?.registeredAt || new Date().toISOString() };
+      const next = [nextUser, ...list.filter((item) => (item.id || item.email || item.phone) !== userId)];
+      window.localStorage.setItem("pet-villa-registered-users", JSON.stringify(next));
+      window.dispatchEvent(new Event("pet-villa-customers"));
+    } catch {
+      window.dispatchEvent(new Event("pet-villa-customers"));
+    }
+  }
+
   function completeOtpVerification() {
     if (!pendingUser) return;
     setErrorMessage("");
@@ -316,6 +331,7 @@ export default function AuthPage() {
     };
     window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
     window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
+    upsertRegisteredUserList(registeredUser);
     if (pendingUser.referralCode) {
       savePendingReferralCode(pendingUser.referralCode, registeredUser.id);
     }

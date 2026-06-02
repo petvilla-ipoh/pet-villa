@@ -485,7 +485,7 @@ export default function HomePage() {
   }
 
   function slotLabel(date: Date) {
-    if (isHostOffDay(localDateKey(date), offDays)) return t({ en: "Off Day", zh: "休息" });
+    if (isHostOffDay(localDateKey(date), offDays)) return t({ en: "Unavailable", zh: "不可预约" });
     const slots = availableSlotsForDate(date, capacityMap);
     if (slots <= 0) return t({ en: "Full", zh: "满位" });
     if (slots === 1) return t({ en: "1 slot left", zh: "剩 1 位" });
