@@ -15,8 +15,9 @@ import { deleteGuestPhoto, readGuestPhotos, saveGuestPhoto, updateGuestPhoto, ty
 import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
 import { type VillaOrder } from "../lib/orderFlow";
-import { type PetProfile } from "../lib/petProfiles";
+import { readPetProfiles, writePetProfiles, type PetProfile } from "../lib/petProfiles";
 import { deleteReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
+import { getVoucherDiscount, markVoucherUsed, readVouchers, VOUCHER_DEFINITIONS, writeVouchers, type UserVoucher, type VoucherDefinition } from "../lib/vouchers";
 
 const hostPhotoPlaceholder = "/hero-dogs.png";
 
@@ -64,7 +65,7 @@ type HostBookingForm = {
   service: "overnight" | "daycare";
   startDate: string;
   endDate: string;
-  total: string;
+  voucherId: string;
   paid: string;
 };
 
@@ -203,6 +204,32 @@ function dogMatchesOrder(dog: DogRecord, order: VillaOrder) {
   });
 }
 
+function bookingDays(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate || startDate}T00:00:00`);
+  const safeEnd = end < start ? start : end;
+  const days = Math.max(1, Math.round((safeEnd.getTime() - start.getTime()) / 86400000) + 1);
+  return { start, end: safeEnd, days };
+}
+
+function hostServiceTotal(service: HostBookingForm["service"], days: number, dogCount: number) {
+  return service === "overnight" ? days * 35 * dogCount : 5 * dogCount;
+}
+
+type OrderWithOwner = VillaOrder & {
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+};
+
+type HostVoucherOption = {
+  id: string;
+  label: string;
+  voucher: UserVoucher | VoucherDefinition;
+  existing: boolean;
+};
+
 export default function HostPage() {
   const { t } = useLanguage();
   const [orders, setOrders] = useState<VillaOrder[]>([]);
@@ -228,9 +255,13 @@ export default function HostPage() {
     service: "overnight",
     startDate: toDateKey(todayLocal()),
     endDate: toDateKey(todayLocal()),
-    total: "",
+    voucherId: "",
     paid: "0"
   });
+  const [reportDate, setReportDate] = useState(toDateKey(todayLocal()));
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [dogSearch, setDogSearch] = useState("");
+  const [bookingSearch, setBookingSearch] = useState("");
   const [offDays, setOffDays] = useState<string[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(todayLocal());
   const [managedDay, setManagedDay] = useState<Date | null>(null);
@@ -280,14 +311,17 @@ export default function HostPage() {
   const capacityMap = useMemo(() => buildCapacityMap(orders), [orders]);
   const days = useMemo(() => monthDays(visibleMonth), [visibleMonth]);
   const todayKey = toDateKey(todayLocal());
+  const reportKey = reportDate || todayKey;
+  const reportDay = new Date(`${reportKey}T00:00:00`);
   const activeOrders = orders.filter((order) => !["cancelled", "completed"].includes(order.status));
-  const todayCheckIns = orders.filter((order) => order.startDateISO === todayKey);
-  const todayCheckOuts = orders.filter((order) => order.endDateISO === todayKey);
+  const dayCheckIns = orders.filter((order) => order.startDateISO === reportKey);
+  const dayCheckOuts = orders.filter((order) => order.endDateISO === reportKey);
+  const dayOrders = ordersForDate(orders, reportDay);
   const balanceDue = orders.reduce((sum, order) => sum + Math.max(0, order.balance || 0), 0);
+  const daySales = dayOrders.reduce((sum, order) => sum + Math.max(0, order.paid || 0), 0);
   const monthRevenue = orders
     .filter((order) => new Date(order.createdAt).getMonth() === visibleMonth.getMonth() && new Date(order.createdAt).getFullYear() === visibleMonth.getFullYear())
     .reduce((sum, order) => sum + Math.max(0, order.paid || 0), 0);
-  const allDogNames = new Set([...dogs.map((dog) => dog.id || dog.name), ...orders.flatMap((order) => order.pets.map((pet) => pet.id || pet.name))]);
   const unreadThreads = threads.filter((thread) => thread.messages.at(-1)?.from === "owner");
   const customers = useMemo<CustomerRecord[]>(() => {
     const records = new Map<string, CustomerRecord>();
@@ -321,15 +355,16 @@ export default function HostPage() {
       });
     });
     orders.forEach((order) => {
+      const orderOwner = order as OrderWithOwner;
       const matchedDog = dogs.find((dog) => dogMatchesOrder(dog, order));
-      const ownerId = matchedDog?.ownerId || registeredUsers[0]?.id || "customer";
+      const ownerId = orderOwner.customerId || matchedDog?.ownerId || "customer";
       const existing = records.get(ownerId);
       const range = getOrderDateRange(order);
       records.set(ownerId, {
         id: ownerId,
-        name: existing?.name || matchedDog?.ownerName || "Pet Owner",
-        phone: existing?.phone || matchedDog?.ownerPhone || "",
-        email: existing?.email || matchedDog?.ownerEmail || "",
+        name: existing?.name || orderOwner.customerName || matchedDog?.ownerName || "Pet Owner",
+        phone: existing?.phone || orderOwner.customerPhone || matchedDog?.ownerPhone || "",
+        email: existing?.email || orderOwner.customerEmail || matchedDog?.ownerEmail || "",
         registerDate: existing?.registerDate || "-",
         dogs: existing?.dogs || [],
         orders: [...(existing?.orders || []), order],
@@ -348,13 +383,97 @@ export default function HostPage() {
     ["Completed", orders.filter((order) => bookingStatus(order) === "Completed").length],
     ["Cancelled", orders.filter((order) => bookingStatus(order) === "Cancelled").length]
   ];
-  const todayCapacityLeft = offDays.includes(todayKey) ? 0 : availableSlotsForDate(todayLocal(), capacityMap);
+  const reportCapacityLeft = offDays.includes(reportKey) ? 0 : availableSlotsForDate(reportDay, capacityMap);
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) || customers[0];
   const selectedDog = dogs.find((dog) => `${dog.ownerId}-${dog.id}` === selectedDogKey) || dogs[0];
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
   const selectedThreadCustomer = selectedThread
     ? customers.find((customer) => customer.name === selectedThread.userName || customer.phone === selectedThread.userPhone)
     : undefined;
+  const activeBookingCustomer = customers.find((customer) => customer.id === bookingForm.customerId);
+  const activeBookingDog = dogs.find((dog) => dog.id === bookingForm.dogId && (!bookingForm.customerId || dog.ownerId === bookingForm.customerId));
+  const bookingDogCount = bookingForm.dogName.trim() || activeBookingDog ? 1 : 0;
+  const bookingDateMath = bookingDays(bookingForm.startDate, bookingForm.endDate);
+  const bookingSubtotal = hostServiceTotal(bookingForm.service, bookingDateMath.days, bookingDogCount || 1);
+  const customerVoucherWallet = bookingForm.customerId ? readVouchers(bookingForm.customerId) : [];
+  const customerVouchers = customerVoucherWallet.filter((voucher) => voucher.status === "available");
+  const hostVoucherOptions: HostVoucherOption[] = [
+    ...customerVouchers.map((voucher) => ({
+      id: voucher.id,
+      label: `${voucher.title.en} · ${voucher.code}`,
+      voucher,
+      existing: true
+    })),
+    ...VOUCHER_DEFINITIONS
+      .filter((definition) => definition.claimable)
+      .filter((definition) => !customerVoucherWallet.some((voucher) => voucher.code === definition.code && voucher.status !== "expired"))
+      .map((definition) => ({
+        id: `definition:${definition.code}`,
+        label: `${definition.title.en} · ${definition.code} (apply now)`,
+        voucher: definition,
+        existing: false
+      }))
+  ];
+  const selectedVoucherOption = hostVoucherOptions.find((option) => option.id === bookingForm.voucherId) || null;
+  const selectedVoucher = selectedVoucherOption?.voucher || null;
+  const selectedVoucherForCalculation = selectedVoucher
+    ? ({
+        ...selectedVoucher,
+        id: selectedVoucherOption?.id || selectedVoucher.code,
+        status: "available",
+        claimedAt: new Date().toISOString()
+      } as UserVoucher)
+    : null;
+  const voucherDiscount = getVoucherDiscount(selectedVoucherForCalculation, {
+    subtotal: bookingSubtotal,
+    selectedPetCount: bookingDogCount || 1,
+    unitTotal: hostServiceTotal(bookingForm.service, bookingDateMath.days, 1)
+  });
+  const bookingTotal = Math.max(0, bookingSubtotal - voucherDiscount);
+  const bookingPaid = Math.min(bookingTotal, Math.max(0, Number(bookingForm.paid) || 0));
+  const bookingDeposit = Math.round(bookingTotal / 2);
+  const bookingBalance = Math.max(0, bookingTotal - bookingPaid);
+  const normalizedCustomerSearch = customerSearch.trim().toLowerCase();
+  const filteredCustomers = customers.filter((customer) =>
+    [customer.name, customer.phone, customer.email, customer.dogs.map((dog) => dog.name).join(" ")]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedCustomerSearch)
+  );
+  const normalizedDogSearch = dogSearch.trim().toLowerCase();
+  const filteredDogs = dogs.filter((dog) =>
+    [dog.name, dog.breed, dog.ownerName, dog.ownerPhone]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedDogSearch)
+  );
+  const normalizedBookingSearch = bookingSearch.trim().toLowerCase();
+  const filteredOrders = orders.filter((order) => {
+    const owner = order as OrderWithOwner;
+    return [order.orderId, owner.customerName, owner.customerPhone, order.pets.map((pet) => pet.name).join(" "), order.serviceLabel, orderRangeLabel(order)]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedBookingSearch);
+  });
+
+  function ownerForOrder(order: VillaOrder) {
+    const owner = order as OrderWithOwner;
+    if (owner.customerName || owner.customerId) {
+      return {
+        id: owner.customerId || "",
+        name: owner.customerName || "Pet Owner",
+        phone: owner.customerPhone || "",
+        email: owner.customerEmail || ""
+      };
+    }
+    const matchedDog = dogs.find((dog) => dogMatchesOrder(dog, order));
+    return {
+      id: matchedDog?.ownerId || "",
+      name: matchedDog?.ownerName || "Pet Owner",
+      phone: matchedDog?.ownerPhone || "",
+      email: matchedDog?.ownerEmail || ""
+    };
+  }
 
   function setOffDay(date: Date, shouldBlock: boolean) {
     const key = toDateKey(date);
@@ -451,7 +570,7 @@ export default function HostPage() {
       service: "overnight",
       startDate: toDateKey(todayLocal()),
       endDate: toDateKey(todayLocal()),
-      total: "",
+      voucherId: "",
       paid: "0"
     });
     setBookingModalOpen(true);
@@ -463,18 +582,40 @@ export default function HostPage() {
         ? bookingForm.customerId
         : `host-customer-${Date.now()}`;
     const customerName = bookingForm.customerName.trim() || customers.find((customer) => customer.id === customerId)?.name || "Pet Owner";
-    const dogName = bookingForm.dogName.trim() || dogs.find((dog) => dog.id === bookingForm.dogId)?.name || "Pet";
+    const existingDog = dogs.find((dog) => dog.id === bookingForm.dogId && dog.ownerId === customerId);
+    const dogName = bookingForm.dogName.trim() || existingDog?.name || "Pet";
     if (!customerName || !dogName || !bookingForm.startDate) {
       setNotice("Please add customer, dog, and date before creating a booking.");
       return;
     }
-    const start = new Date(`${bookingForm.startDate}T00:00:00`);
-    const end = new Date(`${bookingForm.endDate || bookingForm.startDate}T00:00:00`);
-    const safeEnd = end < start ? start : end;
-    const days = Math.max(1, Math.round((safeEnd.getTime() - start.getTime()) / 86400000) + 1);
-    const total = Math.max(0, Number(bookingForm.total) || (bookingForm.service === "overnight" ? days * 35 : 5));
-    const paid = Math.min(total, Math.max(0, Number(bookingForm.paid) || 0));
-    const order: VillaOrder = {
+    const { start, end: safeEnd, days } = bookingDateMath;
+    let orderPet: PetProfile = existingDog || {
+      id: `host-dog-${Date.now()}`,
+      name: dogName,
+      breed: bookingForm.dogBreed || "Small dog",
+      weight: "",
+      age: "",
+      gender: "",
+      coatColor: "",
+      vaccinated: false,
+      neutered: false,
+      friendly: true,
+      calm: true,
+      foodBrand: "",
+      mealsPerDay: "",
+      allergies: "",
+      medication: "",
+      specialNotes: ""
+    };
+    if (!existingDog || !bookingForm.dogId) {
+      const currentPets = readPetProfiles(customerId);
+      const samePet = currentPets.find((pet) => pet.name.trim().toLowerCase() === dogName.trim().toLowerCase());
+      orderPet = samePet || orderPet;
+      if (!samePet) {
+        writePetProfiles([...currentPets, orderPet], customerId);
+      }
+    }
+    const order: VillaOrder & OrderWithOwner = {
       id: `host-draft-${Date.now()}`,
       service: bookingForm.service,
       serviceLabel: bookingForm.service === "overnight" ? "Overnight Boarding" : "Daycare",
@@ -484,25 +625,51 @@ export default function HostPage() {
       nights: bookingForm.service === "overnight" ? days : 0,
       hours: bookingForm.service === "daycare" ? 1 : 0,
       pets: [{
-        id: bookingForm.dogId || `host-dog-${Date.now()}`,
-        name: dogName,
-        breed: bookingForm.dogBreed || "Small dog",
-        weight: "0kg"
+        id: orderPet.id,
+        name: orderPet.name,
+        breed: orderPet.breed || bookingForm.dogBreed || "Small dog",
+        weight: orderPet.weight || "",
+        photoDataUrl: orderPet.photoDataUrl
       }],
-      total,
-      subtotal: total,
-      deposit: Math.round(total / 2),
-      balance: total - paid,
-      paid,
+      total: bookingTotal,
+      subtotal: bookingSubtotal,
+      voucherId: selectedVoucherForCalculation?.id,
+      voucherCode: selectedVoucher?.code,
+      voucherTitle: selectedVoucher?.title.en,
+      voucherDiscount,
+      deposit: bookingDeposit,
+      balance: bookingBalance,
+      paid: bookingPaid,
       specialRequest: "",
       createdAt: new Date().toISOString(),
       orderId: `BK-${Date.now()}`,
-      status: paid > 0 ? "confirmed" : "balance",
-      photosAvailable: 0
+      status: bookingPaid > 0 ? "confirmed" : "balance",
+      photosAvailable: 0,
+      customerId,
+      customerName,
+      customerPhone: bookingForm.customerPhone || activeBookingCustomer?.phone || "",
+      customerEmail: bookingForm.customerEmail || activeBookingCustomer?.email || ""
     };
     const orderKey = `pet-villa-orders:${customerId}`;
     const currentOrders = readJson<VillaOrder[]>(orderKey, []);
     window.localStorage.setItem(orderKey, JSON.stringify([order, ...currentOrders]));
+    if (selectedVoucherForCalculation && voucherDiscount > 0) {
+      if (selectedVoucherOption?.existing) {
+        markVoucherUsed(selectedVoucherForCalculation.id, order.orderId, voucherDiscount, order.dateLabel, customerId);
+      } else {
+        const usedVoucher: UserVoucher = {
+          ...selectedVoucherForCalculation,
+          id: `${selectedVoucherForCalculation.code}-${Date.now()}`,
+          status: "used",
+          claimedAt: new Date().toISOString(),
+          usedAt: new Date().toISOString(),
+          orderId: order.orderId,
+          discountAmount: voucherDiscount,
+          bookingDateRange: order.dateLabel
+        };
+        writeVouchers([usedVoucher, ...readVouchers(customerId)], customerId);
+      }
+    }
     if (bookingForm.mode === "new") {
       const nextUser: RegisteredUser = {
         id: customerId,
@@ -518,6 +685,7 @@ export default function HostPage() {
     setNotice("Booking created in Host Panel.");
     window.dispatchEvent(new Event("pet-villa-orders"));
     window.dispatchEvent(new Event("pet-villa-customers"));
+    window.dispatchEvent(new Event("pet-villa-vouchers"));
   }
 
   const monthLabel = visibleMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -568,20 +736,32 @@ export default function HostPage() {
               <h1 className="page-title mt-4">{t({ en: "Welcome back, Pet Villa!", zh: "欢迎回来，Pet Villa！" })}</h1>
               <p className="body-copy mt-1">{t({ en: "Today’s check-ins, payments, messages, and capacity in one place.", zh: "快速处理今天的入住、付款、消息和名额。" })}</p>
             </div>
-            <button type="button" className="villa-button-outline bg-white" onClick={() => setVisibleMonth(todayLocal())}>{todayLocal().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</button>
+            <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-villa-primary-light bg-white p-2">
+              <span className="px-2 text-xs font-black text-villa-text-secondary">View day</span>
+              <input className="villa-input h-10 w-[160px]" type="date" value={reportDate} onChange={(event) => {
+                setReportDate(event.target.value);
+                if (event.target.value) setVisibleMonth(new Date(`${event.target.value}T00:00:00`));
+              }} />
+              <button type="button" className="villa-button-outline h-10 bg-white px-4 text-xs" onClick={() => {
+                const today = todayLocal();
+                setReportDate(toDateKey(today));
+                setVisibleMonth(today);
+              }}>Today</button>
+            </div>
           </header>
 
           {notice ? <p className="mt-4 rounded-[16px] bg-villa-primary-bg p-3 text-sm font-black text-villa-primary">{notice}</p> : null}
 
-          <section className="mt-6 grid gap-3 md:grid-cols-3 xl:grid-cols-7">
+          <section className="mt-6 grid gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
             {[
-              ["Today Check-in", "今日入住", todayCheckIns.length, `${todayCheckIns.length} bookings`],
-              ["Today Check-out", "今日退房", todayCheckOuts.length, `${todayCheckOuts.length} bookings`],
+              ["Check-in", "入住", dayCheckIns.length, `${dayCheckIns.length} bookings`],
+              ["Check-out", "退房", dayCheckOuts.length, `${dayCheckOuts.length} bookings`],
               ["Active Bookings", "进行中预约", activeOrders.length, "Currently active"],
               ["Pending Payment", "待收付款", money(balanceDue), "Unpaid balance"],
               ["This Month Revenue", "本月营业额", money(monthRevenue), monthLabel],
               ["Unread Messages", "未读消息", unreadThreads.length, "Need reply"],
-              ["Today Capacity", "今日剩余容量", `${todayCapacityLeft}/${MAX_DOGS_PER_DAY}`, offDays.includes(todayKey) ? "Off Day" : "Slots left"]
+              ["Day Sales", "当天收款", money(daySales), shortDate(reportDay)],
+              ["Day Capacity", "当天剩余容量", `${reportCapacityLeft}/${MAX_DOGS_PER_DAY}`, offDays.includes(reportKey) ? "Off Day" : "Slots left"]
             ].map(([en, zh, value, sub]) => (
               <article key={en} className="villa-card flex min-h-[128px] flex-col justify-between p-4">
                 <p className="m-0 text-xs font-black text-villa-text-secondary">{t({ en: String(en), zh: String(zh) })}</p>
@@ -607,7 +787,7 @@ export default function HostPage() {
             </div>
           </section>
 
-          <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <section className="mt-5 grid gap-5">
             <div className="grid gap-5">
               <div className="grid gap-5 lg:grid-cols-2">
                 <article id="payments" className="villa-card p-5">
@@ -646,8 +826,10 @@ export default function HostPage() {
                     <h2 className="section-title">Customers CRM</h2>
                     <p className="body-copy mt-1">Owner profile, dogs, order count, last stay, and total spend.</p>
                   </div>
+                  <span className="rounded-full bg-villa-primary-bg px-3 py-1 text-xs font-black text-villa-primary">{filteredCustomers.length} customers</span>
                 </div>
-                <div className="mt-4 overflow-x-auto">
+                <input className="villa-input mt-4" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search name, phone, email, or dog..." />
+                <div className="mt-4 max-h-[360px] overflow-auto rounded-[18px] border border-villa-primary-light bg-white">
                   <table className="w-full min-w-[760px] text-left text-sm">
                     <thead className="text-xs uppercase text-villa-text-secondary">
                       <tr className="border-b border-villa-primary-light">
@@ -655,7 +837,7 @@ export default function HostPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {customers.map((customer) => (
+                      {filteredCustomers.map((customer) => (
                         <tr key={customer.id} className="border-b border-villa-primary-light/60 font-bold">
                           <td className="py-3"><button type="button" onClick={() => setSelectedCustomerId(customer.id)} className="text-left text-villa-primary">{customer.name}</button></td>
                           <td>{customer.phone || "-"}</td>
@@ -692,9 +874,13 @@ export default function HostPage() {
               </section>
 
               <section id="dogs" className="villa-card p-5">
-                <h2 className="section-title">Dogs Profile</h2>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {dogs.map((dog) => (
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="section-title">Dogs Profile</h2>
+                  <span className="rounded-full bg-villa-primary-bg px-3 py-1 text-xs font-black text-villa-primary">{filteredDogs.length} dogs</span>
+                </div>
+                <input className="villa-input mt-4" value={dogSearch} onChange={(event) => setDogSearch(event.target.value)} placeholder="Search dog, breed, owner, or phone..." />
+                <div className="mt-4 grid max-h-[520px] gap-3 overflow-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+                  {filteredDogs.map((dog) => (
                     <article key={`${dog.ownerId}-${dog.id}`} className="rounded-[18px] border border-villa-primary-light bg-white p-4">
                       <div className="flex gap-3">
                         <img src={dog.photoDataUrl || "/avatar-poodle.png"} alt={dog.name} className="h-16 w-16 rounded-[16px] object-cover" />
@@ -713,7 +899,7 @@ export default function HostPage() {
                       <button type="button" className="mt-3 rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => setSelectedDogKey(`${dog.ownerId}-${dog.id}`)}>View Full Profile</button>
                     </article>
                   ))}
-                  {dogs.length === 0 ? <p className="body-copy">No dog profiles yet.</p> : null}
+                  {filteredDogs.length === 0 ? <p className="body-copy">No dog profiles yet.</p> : null}
                 </div>
                 {selectedDog ? (
                   <article className="mt-4 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-4">
@@ -733,8 +919,12 @@ export default function HostPage() {
               </section>
 
               <section id="booking-center" className="villa-card p-5">
-                <h2 className="section-title">Booking Center</h2>
-                <div className="mt-4 overflow-x-auto">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="section-title">Booking Center</h2>
+                  <span className="rounded-full bg-villa-primary-bg px-3 py-1 text-xs font-black text-villa-primary">{filteredOrders.length} bookings</span>
+                </div>
+                <input className="villa-input mt-4" value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} placeholder="Search booking ID, owner, phone, dog, service, or date..." />
+                <div className="mt-4 max-h-[420px] overflow-auto rounded-[18px] border border-villa-primary-light bg-white">
                   <table className="w-full min-w-[900px] text-left text-sm">
                     <thead className="text-xs uppercase text-villa-text-secondary">
                       <tr className="border-b border-villa-primary-light">
@@ -742,12 +932,13 @@ export default function HostPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map((order) => {
+                      {filteredOrders.map((order) => {
                         const range = getOrderDateRange(order);
+                        const owner = ownerForOrder(order);
                         return (
                           <tr key={order.orderId} className="border-b border-villa-primary-light/60 font-bold">
                             <td className="py-3">{order.orderId}</td>
-                            <td>Pet Owner</td>
+                            <td>{owner.name}</td>
                             <td>{order.pets.map((pet) => pet.name).join(", ") || "Pet"} ({order.pets.length})</td>
                             <td>{shortDate(range?.start)}</td>
                             <td>{shortDate(range?.end)}</td>
@@ -760,7 +951,7 @@ export default function HostPage() {
                       })}
                     </tbody>
                   </table>
-                  {orders.length === 0 ? <p className="body-copy mt-4">No bookings yet.</p> : null}
+                  {filteredOrders.length === 0 ? <p className="body-copy m-4">No bookings yet.</p> : null}
                 </div>
               </section>
 
@@ -889,19 +1080,22 @@ export default function HostPage() {
               </section>
             </div>
 
-            <aside className="grid h-fit gap-5 xl:sticky xl:top-8">
+            <aside className="grid h-fit gap-5 lg:grid-cols-2 2xl:grid-cols-4">
               <section className="villa-card p-5">
                 <h2 className="card-title">Calendar Mini View</h2>
                 <div className="mt-3 grid grid-cols-7 gap-1 text-center text-xs font-black">
                   {days.slice(0, 30).map((date) => {
                     const slots = availableSlotsForDate(date, capacityMap);
                     const off = offDays.includes(toDateKey(date));
-                    return <button key={toDateKey(date)} type="button" onClick={() => setManagedDay(date)} className={`rounded-lg py-2 ${off ? "bg-villa-text-primary text-white" : slots <= 0 ? "bg-red-100 text-red-600" : slots < MAX_DOGS_PER_DAY ? "bg-amber-100 text-amber-700" : "bg-white"}`}>{date.getDate()}</button>;
+                    return <button key={toDateKey(date)} type="button" onClick={() => {
+                      setReportDate(toDateKey(date));
+                      setManagedDay(date);
+                    }} className={`rounded-lg py-2 ${off ? "bg-villa-text-primary text-white" : slots <= 0 ? "bg-red-100 text-red-600" : slots < MAX_DOGS_PER_DAY ? "bg-amber-100 text-amber-700" : "bg-white"}`}>{date.getDate()}</button>;
                   })}
                 </div>
               </section>
 
-              <section id="messages" className="villa-card p-5">
+              <section id="messages" className="villa-card p-5 lg:col-span-2">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="card-title">Messages Inbox</h2>
                   {unreadThreads.length ? <span className="rounded-full bg-villa-primary px-2 py-1 text-xs font-black text-white">{unreadThreads.length} unread</span> : null}
@@ -956,7 +1150,7 @@ export default function HostPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <strong className="block text-villa-text-primary">{order.pets.map((pet) => pet.name).join(", ") || "Pet"}</strong>
-                          <span className="text-xs font-bold text-villa-text-secondary">{order.serviceLabel} · {orderRangeLabel(order)}</span>
+                          <span className="text-xs font-bold text-villa-text-secondary">{ownerForOrder(order).name} · {order.serviceLabel} · {orderRangeLabel(order)}</span>
                         </div>
                         <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusPill(bookingStatus(order))}`}>{bookingStatus(order)}</span>
                       </div>
@@ -1003,7 +1197,7 @@ export default function HostPage() {
                 <h3 className="card-title">1. Customer</h3>
                 <div className="mt-3 flex gap-2">
                   {(["existing", "new"] as const).map((mode) => (
-                    <button key={mode} type="button" className={bookingForm.mode === mode ? "villa-button px-4 py-2 text-xs" : "villa-button-outline bg-white px-4 py-2 text-xs"} onClick={() => setBookingForm({ ...bookingForm, mode })}>
+                    <button key={mode} type="button" className={bookingForm.mode === mode ? "villa-button px-4 py-2 text-xs" : "villa-button-outline bg-white px-4 py-2 text-xs"} onClick={() => setBookingForm({ ...bookingForm, mode, voucherId: "" })}>
                       {mode === "existing" ? "Existing Customer" : "New Customer"}
                     </button>
                   ))}
@@ -1020,7 +1214,8 @@ export default function HostPage() {
                       customerEmail: customer?.email || "",
                       dogId: dog?.id || "",
                       dogName: dog?.name || "",
-                      dogBreed: dog?.breed || ""
+                      dogBreed: dog?.breed || "",
+                      voucherId: ""
                     });
                   }}>
                     <option value="">Select customer</option>
@@ -1037,6 +1232,7 @@ export default function HostPage() {
 
               <section className="rounded-[18px] border border-villa-primary-light bg-white p-4">
                 <h3 className="card-title">2. Dog</h3>
+                <p className="body-copy mt-1">Choose a saved dog from this customer. If no dog exists, type a new dog and it will be saved to the customer's My Pets.</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <select className="villa-input" value={bookingForm.dogId} onChange={(event) => {
                     const dog = dogs.find((item) => item.id === event.target.value && (!bookingForm.customerId || item.ownerId === bookingForm.customerId));
@@ -1064,9 +1260,23 @@ export default function HostPage() {
 
               <section className="rounded-[18px] border border-villa-primary-light bg-white p-4">
                 <h3 className="card-title">4. Payment</h3>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <input className="villa-input" inputMode="numeric" value={bookingForm.total} onChange={(event) => setBookingForm({ ...bookingForm, total: event.target.value })} placeholder="Total amount RM" />
-                  <input className="villa-input" inputMode="numeric" value={bookingForm.paid} onChange={(event) => setBookingForm({ ...bookingForm, paid: event.target.value })} placeholder="Paid amount RM" />
+                <div className="mt-3 grid gap-3">
+                  <select className="villa-input" value={bookingForm.voucherId} onChange={(event) => setBookingForm({ ...bookingForm, voucherId: event.target.value })} disabled={!bookingForm.customerId || hostVoucherOptions.length === 0}>
+                    <option value="">{hostVoucherOptions.length ? "No voucher applied" : "No available voucher"}</option>
+                    {hostVoucherOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                  <input className="villa-input" inputMode="numeric" value={bookingForm.paid} onChange={(event) => setBookingForm({ ...bookingForm, paid: event.target.value })} placeholder={`Paid amount RM (deposit ${bookingDeposit})`} />
+                  <div className="rounded-[18px] bg-villa-primary-bg p-4 text-sm font-bold text-villa-text-primary">
+                    <div className="flex justify-between gap-3"><span>Service</span><strong>{bookingForm.service === "overnight" ? "Boarding" : "Daycare"} · {bookingDateMath.days} day(s) · {bookingDogCount || 1} dog</strong></div>
+                    <div className="mt-2 flex justify-between gap-3"><span>Subtotal</span><strong>{money(bookingSubtotal)}</strong></div>
+                    <div className="mt-2 flex justify-between gap-3 text-villa-primary"><span>Voucher</span><strong>-{money(voucherDiscount)}</strong></div>
+                    <div className="mt-3 border-t border-villa-primary-light pt-3 flex justify-between gap-3 text-base"><span>Total</span><strong>{money(bookingTotal)}</strong></div>
+                    <div className="mt-2 flex justify-between gap-3"><span>Suggested Deposit</span><strong>{money(bookingDeposit)}</strong></div>
+                    <div className="mt-2 flex justify-between gap-3"><span>Paid Now</span><strong>{money(bookingPaid)}</strong></div>
+                    <div className="mt-2 flex justify-between gap-3"><span>Balance</span><strong>{money(bookingBalance)}</strong></div>
+                  </div>
                 </div>
               </section>
 
@@ -1110,7 +1320,7 @@ export default function HostPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <strong>{order.pets.map((pet) => pet.name).join(", ") || "Pet"}</strong>
-                      <p className="mt-1 text-xs text-villa-text-secondary">{order.serviceLabel} · {orderRangeLabel(order)} · {order.pets.length} dog(s)</p>
+                      <p className="mt-1 text-xs text-villa-text-secondary">{ownerForOrder(order).name} · {order.serviceLabel} · {orderRangeLabel(order)} · {order.pets.length} dog(s)</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusPill(bookingStatus(order))}`}>{bookingStatus(order)}</span>
                   </div>
