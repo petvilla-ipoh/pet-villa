@@ -142,38 +142,50 @@ const requirements = [
   { icon: "vet", title: { en: "Emergency Vet Support", zh: "紧急兽医支持" } }
 ] satisfies Array<{ icon: HomeIconName; title: Copy }>;
 
-const reviews = [
+const reviews: PublicReview[] = [
   {
+    id: "fallback-review-grace",
     name: "Grace Sam",
     pet: "Toy Poodle",
+    dogName: "Mochi",
+    breed: "Toy Poodle",
     date: "2026-05-18",
     rating: 5,
+    source: "customer",
     quote: {
       en: "We received photos every day. My dog looked happy, safe, and relaxed. I will choose Pet Villa again!",
       zh: "每天都会收到照片，狗狗玩得很开心！第一次寄宿也很放心，会继续选择 Pet Villa！"
     }
   },
   {
+    id: "fallback-review-michelle",
     name: "Michelle Tan",
     pet: "French Bulldog",
+    dogName: "Bobo",
+    breed: "French Bulldog",
     date: "2026-05-12",
     rating: 5,
+    source: "customer",
     quote: {
       en: "Warm updates, clean home, and very thoughtful care for small dogs.",
       zh: "更新很温暖，环境干净，对小型犬照顾得很细心。"
     }
   },
   {
+    id: "fallback-review-rachel",
     name: "Rachel Lee",
     pet: "Maltese",
+    dogName: "Luna",
+    breed: "Maltese",
     date: "2026-05-05",
     rating: 5,
+    source: "customer",
     quote: {
       en: "The booking was simple and my dog settled in quickly.",
       zh: "预约很简单，狗狗也很快适应，真的很安心。"
     }
   }
-] satisfies Array<{ name: string; pet: string; date: string; rating: number; quote: Copy }>;
+];
 
 const galleryDogs = [
   { breed: "Poodle", color: "#f0b46e" },
@@ -703,11 +715,11 @@ export default function HomePage() {
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 overflow-hidden rounded-full">
-                    <DogPortrait breed={activeReview.pet} color="#f0b46e" />
+                    {activeReview.photo ? <img src={activeReview.photo} alt={activeReview.dogName || activeReview.pet} className="h-full w-full object-cover" /> : <DogPortrait breed={activeReview.pet} color="#f0b46e" />}
                   </div>
                   <div>
                     <strong className="block text-sm font-black">{activeReview.name}</strong>
-                    <span className="text-xs font-bold text-villa-text-secondary">{activeReview.pet}</span>
+                    <span className="text-xs font-bold text-villa-text-secondary">{activeReview.dogName || activeReview.pet}{activeReview.breed ? ` · ${activeReview.breed}` : ""}</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -824,7 +836,10 @@ export default function HomePage() {
                 <article key={review.name} className="rounded-[18px] bg-villa-primary-bg p-4">
                   <Stars rating={review.rating} />
                   <p className="mt-2 text-sm font-bold leading-relaxed">“{t(review.quote)}”</p>
-                  <p className="mt-3 text-xs font-black">{review.name} · {review.pet} · {review.date}</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    {review.photo ? <img src={review.photo} alt={review.dogName || review.pet} className="h-10 w-10 rounded-full object-cover" /> : null}
+                    <p className="text-xs font-black">{review.name} · {review.dogName || review.pet}{review.breed ? ` · ${review.breed}` : ""} · {review.date}</p>
+                  </div>
                 </article>
               ))}
             </div>

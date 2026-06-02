@@ -7,7 +7,7 @@ import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, toDateKey } 
 import { readGuestPhotos, saveGuestPhoto, deleteGuestPhoto, type GuestPhoto } from "../lib/gallery";
 import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
 import { type VillaOrder } from "../lib/orderFlow";
-import { deleteHostReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
+import { deleteReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
 import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 
 const hostPhotoPlaceholder = "/hero-dogs.png";
@@ -63,7 +63,7 @@ export default function HostPage() {
   const [visibleMonth, setVisibleMonth] = useState(todayLocal());
   const [reply, setReply] = useState("");
   const [photoForm, setPhotoForm] = useState({ petName: "", breed: "", caption: "", imageUrl: "" });
-  const [reviewForm, setReviewForm] = useState({ name: "", pet: "", rating: 5, en: "", zh: "" });
+  const [reviewForm, setReviewForm] = useState({ name: "", dogName: "", breed: "", rating: 5, en: "", zh: "", date: new Date().toISOString().slice(0, 10), photo: "" });
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
@@ -121,6 +121,14 @@ export default function HostPage() {
     reader.readAsDataURL(file);
   }
 
+  function handleReviewPhotoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setReviewForm((current) => ({ ...current, photo: String(reader.result || "") }));
+    reader.readAsDataURL(file);
+  }
+
   function publishPhoto() {
     if (!photoForm.petName.trim()) {
       setNotice(t({ en: "Please add a pet name before publishing.", zh: "发布前请填写宠物名字。" }));
@@ -145,14 +153,19 @@ export default function HostPage() {
     }
     saveHostReview({
       name: reviewForm.name,
-      pet: reviewForm.pet || "Small dog",
+      pet: [reviewForm.dogName, reviewForm.breed].filter(Boolean).join(" · ") || "Small dog",
+      dogName: reviewForm.dogName || "Pet",
+      breed: reviewForm.breed || "Small dog",
+      date: reviewForm.date,
       rating: reviewForm.rating,
+      photo: reviewForm.photo,
       quote: {
         en: reviewForm.en,
         zh: reviewForm.zh || reviewForm.en
       }
     });
-    setReviewForm({ name: "", pet: "", rating: 5, en: "", zh: "" });
+    setReviewForm({ name: "", dogName: "", breed: "", rating: 5, en: "", zh: "", date: new Date().toISOString().slice(0, 10), photo: "" });
+    setReviews(readPublicReviews({ includeHidden: true }));
     setNotice(t({ en: "Review published to Home.", zh: "评价已同步到首页。" }));
   }
 
@@ -165,6 +178,12 @@ export default function HostPage() {
       setNotice(t({ en: "Review hidden from Home.", zh: "评价已从首页隐藏。" }));
     }
     setReviews(readPublicReviews({ includeHidden: true }));
+  }
+
+  function removeReview(review: PublicReview) {
+    deleteReview(review);
+    setReviews(readPublicReviews({ includeHidden: true }));
+    setNotice(t({ en: "Review deleted.", zh: "评价已删除。" }));
   }
 
   function sendHostReply() {
@@ -319,25 +338,46 @@ export default function HostPage() {
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div className="grid gap-3">
                     <input className="villa-input" value={reviewForm.name} onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })} placeholder={t({ en: "Owner name", zh: "宠主名字" })} />
-                    <input className="villa-input" value={reviewForm.pet} onChange={(event) => setReviewForm({ ...reviewForm, pet: event.target.value })} placeholder={t({ en: "Pet / breed", zh: "宠物 / 品种" })} />
+                    <input className="villa-input" value={reviewForm.dogName} onChange={(event) => setReviewForm({ ...reviewForm, dogName: event.target.value })} placeholder={t({ en: "Dog name", zh: "狗狗名字" })} />
+                    <input className="villa-input" value={reviewForm.breed} onChange={(event) => setReviewForm({ ...reviewForm, breed: event.target.value })} placeholder={t({ en: "Breed", zh: "品种" })} />
+                    <input className="villa-input" type="date" value={reviewForm.date} onChange={(event) => setReviewForm({ ...reviewForm, date: event.target.value })} />
+                    <label className="grid min-h-[54px] cursor-pointer place-items-center overflow-hidden rounded-[14px] border border-villa-primary-light bg-villa-primary-bg px-4 py-3 text-sm font-black text-villa-primary">
+                      {reviewForm.photo ? (
+                        <span className="flex w-full items-center gap-3">
+                          <img src={reviewForm.photo} alt="" className="h-12 w-12 rounded-full object-cover" />
+                          {t({ en: "Change review photo", zh: "更换评价照片" })}
+                        </span>
+                      ) : t({ en: "Optional photo", zh: "可选照片" })}
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleReviewPhotoFile} />
+                    </label>
                     <select className="villa-input" value={reviewForm.rating} onChange={(event) => setReviewForm({ ...reviewForm, rating: Number(event.target.value) })}>
                       {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} stars</option>)}
                     </select>
-                    <textarea className="villa-input h-24 py-3" value={reviewForm.en} onChange={(event) => setReviewForm({ ...reviewForm, en: event.target.value })} placeholder="English review" />
-                    <textarea className="villa-input h-24 py-3" value={reviewForm.zh} onChange={(event) => setReviewForm({ ...reviewForm, zh: event.target.value })} placeholder="中文评价（可选）" />
+                    <textarea className="villa-input h-24 py-3" value={reviewForm.en} onChange={(event) => setReviewForm({ ...reviewForm, en: event.target.value })} placeholder={t({ en: "Review text", zh: "评价内容" })} />
+                    <textarea className="villa-input h-24 py-3" value={reviewForm.zh} onChange={(event) => setReviewForm({ ...reviewForm, zh: event.target.value })} placeholder={t({ en: "Chinese review (optional)", zh: "中文评价（可选）" })} />
                     <button type="button" className="villa-button" onClick={publishReview}>{t({ en: "Publish Review", zh: "发布评价" })}</button>
                   </div>
                   <div className="grid max-h-[520px] content-start gap-3 overflow-auto pr-1">
                     {reviews.map((review) => (
                       <article key={review.id} className={`rounded-[18px] border p-3 ${review.hidden ? "border-villa-primary-light bg-villa-primary-bg opacity-70" : "border-villa-primary-light bg-white"}`}>
-                        <div className="text-sm font-black text-[#f5a623]">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</div>
-                        <p className="mt-2 text-sm font-bold text-villa-text-primary">{review.quote.en}</p>
-                        <p className="mt-2 text-xs font-black text-villa-text-secondary">{review.name} · {review.pet} · {review.source}</p>
+                        <div className="flex items-start gap-3">
+                          {review.photo ? <img src={review.photo} alt={review.dogName || review.pet} className="h-12 w-12 rounded-full object-cover" /> : null}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-black text-[#f5a623]">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</div>
+                            <p className="mt-2 text-sm font-bold text-villa-text-primary">{review.quote.en}</p>
+                            <p className="mt-2 text-xs font-black text-villa-text-secondary">
+                              {review.name} · {review.dogName || review.pet}{review.breed ? ` · ${review.breed}` : ""} · {review.date}
+                            </p>
+                            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${review.hidden ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-700"}`}>
+                              {review.hidden ? t({ en: "Hidden", zh: "已隐藏" }) : t({ en: "Live", zh: "已上线" })}
+                            </span>
+                          </div>
+                        </div>
                         <div className="mt-2 flex gap-2">
                           <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => toggleReviewVisibility(review)}>
-                            {review.hidden ? t({ en: "Show on Home", zh: "显示到首页" }) : t({ en: "Hide from Home", zh: "从首页隐藏" })}
+                            {review.hidden ? t({ en: "Show", zh: "显示" }) : t({ en: "Hide", zh: "隐藏" })}
                           </button>
-                          {review.source === "host" ? <button type="button" className="text-xs font-black text-red-500" onClick={() => deleteHostReview(review.id)}>{t({ en: "Delete", zh: "删除" })}</button> : null}
+                          <button type="button" className="rounded-pill border border-red-200 px-3 py-1 text-xs font-black text-red-500" onClick={() => removeReview(review)}>{t({ en: "Delete", zh: "删除" })}</button>
                         </div>
                       </article>
                     ))}

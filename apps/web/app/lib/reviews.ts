@@ -9,10 +9,13 @@ export type PublicReview = {
   id: string;
   name: string;
   pet: string;
+  dogName?: string;
+  breed?: string;
   date: string;
   rating: number;
   quote: ReviewCopy;
   source: "host" | "customer";
+  photo?: string;
   hidden?: boolean;
   orderId?: string;
 };
@@ -42,18 +45,42 @@ export function readHostReviews(): HostReview[] {
   return readJson<HostReview[]>(hostReviewsKey, []);
 }
 
-export function saveHostReview(review: Omit<HostReview, "id" | "date">) {
+export function saveHostReview(review: Omit<HostReview, "id"> & { date?: string }) {
   const next: HostReview = {
     ...review,
     hidden: false,
     id: `host-review-${Date.now()}`,
-    date: new Date().toISOString().slice(0, 10)
+    date: review.date || new Date().toISOString().slice(0, 10)
   };
   writeJson(hostReviewsKey, [next, ...readHostReviews()]);
 }
 
 export function deleteHostReview(reviewId: string) {
   writeJson(hostReviewsKey, readHostReviews().filter((review) => review.id !== reviewId));
+}
+
+export function deleteReview(review: Pick<PublicReview, "id" | "source" | "orderId">) {
+  if (review.source === "host") {
+    deleteHostReview(review.id);
+    return;
+  }
+  if (typeof window === "undefined") return;
+  Object.keys(window.localStorage)
+    .filter((key) => key.startsWith("pet-villa-orders:"))
+    .forEach((key) => {
+      const orders = readJson<any[]>(key, []);
+      const nextOrders = orders.map((order) => {
+        if (order.orderId !== review.orderId) return order;
+        const { review: _removedReview, ...rest } = order;
+        return rest;
+      });
+      if (JSON.stringify(orders) !== JSON.stringify(nextOrders)) {
+        window.localStorage.setItem(key, JSON.stringify(nextOrders));
+      }
+    });
+  showReview(review.id);
+  window.dispatchEvent(new Event("pet-villa-orders"));
+  window.dispatchEvent(new Event("pet-villa-reviews"));
 }
 
 export function readHiddenReviewIds(): string[] {
@@ -95,14 +122,19 @@ export function readCustomerOrderReviews(): PublicReview[] {
         const text = normalizeQuote(order.review.text || order.review.quote || order.review.comment);
         if (!rating || (!text.en && !text.zh)) return;
         const petNames = Array.isArray(order.pets) ? order.pets.map((pet: any) => pet.name).filter(Boolean).join(", ") : "Pet";
+        const breeds = Array.isArray(order.pets) ? order.pets.map((pet: any) => pet.breed).filter(Boolean).join(", ") : "";
+        const firstPhoto = Array.isArray(order.pets) ? order.pets.find((pet: any) => pet.photo || pet.imageUrl)?.photo || order.pets.find((pet: any) => pet.photo || pet.imageUrl)?.imageUrl : "";
         reviews.push({
           id: `customer-review-${order.orderId}`,
           orderId: order.orderId,
           name: order.customerName || order.ownerName || "Pet Owner",
           pet: petNames || "Pet",
+          dogName: petNames || "Pet",
+          breed: breeds || order.serviceLabel || "Small dog",
           date: order.review.createdAt?.slice?.(0, 10) || order.updatedAt?.slice?.(0, 10) || new Date().toISOString().slice(0, 10),
           rating,
           quote: text,
+          photo: firstPhoto,
           source: "customer"
         });
       });
