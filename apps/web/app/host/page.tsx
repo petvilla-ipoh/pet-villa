@@ -49,6 +49,8 @@ type DogRecord = PetProfile & {
   ownerName: string;
   ownerPhone: string;
   ownerEmail: string;
+  medicalRecordName?: string;
+  medicalRecordDataUrl?: string;
 };
 
 type CapacityStatus = "available" | "partial" | "full" | "off";
@@ -230,6 +232,21 @@ type HostVoucherOption = {
   existing: boolean;
 };
 
+type CustomerEditForm = {
+  name: string;
+  phone: string;
+  email: string;
+};
+
+type DogEditForm = PetProfile & {
+  medicalRecordName?: string;
+  medicalRecordDataUrl?: string;
+};
+
+function chatThreadsKey() {
+  return "pet-villa-chat-threads";
+}
+
 export default function HostPage() {
   const { t } = useLanguage();
   const [orders, setOrders] = useState<VillaOrder[]>([]);
@@ -262,9 +279,15 @@ export default function HostPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [dogSearch, setDogSearch] = useState("");
   const [bookingSearch, setBookingSearch] = useState("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState("");
   const [offDays, setOffDays] = useState<string[]>([]);
   const [visibleMonth, setVisibleMonth] = useState(todayLocal());
   const [managedDay, setManagedDay] = useState<Date | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [customerEditOpen, setCustomerEditOpen] = useState(false);
+  const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>({ name: "", phone: "", email: "" });
+  const [dogEditOpen, setDogEditOpen] = useState(false);
+  const [dogEditForm, setDogEditForm] = useState<DogEditForm | null>(null);
   const [reply, setReply] = useState("");
   const [photoForm, setPhotoForm] = useState({ petName: "", breed: "", caption: "", imageUrl: "" });
   const [reviewForm, setReviewForm] = useState({ name: "", dogName: "", breed: "", rating: 5, en: "", zh: "", date: new Date().toISOString().slice(0, 10), photo: "" });
@@ -386,10 +409,14 @@ export default function HostPage() {
   const reportCapacityLeft = offDays.includes(reportKey) ? 0 : availableSlotsForDate(reportDay, capacityMap);
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) || customers[0];
   const selectedDog = dogs.find((dog) => `${dog.ownerId}-${dog.id}` === selectedDogKey) || dogs[0];
+  const selectedOrder = orders.find((order) => order.orderId === selectedOrderId) || null;
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
   const selectedThreadCustomer = selectedThread
     ? customers.find((customer) => customer.name === selectedThread.userName || customer.phone === selectedThread.userPhone)
     : undefined;
+  const selectedChatDogs = selectedThreadCustomer?.dogs || [];
+  const selectedChatOrders = selectedThreadCustomer?.orders || [];
+  const selectedChatBalance = selectedChatOrders.reduce((sum, order) => sum + Math.max(0, order.balance || 0), 0);
   const activeBookingCustomer = customers.find((customer) => customer.id === bookingForm.customerId);
   const activeBookingDog = dogs.find((dog) => dog.id === bookingForm.dogId && (!bookingForm.customerId || dog.ownerId === bookingForm.customerId));
   const bookingDogCount = bookingForm.dogName.trim() || activeBookingDog ? 1 : 0;
@@ -450,11 +477,13 @@ export default function HostPage() {
   const normalizedBookingSearch = bookingSearch.trim().toLowerCase();
   const filteredOrders = orders.filter((order) => {
     const owner = order as OrderWithOwner;
+    const statusMatches = !bookingStatusFilter || bookingStatus(order) === bookingStatusFilter || paymentStatus(order) === bookingStatusFilter;
     return [order.orderId, owner.customerName, owner.customerPhone, order.pets.map((pet) => pet.name).join(" "), order.serviceLabel, orderRangeLabel(order)]
       .join(" ")
       .toLowerCase()
-      .includes(normalizedBookingSearch);
+      .includes(normalizedBookingSearch) && statusMatches;
   });
+  const selectedStatusOrders = bookingStatusFilter ? orders.filter((order) => bookingStatus(order) === bookingStatusFilter || paymentStatus(order) === bookingStatusFilter).slice(0, 5) : [];
 
   function ownerForOrder(order: VillaOrder) {
     const owner = order as OrderWithOwner;
@@ -473,6 +502,151 @@ export default function HostPage() {
       phone: matchedDog?.ownerPhone || "",
       email: matchedDog?.ownerEmail || ""
     };
+  }
+
+  function scrollToHostSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function refreshHostData() {
+    const nextRegisteredUsers = readRegisteredUsers();
+    setOrders(readAllOrders());
+    setRegisteredUsers(nextRegisteredUsers);
+    setDogs(readAllPets(nextRegisteredUsers));
+    setThreads(readChatThreads());
+    setReviews(readPublicReviews({ includeHidden: true }));
+    setPhotos(readGuestPhotos());
+  }
+
+  function writeRegisteredUser(nextUser: RegisteredUser) {
+    const id = nextUser.id || nextUser.email || nextUser.phone;
+    if (!id || typeof window === "undefined") return;
+    const next = readRegisteredUsers().map((user) => ((user.id || user.email || user.phone) === id ? { ...user, ...nextUser, id } : user));
+    if (!next.some((user) => (user.id || user.email || user.phone) === id)) next.unshift({ ...nextUser, id });
+    window.localStorage.setItem("pet-villa-registered-users", JSON.stringify(next));
+    const session = readJson<{ user?: RegisteredUser }>("pet-villa-session", {});
+    if ((session.user?.id || session.user?.email || session.user?.phone) === id) {
+      window.localStorage.setItem("pet-villa-session", JSON.stringify({ ...session, user: { ...session.user, ...nextUser, id } }));
+    }
+    window.dispatchEvent(new Event("pet-villa-customers"));
+  }
+
+  function openCustomerEditor(customer: CustomerRecord) {
+    setSelectedCustomerId(customer.id);
+    setCustomerEditForm({ name: customer.name, phone: customer.phone, email: customer.email });
+    setCustomerEditOpen(true);
+  }
+
+  function saveCustomerEdit() {
+    if (!selectedCustomer) return;
+    writeRegisteredUser({
+      id: selectedCustomer.id,
+      fullName: customerEditForm.name.trim() || selectedCustomer.name,
+      phone: customerEditForm.phone.trim(),
+      email: customerEditForm.email.trim()
+    });
+    setCustomerEditOpen(false);
+    setNotice("Customer profile updated.");
+    refreshHostData();
+  }
+
+  function deleteCustomer(customer: CustomerRecord) {
+    if (typeof window === "undefined") return;
+    const nextUsers = readRegisteredUsers().filter((user) => (user.id || user.email || user.phone) !== customer.id);
+    window.localStorage.setItem("pet-villa-registered-users", JSON.stringify(nextUsers));
+    window.localStorage.removeItem(`pet-villa-pets:${customer.id}`);
+    window.localStorage.removeItem(`pet-villa-orders:${customer.id}`);
+    setSelectedCustomerId("");
+    setNotice("Customer, pets, and customer-scoped orders removed.");
+    window.dispatchEvent(new Event("pet-villa-customers"));
+    window.dispatchEvent(new Event("pet-villa-pets"));
+    window.dispatchEvent(new Event("pet-villa-orders"));
+    refreshHostData();
+  }
+
+  function openDogEditor(dog: DogRecord) {
+    setSelectedDogKey(`${dog.ownerId}-${dog.id}`);
+    setDogEditForm({ ...dog });
+    setDogEditOpen(true);
+  }
+
+  function handleMedicalRecordFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !dogEditForm) return;
+    const reader = new FileReader();
+    reader.onload = () => setDogEditForm((current) => current ? { ...current, medicalRecordName: file.name, medicalRecordDataUrl: String(reader.result || "") } : current);
+    reader.readAsDataURL(file);
+  }
+
+  function saveDogEdit() {
+    if (!dogEditForm || !selectedDog) return;
+    const ownerId = selectedDog.ownerId;
+    const current = readPetProfiles(ownerId);
+    const cleanPet: DogEditForm = {
+      ...dogEditForm,
+      name: dogEditForm.name.trim() || selectedDog.name,
+      breed: dogEditForm.breed.trim(),
+      weight: dogEditForm.weight.trim(),
+      age: dogEditForm.age.trim(),
+      allergies: dogEditForm.allergies.trim(),
+      medication: dogEditForm.medication.trim(),
+      specialNotes: dogEditForm.specialNotes.trim()
+    };
+    const next = current.map((pet) => (pet.id === cleanPet.id ? cleanPet : pet));
+    writePetProfiles(next, ownerId);
+    setDogEditOpen(false);
+    setNotice("Dog profile updated.");
+    refreshHostData();
+  }
+
+  function updateHostOrder(order: VillaOrder, updater: (order: VillaOrder & OrderWithOwner) => VillaOrder & OrderWithOwner) {
+    if (typeof window === "undefined") return;
+    const owner = ownerForOrder(order);
+    const possibleKeys = [
+      owner.id ? `pet-villa-orders:${owner.id}` : "",
+      ...(order as OrderWithOwner).customerId ? [`pet-villa-orders:${(order as OrderWithOwner).customerId}`] : [],
+      ...Object.keys(window.localStorage).filter((key) => key.startsWith("pet-villa-orders:"))
+    ].filter(Boolean);
+    const seen = new Set<string>();
+    for (const key of possibleKeys) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const current = readJson<(VillaOrder & OrderWithOwner)[]>(key, []);
+      if (!current.some((item) => item.orderId === order.orderId)) continue;
+      const next = current.map((item) => (item.orderId === order.orderId ? updater(item) : item));
+      window.localStorage.setItem(key, JSON.stringify(next));
+      window.dispatchEvent(new Event("pet-villa-orders"));
+      refreshHostData();
+      setSelectedOrderId(order.orderId);
+      return;
+    }
+  }
+
+  function ensureCustomerThread(customer?: CustomerRecord) {
+    if (!customer || typeof window === "undefined") return "";
+    const threadId = `thread-${customer.id}`;
+    const current = readChatThreads();
+    const existing = current.find((thread) => thread.id === threadId);
+    if (existing) {
+      setSelectedThreadId(existing.id);
+      setMessages(existing.messages);
+      scrollToHostSection("messages");
+      return existing.id;
+    }
+    const nextThread: ChatThread = {
+      id: threadId,
+      userId: customer.id,
+      userName: customer.name,
+      userPhone: customer.phone,
+      updatedAt: new Date().toISOString(),
+      messages: []
+    };
+    window.localStorage.setItem(chatThreadsKey(), JSON.stringify([nextThread, ...current]));
+    setThreads(readChatThreads());
+    setSelectedThreadId(threadId);
+    setMessages([]);
+    scrollToHostSection("messages");
+    return threadId;
   }
 
   function setOffDay(date: Date, shouldBlock: boolean) {
@@ -693,6 +867,8 @@ export default function HostPage() {
   const managedSlots = managedDay ? availableSlotsForDate(managedDay, capacityMap) : MAX_DOGS_PER_DAY;
   const managedKey = managedDay ? toDateKey(managedDay) : "";
   const managedOff = managedDay ? offDays.includes(managedKey) : false;
+  const selectedOrderOwner = selectedOrder ? ownerForOrder(selectedOrder) : null;
+  const selectedOrderCustomer = selectedOrderOwner ? customers.find((customer) => customer.id === selectedOrderOwner.id || customer.phone === selectedOrderOwner.phone || customer.email === selectedOrderOwner.email) : undefined;
 
   return (
     <div className="min-h-screen bg-[#3d1f0d] text-[#f5c4b3]">
@@ -754,20 +930,20 @@ export default function HostPage() {
 
           <section className="mt-6 grid gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
             {[
-              ["Check-in", "入住", dayCheckIns.length, `${dayCheckIns.length} bookings`],
-              ["Check-out", "退房", dayCheckOuts.length, `${dayCheckOuts.length} bookings`],
-              ["Active Bookings", "进行中预约", activeOrders.length, "Currently active"],
-              ["Pending Payment", "待收付款", money(balanceDue), "Unpaid balance"],
-              ["This Month Revenue", "本月营业额", money(monthRevenue), monthLabel],
-              ["Unread Messages", "未读消息", unreadThreads.length, "Need reply"],
-              ["Day Sales", "当天收款", money(daySales), shortDate(reportDay)],
-              ["Day Capacity", "当天剩余容量", `${reportCapacityLeft}/${MAX_DOGS_PER_DAY}`, offDays.includes(reportKey) ? "Off Day" : "Slots left"]
-            ].map(([en, zh, value, sub]) => (
-              <article key={en} className="villa-card flex min-h-[128px] flex-col justify-between p-4">
-                <p className="m-0 text-xs font-black text-villa-text-secondary">{t({ en: String(en), zh: String(zh) })}</p>
-                <strong className="text-2xl font-black text-villa-text-primary">{value}</strong>
-                <span className="text-[11px] font-bold text-villa-text-muted">{sub}</span>
-              </article>
+              { en: "Check-in", zh: "入住", value: dayCheckIns.length, sub: `${dayCheckIns.length} bookings`, action: () => { setBookingSearch(reportKey); setBookingStatusFilter(""); scrollToHostSection("booking-center"); } },
+              { en: "Check-out", zh: "退房", value: dayCheckOuts.length, sub: `${dayCheckOuts.length} bookings`, action: () => { setBookingSearch(reportKey); setBookingStatusFilter(""); scrollToHostSection("booking-center"); } },
+              { en: "Active Bookings", zh: "进行中预约", value: activeOrders.length, sub: "Currently active", action: () => { setBookingStatusFilter("Checked In"); scrollToHostSection("booking-center"); } },
+              { en: "Pending Payment", zh: "待收付款", value: money(balanceDue), sub: "Unpaid balance", action: () => { setBookingStatusFilter("Half Payment"); scrollToHostSection("booking-center"); } },
+              { en: "This Month Revenue", zh: "本月营业额", value: money(monthRevenue), sub: monthLabel, action: () => scrollToHostSection("payments") },
+              { en: "Unread Messages", zh: "未读消息", value: unreadThreads.length, sub: "Need reply", action: () => scrollToHostSection("messages") },
+              { en: "Day Sales", zh: "当天收款", value: money(daySales), sub: shortDate(reportDay), action: () => scrollToHostSection("payments") },
+              { en: "Day Capacity", zh: "当天剩余容量", value: `${reportCapacityLeft}/${MAX_DOGS_PER_DAY}`, sub: offDays.includes(reportKey) ? "Off Day" : "Slots left", action: () => { setManagedDay(reportDay); scrollToHostSection("calendar-capacity"); } }
+            ].map((card) => (
+              <button key={card.en} type="button" onClick={card.action} className="villa-card flex min-h-[128px] flex-col justify-between p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg">
+                <p className="m-0 text-xs font-black text-villa-text-secondary">{t({ en: card.en, zh: card.zh })}</p>
+                <strong className="text-2xl font-black text-villa-text-primary">{card.value}</strong>
+                <span className="text-[11px] font-bold text-villa-text-muted">{card.sub}</span>
+              </button>
             ))}
           </section>
 
@@ -811,12 +987,33 @@ export default function HostPage() {
                   <h2 className="card-title">Booking Status Overview</h2>
                   <div className="mt-4 grid gap-2">
                     {statusOverview.map(([label, count]) => (
-                      <div key={label} className="flex items-center justify-between rounded-[14px] border border-villa-primary-light bg-white px-3 py-2 text-sm font-bold">
+                      <button key={label} type="button" onClick={() => {
+                        setBookingStatusFilter(String(label));
+                        setBookingSearch("");
+                        scrollToHostSection("booking-center");
+                      }} className={`flex items-center justify-between rounded-[14px] border px-3 py-2 text-left text-sm font-bold transition hover:-translate-y-px ${bookingStatusFilter === label ? "border-villa-primary bg-villa-primary-bg" : "border-villa-primary-light bg-white"}`}>
                         <span>{label}</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs ${statusPill(String(label))}`}>{count}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
+                  {bookingStatusFilter ? (
+                    <div className="mt-4 rounded-[18px] bg-villa-primary-bg p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <strong className="text-sm text-villa-text-primary">{bookingStatusFilter} bookings</strong>
+                        <button type="button" className="text-xs font-black text-villa-primary" onClick={() => setBookingStatusFilter("")}>Clear</button>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {selectedStatusOrders.map((order) => (
+                          <button key={order.orderId} type="button" className="rounded-[14px] bg-white p-3 text-left text-xs font-bold" onClick={() => setSelectedOrderId(order.orderId)}>
+                            <span className="block font-black text-villa-text-primary">{order.pets.map((pet) => pet.name).join(", ") || "Pet"} - {ownerForOrder(order).name}</span>
+                            <span className="text-villa-text-secondary">{orderRangeLabel(order)} - {money(order.balance)} balance</span>
+                          </button>
+                        ))}
+                        {selectedStatusOrders.length === 0 ? <p className="body-copy text-xs">No matching orders.</p> : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               </div>
 
@@ -847,7 +1044,12 @@ export default function HostPage() {
                           <td>{customer.orders.length}</td>
                           <td>{customer.lastStay}</td>
                           <td>{money(customer.totalSpend)}</td>
-                          <td><button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => openCreateBooking(customer)}>Create Booking</button></td>
+                          <td>
+                            <div className="flex gap-2">
+                              <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => setSelectedCustomerId(customer.id)}>Open</button>
+                              <button type="button" className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-black text-white" onClick={() => openCreateBooking(customer)}>Book</button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -862,12 +1064,62 @@ export default function HostPage() {
                         <p className="mt-1 text-xs font-bold text-villa-text-secondary">{selectedCustomer.phone || "No phone"} · {selectedCustomer.email || "No email"}</p>
                         <p className="mt-1 text-xs font-bold text-villa-text-muted">Registered {selectedCustomer.registerDate || "-"} · Last stay {selectedCustomer.lastStay}</p>
                       </div>
-                      <button type="button" className="villa-button-outline bg-white px-4 py-2 text-xs" onClick={() => openCreateBooking(selectedCustomer)}>Create Booking</button>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="villa-button-outline bg-white px-4 py-2 text-xs" onClick={() => openCustomerEditor(selectedCustomer)}>Edit Customer</button>
+                        <button type="button" className="villa-button-outline bg-white px-4 py-2 text-xs" onClick={() => ensureCustomerThread(selectedCustomer)}>Send Message</button>
+                        <button type="button" className="villa-button px-4 py-2 text-xs" onClick={() => openCreateBooking(selectedCustomer)}>Create Booking</button>
+                        <button type="button" className="rounded-pill border border-red-200 bg-white px-4 py-2 text-xs font-black text-red-500" onClick={() => window.confirm("Delete this customer and their local pets/orders?") && deleteCustomer(selectedCustomer)}>Delete</button>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-[14px] bg-white p-3 text-sm font-black">Dogs: {selectedCustomer.dogs.length}</div>
                       <div className="rounded-[14px] bg-white p-3 text-sm font-black">Orders: {selectedCustomer.orders.length}</div>
                       <div className="rounded-[14px] bg-white p-3 text-sm font-black">Spend: {money(selectedCustomer.totalSpend)}</div>
+                    </div>
+                    {customerEditOpen ? (
+                      <div className="mt-3 grid gap-3 rounded-[16px] bg-white p-3 sm:grid-cols-3">
+                        <input className="villa-input" value={customerEditForm.name} onChange={(event) => setCustomerEditForm({ ...customerEditForm, name: event.target.value })} placeholder="Full name" />
+                        <input className="villa-input" value={customerEditForm.phone} onChange={(event) => setCustomerEditForm({ ...customerEditForm, phone: event.target.value })} placeholder="Phone" />
+                        <input className="villa-input" value={customerEditForm.email} onChange={(event) => setCustomerEditForm({ ...customerEditForm, email: event.target.value })} placeholder="Email" />
+                        <button type="button" className="villa-button sm:col-span-2" onClick={saveCustomerEdit}>Save Customer</button>
+                        <button type="button" className="villa-button-outline bg-white" onClick={() => setCustomerEditOpen(false)}>Cancel</button>
+                      </div>
+                    ) : null}
+                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-[16px] bg-white p-3">
+                        <h4 className="text-sm font-black text-villa-text-primary">Dog List</h4>
+                        <div className="mt-2 grid gap-2">
+                          {selectedCustomer.dogs.map((dog) => {
+                            const fullDogRecord = dogs.find((item) => item.ownerId === selectedCustomer.id && item.id === dog.id) || {
+                              ...dog,
+                              ownerId: selectedCustomer.id,
+                              ownerName: selectedCustomer.name,
+                              ownerPhone: selectedCustomer.phone,
+                              ownerEmail: selectedCustomer.email,
+                            };
+
+                            return (
+                            <button key={dog.id} type="button" className="rounded-[12px] bg-villa-primary-bg p-2 text-left text-xs font-bold" onClick={() => openDogEditor(fullDogRecord)}>
+                              <span className="block font-black">{dog.name || "Unnamed dog"} - {dog.breed || "Small dog"}</span>
+                              <span className="text-villa-text-secondary">{dog.weight || "-"}kg - {dog.vaccinated ? "Vaccinated" : "Not vaccinated"}</span>
+                            </button>
+                            );
+                          })}
+                          {selectedCustomer.dogs.length === 0 ? <p className="body-copy text-xs">No dogs yet.</p> : null}
+                        </div>
+                      </div>
+                      <div className="rounded-[16px] bg-white p-3">
+                        <h4 className="text-sm font-black text-villa-text-primary">Order History</h4>
+                        <div className="mt-2 grid max-h-[190px] gap-2 overflow-auto pr-1">
+                          {selectedCustomer.orders.map((order) => (
+                            <button key={order.orderId} type="button" className="rounded-[12px] bg-villa-primary-bg p-2 text-left text-xs font-bold" onClick={() => setSelectedOrderId(order.orderId)}>
+                              <span className="block font-black">{order.orderId} - {bookingStatus(order)}</span>
+                              <span className="text-villa-text-secondary">{orderRangeLabel(order)} - {money(order.total)}</span>
+                            </button>
+                          ))}
+                          {selectedCustomer.orders.length === 0 ? <p className="body-copy text-xs">No orders yet.</p> : null}
+                        </div>
+                      </div>
                     </div>
                   </article>
                 ) : null}
@@ -896,7 +1148,10 @@ export default function HostPage() {
                         <span>{dog.medication || "No medication"}</span>
                         <span>{dog.specialNotes || "No notes"}</span>
                       </div>
-                      <button type="button" className="mt-3 rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => setSelectedDogKey(`${dog.ownerId}-${dog.id}`)}>View Full Profile</button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => setSelectedDogKey(`${dog.ownerId}-${dog.id}`)}>View Full Profile</button>
+                        <button type="button" className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-black text-white" onClick={() => openDogEditor(dog)}>Edit Dog</button>
+                      </div>
                     </article>
                   ))}
                   {filteredDogs.length === 0 ? <p className="body-copy">No dog profiles yet.</p> : null}
@@ -912,8 +1167,35 @@ export default function HostPage() {
                       <span>Vaccination: {selectedDog.vaccinated ? "Vaccinated" : "Not verified"}</span>
                       <span>Allergy: {selectedDog.allergies || "None"}</span>
                       <span>Medication: {selectedDog.medication || "None"}</span>
+                      <span>Medical record: {selectedDog.medicalRecordName || "Not uploaded"}</span>
                       <span className="sm:col-span-2">Notes: {selectedDog.specialNotes || "No notes"}</span>
                     </div>
+                    <button type="button" className="villa-button-outline mt-3 bg-white px-4 py-2 text-xs" onClick={() => openDogEditor(selectedDog)}>Edit Dog</button>
+                    {dogEditOpen && dogEditForm ? (
+                      <div className="mt-4 grid gap-3 rounded-[16px] bg-white p-3 sm:grid-cols-2">
+                        <input className="villa-input" value={dogEditForm.name} onChange={(event) => setDogEditForm({ ...dogEditForm, name: event.target.value })} placeholder="Dog name" />
+                        <input className="villa-input" value={dogEditForm.breed} onChange={(event) => setDogEditForm({ ...dogEditForm, breed: event.target.value })} placeholder="Breed" />
+                        <input className="villa-input" value={dogEditForm.age} onChange={(event) => setDogEditForm({ ...dogEditForm, age: event.target.value })} placeholder="Age" />
+                        <input className="villa-input" value={dogEditForm.weight} onChange={(event) => setDogEditForm({ ...dogEditForm, weight: event.target.value })} placeholder="Weight kg" />
+                        <label className="flex items-center gap-2 rounded-[14px] border border-villa-primary-light bg-villa-primary-bg px-3 py-3 text-sm font-black">
+                          <input type="checkbox" checked={dogEditForm.vaccinated} onChange={(event) => setDogEditForm({ ...dogEditForm, vaccinated: event.target.checked })} />
+                          Vaccinated
+                        </label>
+                        <label className="flex items-center gap-2 rounded-[14px] border border-villa-primary-light bg-villa-primary-bg px-3 py-3 text-sm font-black">
+                          <input type="checkbox" checked={dogEditForm.neutered} onChange={(event) => setDogEditForm({ ...dogEditForm, neutered: event.target.checked })} />
+                          Neutered
+                        </label>
+                        <input className="villa-input" value={dogEditForm.allergies} onChange={(event) => setDogEditForm({ ...dogEditForm, allergies: event.target.value })} placeholder="Allergy" />
+                        <input className="villa-input" value={dogEditForm.medication} onChange={(event) => setDogEditForm({ ...dogEditForm, medication: event.target.value })} placeholder="Medication" />
+                        <textarea className="villa-input h-24 py-3 sm:col-span-2" value={dogEditForm.specialNotes} onChange={(event) => setDogEditForm({ ...dogEditForm, specialNotes: event.target.value })} placeholder="Notes" />
+                        <label className="grid cursor-pointer place-items-center rounded-[14px] border border-villa-primary-light bg-villa-primary-bg px-4 py-3 text-sm font-black text-villa-primary sm:col-span-2">
+                          {dogEditForm.medicalRecordName ? `Medical record: ${dogEditForm.medicalRecordName}` : "Upload Medical Record"}
+                          <input type="file" accept="image/*,.pdf" className="sr-only" onChange={handleMedicalRecordFile} />
+                        </label>
+                        <button type="button" className="villa-button" onClick={saveDogEdit}>Save Dog</button>
+                        <button type="button" className="villa-button-outline bg-white" onClick={() => setDogEditOpen(false)}>Cancel</button>
+                      </div>
+                    ) : null}
                   </article>
                 ) : null}
               </section>
@@ -928,7 +1210,7 @@ export default function HostPage() {
                   <table className="w-full min-w-[900px] text-left text-sm">
                     <thead className="text-xs uppercase text-villa-text-secondary">
                       <tr className="border-b border-villa-primary-light">
-                        <th className="py-3">Booking ID</th><th>Owner</th><th>Dog(s)</th><th>Check-in</th><th>Check-out</th><th>Status</th><th>Payment</th><th>Paid</th><th>Balance</th>
+                        <th className="py-3">Booking ID</th><th>Owner</th><th>Dog(s)</th><th>Check-in</th><th>Check-out</th><th>Status</th><th>Payment</th><th>Paid</th><th>Balance</th><th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -946,6 +1228,7 @@ export default function HostPage() {
                             <td><span className={`rounded-full px-2.5 py-1 text-xs ${statusPill(paymentStatus(order))}`}>{paymentStatus(order)}</span></td>
                             <td>{money(order.paid)}</td>
                             <td>{money(order.balance)}</td>
+                            <td><button type="button" className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-black text-white" onClick={() => setSelectedOrderId(order.orderId)}>Details</button></td>
                           </tr>
                         );
                       })}
@@ -1064,11 +1347,15 @@ export default function HostPage() {
                               <strong className="block text-sm">{photo.petName}</strong>
                               <span className="text-xs font-bold text-villa-text-secondary">{photo.breed}</span>
                             </div>
-                            <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusPill(photo.visibleOnHome ? "Live" : "Hidden")}`}>{photo.visibleOnHome ? "Published" : "Hidden"}</span>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusPill(photo.visibleOnHome ? "Live" : "Hidden")}`}>{photo.visibleOnHome ? "Published" : "Hidden"}</span>
+                              {(photo as GuestPhoto & { featured?: boolean }).featured ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Featured</span> : null}
+                            </div>
                           </div>
                           {!photo.id.startsWith("guest-") ? (
-                            <div className="mt-3 flex gap-2">
-                              <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => updateGuestPhoto(photo.id, { visibleOnHome: !photo.visibleOnHome })}>{photo.visibleOnHome ? "Hide" : "Publish"}</button>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => updateGuestPhoto(photo.id, { visibleOnHome: !photo.visibleOnHome })}>{photo.visibleOnHome ? "Hide" : "Show"}</button>
+                              <button type="button" className="rounded-pill border border-amber-200 px-3 py-1 text-xs font-black text-amber-700" onClick={() => updateGuestPhoto(photo.id, { featured: !(photo as GuestPhoto & { featured?: boolean }).featured } as Partial<GuestPhoto>)}>{(photo as GuestPhoto & { featured?: boolean }).featured ? "Unfeature" : "Feature"}</button>
                               <button type="button" className="rounded-pill border border-red-200 px-3 py-1 text-xs font-black text-red-500" onClick={() => deleteGuestPhoto(photo.id)}>Delete</button>
                             </div>
                           ) : null}
@@ -1100,7 +1387,7 @@ export default function HostPage() {
                   <h2 className="card-title">Messages Inbox</h2>
                   {unreadThreads.length ? <span className="rounded-full bg-villa-primary px-2 py-1 text-xs font-black text-white">{unreadThreads.length} unread</span> : null}
                 </div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-[180px_1fr]">
+                <div className="mt-4 grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_260px]">
                   <div className="grid max-h-[360px] content-start gap-2 overflow-auto pr-1">
                     {threads.map((thread) => (
                       <button key={thread.id} type="button" className={`rounded-[14px] border p-3 text-left text-xs font-black ${thread.id === selectedThreadId ? "border-villa-primary bg-villa-primary-bg text-villa-primary" : "border-villa-primary-light bg-white text-villa-text-primary"}`} onClick={() => setSelectedThreadId(thread.id)}>
@@ -1121,11 +1408,6 @@ export default function HostPage() {
                           <strong className="block text-sm text-villa-text-primary">{selectedThread?.userName || "Select a chat"}</strong>
                           <span className="text-xs font-bold text-villa-text-secondary">{selectedThreadCustomer?.phone || selectedThread?.userPhone || "No phone"} · {selectedThreadCustomer?.email || "No email"}</span>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-[11px] font-black text-villa-primary" onClick={() => selectedThreadCustomer && setSelectedCustomerId(selectedThreadCustomer.id)}>View Profile</button>
-                          <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-[11px] font-black text-villa-primary" onClick={() => document.getElementById("booking-center")?.scrollIntoView({ behavior: "smooth" })}>View Booking</button>
-                          <button type="button" className="rounded-pill bg-villa-primary px-3 py-1 text-[11px] font-black text-white" onClick={() => openCreateBooking(selectedThreadCustomer)}>Create Booking</button>
-                        </div>
                       </div>
                     </div>
                     <div className="mt-3 grid max-h-[340px] gap-3 overflow-auto rounded-[18px] bg-villa-primary-bg p-3">
@@ -1139,6 +1421,37 @@ export default function HostPage() {
                       <button type="button" className="villa-button px-5" onClick={sendHostReply}>Send</button>
                     </div>
                   </div>
+                  <aside className="rounded-[18px] border border-villa-primary-light bg-white p-4">
+                    <h3 className="card-title">Customer Card</h3>
+                    {selectedThreadCustomer ? (
+                      <div className="mt-3 grid gap-3 text-sm font-bold">
+                        <div className="rounded-[14px] bg-villa-primary-bg p-3">
+                          <strong className="block text-villa-text-primary">{selectedThreadCustomer.name}</strong>
+                          <span className="block text-xs text-villa-text-secondary">{selectedThreadCustomer.phone || "No phone"}</span>
+                          <span className="block text-xs text-villa-text-secondary">{selectedThreadCustomer.email || "No email"}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <span className="rounded-[12px] bg-villa-primary-bg p-2"><b className="block text-base">{selectedChatDogs.length}</b>Dogs</span>
+                          <span className="rounded-[12px] bg-villa-primary-bg p-2"><b className="block text-base">{selectedChatOrders.length}</b>Orders</span>
+                          <span className="rounded-[12px] bg-villa-primary-bg p-2"><b className="block text-base">{money(selectedChatBalance)}</b>Balance</span>
+                        </div>
+                        <div className="grid gap-2">
+                          <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => {
+                            setSelectedCustomerId(selectedThreadCustomer.id);
+                            scrollToHostSection("customers");
+                          }}>Open CRM</button>
+                          <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => {
+                            setBookingSearch(selectedThreadCustomer.name);
+                            setBookingStatusFilter("");
+                            scrollToHostSection("booking-center");
+                          }}>Open Orders</button>
+                          <button type="button" className="villa-button px-3 py-2 text-xs" onClick={() => openCreateBooking(selectedThreadCustomer)}>Create Booking</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="body-copy mt-3 text-xs">Select a customer chat to view CRM details.</p>
+                    )}
+                  </aside>
                 </div>
               </section>
 
@@ -1286,6 +1599,52 @@ export default function HostPage() {
         </div>
       ) : null}
 
+      {selectedOrder ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 p-3">
+          <aside className="villa-card h-full w-full max-w-md overflow-auto p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="section-title">Booking Detail</h2>
+                <p className="body-copy mt-1">{selectedOrder.orderId}</p>
+              </div>
+              <button type="button" className="villa-button-outline h-10 bg-white px-4" onClick={() => setSelectedOrderId("")}>Close</button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <section className="rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-4">
+                <h3 className="card-title">{selectedOrderOwner?.name || "Pet Owner"}</h3>
+                <p className="mt-1 text-xs font-bold text-villa-text-secondary">{selectedOrderOwner?.phone || "No phone"} · {selectedOrderOwner?.email || "No email"}</p>
+              </section>
+
+              <section className="rounded-[18px] border border-villa-primary-light bg-white p-4 text-sm font-bold">
+                <div className="grid gap-3">
+                  <div className="flex justify-between gap-3"><span>Dog</span><strong>{selectedOrder.pets.map((pet) => `${pet.name} (${pet.breed || "Small dog"})`).join(", ")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Service</span><strong>{selectedOrder.serviceLabel}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Check In</span><strong>{shortDate(getOrderDateRange(selectedOrder)?.start)}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Check Out</span><strong>{shortDate(getOrderDateRange(selectedOrder)?.end)}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Status</span><span className={`rounded-full px-2.5 py-1 text-xs ${statusPill(bookingStatus(selectedOrder))}`}>{bookingStatus(selectedOrder)}</span></div>
+                  <div className="flex justify-between gap-3"><span>Payment</span><span className={`rounded-full px-2.5 py-1 text-xs ${statusPill(paymentStatus(selectedOrder))}`}>{paymentStatus(selectedOrder)}</span></div>
+                </div>
+              </section>
+
+              <section className="rounded-[18px] border border-villa-primary-light bg-white p-4 text-sm font-bold">
+                <div className="flex justify-between gap-3"><span>Total</span><strong>{money(selectedOrder.total)}</strong></div>
+                <div className="mt-2 flex justify-between gap-3"><span>Paid</span><strong>{money(selectedOrder.paid)}</strong></div>
+                <div className="mt-2 flex justify-between gap-3 text-villa-primary"><span>Balance</span><strong>{money(selectedOrder.balance)}</strong></div>
+              </section>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => updateHostOrder(selectedOrder, (order) => ({ ...order, status: "active" }))}>Check In</button>
+                <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => updateHostOrder(selectedOrder, (order) => ({ ...order, status: "ready_pickup" }))}>Check Out</button>
+                <button type="button" className="villa-button px-3 py-2 text-xs" onClick={() => updateHostOrder(selectedOrder, (order) => ({ ...order, paid: order.total, balance: 0, status: order.status === "balance" ? "confirmed" : order.status }))}>Mark Full Payment</button>
+                <button type="button" className="rounded-pill border border-red-200 bg-white px-3 py-2 text-xs font-black text-red-500" onClick={() => updateHostOrder(selectedOrder, (order) => ({ ...order, status: "cancelled", cancelledAt: new Date().toISOString() }))}>Cancel Booking</button>
+                <button type="button" className="villa-button-outline col-span-2 bg-white px-3 py-2 text-xs" onClick={() => selectedOrderCustomer && ensureCustomerThread(selectedOrderCustomer)}>Send Message</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
       {managedDay ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
           <div className="villa-card max-h-[90vh] w-full max-w-xl overflow-auto p-5">
@@ -1319,10 +1678,23 @@ export default function HostPage() {
                 <article key={order.orderId} className="rounded-[16px] border border-villa-primary-light bg-white p-3 text-sm font-bold">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <strong>{order.pets.map((pet) => pet.name).join(", ") || "Pet"}</strong>
-                      <p className="mt-1 text-xs text-villa-text-secondary">{ownerForOrder(order).name} · {order.serviceLabel} · {orderRangeLabel(order)} · {order.pets.length} dog(s)</p>
+                      <strong>{ownerForOrder(order).name}</strong>
+                      <p className="mt-1 text-xs text-villa-text-secondary">{order.pets.map((pet) => `${pet.name} (${pet.breed || "Small dog"})`).join(", ") || "Pet"}</p>
+                      <p className="mt-1 text-xs text-villa-text-muted">{order.serviceLabel} · {orderRangeLabel(order)} · {order.pets.length} slot(s)</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusPill(bookingStatus(order))}`}>{bookingStatus(order)}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => {
+                      setSelectedOrderId(order.orderId);
+                      setManagedDay(null);
+                    }}>Open Booking</button>
+                    <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => {
+                      const owner = ownerForOrder(order);
+                      setSelectedCustomerId(owner.id);
+                      setManagedDay(null);
+                      scrollToHostSection("customers");
+                    }}>Open Customer</button>
                   </div>
                 </article>
               ))}
