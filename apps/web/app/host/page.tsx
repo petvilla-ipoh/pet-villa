@@ -963,8 +963,102 @@ export default function HostPage() {
             </div>
           </section>
 
+          <section id="messages" className="mt-5 villa-card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="section-title">Messages Inbox</h2>
+                <p className="body-copy mt-1">Reply customers, check their dogs, and create bookings from one workspace.</p>
+              </div>
+              {unreadThreads.length ? <span className="rounded-full bg-villa-primary px-3 py-1 text-xs font-black text-white">{unreadThreads.length} unread</span> : null}
+            </div>
+            <div className="mt-4 grid min-h-[620px] gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+              <div className="rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <strong className="text-sm text-villa-text-primary">Chats</strong>
+                  <span className="text-xs font-black text-villa-text-muted">{threads.length}</span>
+                </div>
+                <div className="grid max-h-[560px] content-start gap-2 overflow-auto pr-1">
+                  {threads.map((thread) => (
+                    <button key={thread.id} type="button" className={`rounded-[16px] border p-3 text-left transition hover:-translate-y-px ${thread.id === selectedThreadId ? "border-villa-primary bg-white shadow-md" : "border-villa-primary-light bg-white/70"}`} onClick={() => setSelectedThreadId(thread.id)}>
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-black text-villa-text-primary">{thread.userName}</span>
+                        {thread.messages.at(-1)?.from === "owner" ? <span className="rounded-full bg-villa-primary px-2 py-0.5 text-[10px] font-black text-white">New</span> : null}
+                      </span>
+                      <span className="mt-1 block truncate text-xs font-bold text-villa-text-secondary">{thread.messages.at(-1)?.text || "No message yet"}</span>
+                      <span className="mt-1 block text-[10px] font-black text-villa-text-muted">{thread.messages.at(-1)?.createdAt ? shortDateFromISO(thread.messages.at(-1)?.createdAt) : "No time"}</span>
+                    </button>
+                  ))}
+                  {threads.length === 0 ? <p className="body-copy rounded-[16px] bg-white p-3 text-xs">No customer chats yet.</p> : null}
+                </div>
+              </div>
+
+              <div className="flex min-h-0 flex-col rounded-[18px] border border-villa-primary-light bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-villa-primary-light pb-3">
+                  <div>
+                    <strong className="block text-base text-villa-text-primary">{selectedThread?.userName || "Select a chat"}</strong>
+                    <span className="text-xs font-bold text-villa-text-secondary">{selectedThreadCustomer?.phone || selectedThread?.userPhone || "No phone"} · {selectedThreadCustomer?.email || "No email"}</span>
+                  </div>
+                  {selectedThreadCustomer ? (
+                    <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => {
+                      setSelectedCustomerId(selectedThreadCustomer.id);
+                      scrollToHostSection("customers");
+                    }}>Open CRM</button>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid flex-1 content-start gap-3 overflow-auto rounded-[18px] bg-villa-primary-bg p-4">
+                  {messages.map((message) => (
+                    <div key={message.id} className={`max-w-[78%] rounded-[18px] p-3 text-sm font-bold leading-relaxed ${message.from === "host" ? "justify-self-end bg-villa-primary text-white" : "bg-white text-villa-text-primary"}`}>{message.text}</div>
+                  ))}
+                  {messages.length === 0 ? <p className="body-copy rounded-[18px] bg-white p-4">Choose a customer conversation to reply.</p> : null}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <input className="villa-input" value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as host..." />
+                  <button type="button" className="villa-button px-6" onClick={sendHostReply}>Send</button>
+                </div>
+              </div>
+
+              <aside className="rounded-[18px] border border-villa-primary-light bg-white p-4">
+                <h3 className="card-title">Customer Card</h3>
+                {selectedThreadCustomer ? (
+                  <div className="mt-4 grid gap-3 text-sm font-bold">
+                    <div className="rounded-[16px] bg-villa-primary-bg p-4">
+                      <strong className="block text-villa-text-primary">{selectedThreadCustomer.name}</strong>
+                      <span className="mt-1 block text-xs text-villa-text-secondary">{selectedThreadCustomer.phone || "No phone"}</span>
+                      <span className="block text-xs text-villa-text-secondary">{selectedThreadCustomer.email || "No email"}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <span className="rounded-[14px] bg-villa-primary-bg p-3"><b className="block text-lg">{selectedChatDogs.length}</b>Dogs</span>
+                      <span className="rounded-[14px] bg-villa-primary-bg p-3"><b className="block text-lg">{selectedChatOrders.length}</b>Orders</span>
+                      <span className="rounded-[14px] bg-villa-primary-bg p-3"><b className="block text-lg">{money(selectedChatBalance)}</b>Balance</span>
+                    </div>
+                    <div className="rounded-[16px] bg-villa-primary-bg p-3">
+                      <strong className="text-xs uppercase text-villa-text-secondary">Dogs</strong>
+                      <div className="mt-2 grid gap-1 text-xs">
+                        {selectedChatDogs.slice(0, 4).map((dog) => <span key={dog.id}>{dog.name} · {dog.breed || "Small dog"}</span>)}
+                        {selectedChatDogs.length === 0 ? <span>No dogs saved.</span> : null}
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => {
+                        setSelectedCustomerId(selectedThreadCustomer.id);
+                        scrollToHostSection("customers");
+                      }}>Open CRM</button>
+                      <button type="button" className="villa-button-outline bg-white px-3 py-2 text-xs" onClick={() => {
+                        setBookingSearch(selectedThreadCustomer.name);
+                        setBookingStatusFilter("");
+                        scrollToHostSection("booking-center");
+                      }}>Open Orders</button>
+                      <button type="button" className="villa-button px-3 py-2 text-xs" onClick={() => openCreateBooking(selectedThreadCustomer)}>Create Booking</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="body-copy mt-3 text-xs">Select a customer chat to view phone, email, dogs, orders, and outstanding balance.</p>
+                )}
+              </aside>
+            </div>
+          </section>
+
           <section className="mt-5 grid gap-5">
-            <div className="grid gap-5">
               <div className="grid gap-5 lg:grid-cols-2">
                 <article id="payments" className="villa-card p-5">
                   <h2 className="card-title">Sales Overview</h2>
@@ -1365,24 +1459,8 @@ export default function HostPage() {
                   </div>
                 </div>
               </section>
-            </div>
-
-            <aside className="grid h-fit gap-5 lg:grid-cols-2 2xl:grid-cols-4">
-              <section className="villa-card p-5">
-                <h2 className="card-title">Calendar Mini View</h2>
-                <div className="mt-3 grid grid-cols-7 gap-1 text-center text-xs font-black">
-                  {days.slice(0, 30).map((date) => {
-                    const slots = availableSlotsForDate(date, capacityMap);
-                    const off = offDays.includes(toDateKey(date));
-                    return <button key={toDateKey(date)} type="button" onClick={() => {
-                      setReportDate(toDateKey(date));
-                      setManagedDay(date);
-                    }} className={`rounded-lg py-2 ${off ? "bg-villa-text-primary text-white" : slots <= 0 ? "bg-red-100 text-red-600" : slots < MAX_DOGS_PER_DAY ? "bg-amber-100 text-amber-700" : "bg-white"}`}>{date.getDate()}</button>;
-                  })}
-                </div>
-              </section>
-
-              <section id="messages" className="villa-card p-5 lg:col-span-2">
+            <aside className="hidden">
+              <section id="messages-legacy" className="villa-card p-5 lg:col-span-2">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="card-title">Messages Inbox</h2>
                   {unreadThreads.length ? <span className="rounded-full bg-villa-primary px-2 py-1 text-xs font-black text-white">{unreadThreads.length} unread</span> : null}
