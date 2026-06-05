@@ -13,8 +13,9 @@ These issues were discovered from the current repository state and should be rev
    - Web pages still rely heavily on localStorage helper modules.
 
 3. Real authentication is not production-grade yet.
-   - Current web session uses local browser storage.
-   - Passwords/OTP flows need secure backend provider integration before real launch.
+   - Supabase Auth Round 1 is connected for login/register.
+   - Legacy localStorage fallback remains so existing Booking/Payment/Host flows continue to work.
+   - OTP is still demo-only (`123456`) and needs real phone/email OTP before launch.
 
 4. Upload storage is not production-grade.
    - Gallery and pet images may be stored as local data URLs.

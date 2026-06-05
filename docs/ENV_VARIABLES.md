@@ -27,6 +27,8 @@ Do not store secrets in GitHub. This file lists only key names and usage.
 | Key | Usage |
 | --- | --- |
 | `NEXT_PUBLIC_API_URL` | Public API base URL for Next.js web app. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Public Supabase project URL for browser Auth. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase anon key for browser Auth. |
 | `EXPO_PUBLIC_API_URL` | Public API base URL for Expo/mobile app. |
 
 ## Deployment
@@ -35,7 +37,7 @@ Do not store secrets in GitHub. This file lists only key names and usage.
 | --- | --- |
 | `RENDER_HEALTHCHECK_PATH` | Optional deployment health check path. |
 
-Total documented ENV keys: 18.
+Total documented ENV keys: 20.
 
 ## Important Backup Note
 

@@ -2,6 +2,8 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useLanguage } from "../components/LanguageProvider";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
+import { upsertSupabaseProfile, writeLocalSessionUser } from "../lib/authSession";
 import { savePendingReferralCode } from "../lib/vouchers";
 
 type AuthMode = "login" | "register";
@@ -18,6 +20,7 @@ type PendingUser = {
   expiresAt: number;
 };
 
+// TODO: real OTP - replace this demo OTP with Supabase phone OTP or a verified SMS/email provider.
 const DEMO_OTP = "123456";
 
 function makeUserId(emailOrPhone: string) {
@@ -219,7 +222,7 @@ export default function AuthPage() {
     window.dispatchEvent(new Event("pet-villa-route"));
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     const fullName = String(form.get("fullName") || "").trim();
     const emailOrPhone = String(form.get("emailOrPhone") || form.get("email") || "").trim();
@@ -261,6 +264,29 @@ export default function AuthPage() {
       setErrorMessage(t({ en: "Please enter email or phone number and password.", zh: "请输入邮箱或电话号码和密码。" }));
       return;
     }
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const credentials = emailOrPhone.includes("@")
+        ? { email: emailOrPhone, password }
+        : { phone: emailOrPhone, password };
+      const { data, error } = await supabase.auth.signInWithPassword(credentials);
+      if (!error && data.user) {
+        const localUser = {
+          id: data.user.id,
+          role: "owner" as const,
+          name: String(data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email || "Pet Owner"),
+          email: String(data.user.email || ""),
+          phone: String(data.user.user_metadata?.phone || data.user.phone || ""),
+          phoneVerified: Boolean(data.user.user_metadata?.phone_verified),
+          emailVerified: Boolean(data.user.email_confirmed_at || data.user.user_metadata?.email_verified)
+        };
+        writeLocalSessionUser(localUser);
+        void upsertSupabaseProfile(data.user, localUser);
+        window.location.href = redirect || "/";
+        return;
+      }
+    }
+
     const registered = readRegisteredUser();
     const matched = registered && (registered.email === emailOrPhone || registered.phone === emailOrPhone);
     if (!registered || !matched) {
@@ -271,18 +297,15 @@ export default function AuthPage() {
       setErrorMessage(t({ en: "Incorrect password. Please try again.", zh: "密码不正确，请重试。" }));
       return;
     }
-    window.localStorage.setItem("pet-villa-session", JSON.stringify({
-      user: {
-        id: registered.id || makeUserId(registered.email || registered.phone),
-        role: "owner",
-        name: registered.fullName,
-        email: registered.email,
-        phone: registered.phone,
-        phoneVerified: Boolean(registered.phoneVerified),
-        emailVerified: Boolean(registered.emailVerified)
-      }
-    }));
-    window.dispatchEvent(new Event("pet-villa-auth"));
+    writeLocalSessionUser({
+      id: registered.id || makeUserId(registered.email || registered.phone),
+      role: "owner",
+      name: registered.fullName,
+      email: registered.email,
+      phone: registered.phone,
+      phoneVerified: Boolean(registered.phoneVerified),
+      emailVerified: Boolean(registered.emailVerified)
+    });
     window.location.href = redirect || "/";
   }
 
@@ -309,7 +332,7 @@ export default function AuthPage() {
     }
   }
 
-  function completeOtpVerification() {
+  async function completeOtpVerification() {
     if (!pendingUser) return;
     setErrorMessage("");
     if (Date.now() > pendingUser.expiresAt) {
@@ -320,8 +343,43 @@ export default function AuthPage() {
       setErrorMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
       return;
     }
+    const fallbackId = makeUserId(pendingUser.email || pendingUser.phone);
+    let authUserId = fallbackId;
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email: pendingUser.email,
+        password: pendingUser.password,
+        options: {
+          data: {
+            full_name: pendingUser.fullName,
+            phone: pendingUser.phone,
+            role: "owner",
+            phone_verified: true,
+            email_verified: false,
+            referral_code: pendingUser.referralCode || null
+          }
+        }
+      });
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+      if (data.user) {
+        authUserId = data.user.id;
+        void upsertSupabaseProfile(data.user, {
+          id: data.user.id,
+          role: "owner",
+          name: pendingUser.fullName,
+          email: pendingUser.email,
+          phone: pendingUser.phone,
+          phoneVerified: true,
+          emailVerified: Boolean(data.user.email_confirmed_at)
+        });
+      }
+    }
     const registeredUser = {
-      id: makeUserId(pendingUser.email || pendingUser.phone),
+      id: authUserId,
       fullName: pendingUser.fullName,
       phone: pendingUser.phone,
       email: pendingUser.email,
@@ -335,19 +393,16 @@ export default function AuthPage() {
     if (pendingUser.referralCode) {
       savePendingReferralCode(pendingUser.referralCode, registeredUser.id);
     }
-    window.localStorage.setItem("pet-villa-session", JSON.stringify({
-      user: {
-        id: registeredUser.id,
-        role: "owner",
-        name: pendingUser.fullName,
-        email: pendingUser.email,
-        phone: pendingUser.phone,
-        phoneVerified: true,
-        emailVerified: false
-      }
-    }));
-    window.dispatchEvent(new Event("pet-villa-auth"));
-    setStatusMessage(t({ en: "Phone verified. Welcome to Pet Villa!", zh: "电话号码已验证，欢迎来到 Pet Villa！" }));
+    writeLocalSessionUser({
+      id: registeredUser.id,
+      role: "owner",
+      name: pendingUser.fullName,
+      email: pendingUser.email,
+      phone: pendingUser.phone,
+      phoneVerified: true,
+      emailVerified: false
+    });
+    setStatusMessage(t({ en: isSupabaseConfigured() ? "Phone verified. Supabase account created." : "Phone verified. Welcome to Pet Villa!", zh: isSupabaseConfigured() ? "电话已验证，Supabase 账号已创建。" : "电话号码已验证，欢迎来到 Pet Villa！" }));
     window.setTimeout(() => {
       window.location.href = redirect || "/";
     }, 600);
@@ -617,11 +672,11 @@ export default function AuthPage() {
                   <div className="grid gap-3">
                     <button type="button" onClick={() => alert(t({ en: "Google login is coming soon.", zh: "Google 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
                       <GoogleMark />
-                      {t({ en: "Continue with Google", zh: "使用 Google 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
+                      {t({ en: "Google Login Coming Soon", zh: "Google 登录即将开放" })}
                     </button>
                     <button type="button" onClick={() => alert(t({ en: "Apple login is coming soon.", zh: "Apple 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
                       <AppleMark />
-                      {t({ en: "Continue with Apple", zh: "使用 Apple 继续" })} <span className="text-[10px] text-villa-text-muted">Soon</span>
+                      {t({ en: "Apple Login Coming Soon", zh: "Apple 登录即将开放" })}
                     </button>
                   </div>
                 </>

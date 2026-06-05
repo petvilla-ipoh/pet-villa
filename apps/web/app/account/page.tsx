@@ -4,6 +4,7 @@ import { type ChangeEvent, useEffect, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
+import { signOutAuth } from "../lib/authSession";
 import { avatarOptions, avatarToImageSrc, readProfileAvatar, saveProfileAvatar } from "../lib/profileAvatar";
 
 type SessionUser = {
@@ -184,9 +185,8 @@ export default function AccountPage() {
     setMessage(t({ en: "Password changed successfully.", zh: "密码已成功更改。" }));
   }
 
-  function logout() {
-    window.localStorage.removeItem("pet-villa-session");
-    window.dispatchEvent(new Event("pet-villa-auth"));
+  async function logout() {
+    await signOutAuth();
     window.location.href = "/";
   }
 

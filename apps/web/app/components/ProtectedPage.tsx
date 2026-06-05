@@ -2,19 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
+import { hasAuthSession } from "../lib/authSession";
 
 export function ProtectedPage({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const session = window.localStorage.getItem("pet-villa-session");
-    if (!session) {
-      const redirect = `${window.location.pathname}${window.location.search}`;
-      window.location.href = `/auth?redirect=${encodeURIComponent(redirect)}`;
-      return;
+    let active = true;
+    async function checkSession() {
+      const session = await hasAuthSession();
+      if (!active) return;
+      if (!session) {
+        const redirect = `${window.location.pathname}${window.location.search}`;
+        window.location.href = `/auth?redirect=${encodeURIComponent(redirect)}`;
+        return;
+      }
+      setReady(true);
     }
-    setReady(true);
+    void checkSession();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (!ready) {

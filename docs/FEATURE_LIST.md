@@ -22,12 +22,16 @@ This file lists the v1.0 features discovered in the current project.
 
 - Login page.
 - Register page.
+- Supabase Auth browser client for login and registration.
+- Supabase cookie-backed session storage with legacy localStorage fallback during migration.
+- Profiles table migration for Supabase Auth users.
 - Full name, phone, email, password, confirm password, and optional referral code fields.
 - Phone OTP-style registration flow in UI.
+- Demo OTP remains temporarily marked for real OTP replacement.
 - Forgot/reset password flow with phone/email method support in UI.
 - Password visibility toggles.
 - Terms of Service and Privacy Policy modal/content entry points.
-- Local session storage for current web flow.
+- Local session fallback remains for existing web flows until Booking/Payment data migration is complete.
 
 ## Customer Account
 

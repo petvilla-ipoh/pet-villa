@@ -3,6 +3,7 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { LanguageToggle } from "./LanguageToggle";
 import { useLanguage } from "./LanguageProvider";
+import { signOutAuth, syncSupabaseSessionToLocalStorage } from "../lib/authSession";
 import { avatarToImageSrc, readProfileAvatar } from "../lib/profileAvatar";
 
 function hasSession() {
@@ -243,6 +244,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
     window.addEventListener("pet-villa-auth", sync);
     window.addEventListener("pet-villa-route", sync);
     document.addEventListener("click", closeAccount);
+    void syncSupabaseSessionToLocalStorage().then(sync);
     return () => {
       window.removeEventListener("storage", sync);
       window.removeEventListener("popstate", sync);
@@ -252,9 +254,8 @@ export function AppNav({ host = false }: { host?: boolean }) {
     };
   }, []);
 
-  function logout() {
-    window.localStorage.removeItem("pet-villa-session");
-    window.dispatchEvent(new Event("pet-villa-auth"));
+  async function logout() {
+    await signOutAuth();
     setLoggedIn(false);
     setAccountOpen(false);
     window.location.href = "/";

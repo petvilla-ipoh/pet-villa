@@ -47,6 +47,12 @@ The app also uses browser events for same-tab/cross-component sync:
 - `pet-villa-availability`
 - `pet-villa-booking-draft`
 
+## Cookie-Based Auth Storage
+
+| Key | Usage |
+| --- | --- |
+| `sb-pet-villa-auth-token` | Supabase Auth browser session stored in a cookie by the web client. This is not a localStorage key. |
+
 ## Reset Risk
 
 If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. This affects local customer accounts, pet profiles, bookings, reviews, messages, gallery uploads, vouchers, and off days in the current web implementation.

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1 - Supabase Auth Round 1
+
+- Installed `@supabase/supabase-js` for the web app.
+- Added a browser Supabase Auth client with cookie-backed session storage.
+- Connected customer login to Supabase `signInWithPassword` with localStorage fallback retained for existing flows.
+- Connected customer registration completion to Supabase `signUp` after the current demo OTP step.
+- Added a `profiles` table migration linked to `auth.users` with RLS policies.
+- Updated logout to call Supabase `signOut` before clearing the legacy fallback session.
+- Kept Google and Apple login buttons visible as Coming Soon.
+- Marked the current `123456` OTP as demo-only with a TODO for real OTP.
+
 ## v1.0 - Stable Release
 
 ### Core Product
