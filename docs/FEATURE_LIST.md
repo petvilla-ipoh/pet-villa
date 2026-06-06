@@ -152,17 +152,21 @@ This file lists the v1.0 features discovered in the current project.
 - New Guest voucher.
 - Multi-dog voucher.
 - Referral voucher flow.
-- Voucher wallet storage.
-- Voucher application in Booking and Payment.
-- Used voucher status with order references.
-- Cancelled eligible bookings can return voucher availability in frontend logic.
+- Voucher wallet reads and writes use Supabase when configured, with localStorage fallback retained.
+- Homepage promotion claim uses Supabase RPC with server-side duplicate prevention when configured.
+- Voucher application in Booking validates against Supabase before Payment when configured.
+- Used voucher status with order references is written to Supabase when configured.
+- Cancelled eligible bookings can return voucher availability in Supabase and local fallback.
 
 ## Referral
 
 - Referral code generation based on user data.
 - Referral code copy action and feedback.
 - Optional referral code field in registration.
-- Referral reward logic scaffold: referrer and friend receive RM10 after qualifying completion.
+- Referral code persistence uses Supabase when configured, with local referral map fallback retained.
+- Pending referral save uses Supabase when configured, with localStorage fallback retained.
+- Referral reward logic issues RM10 vouchers to referrer and friend after qualifying completion.
+- Supabase referral RPC prevents duplicate pending referrals and duplicate promotion voucher claims.
 
 ## Capacity
 

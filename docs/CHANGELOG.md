@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5 - Supabase Voucher and Referral Round 5
+
+- Added a Supabase vouchers/referrals migration with owner-scoped voucher RLS.
+- Added server-side voucher claim, validation, used, restore, and referral reward RPC helpers.
+- Connected Home voucher claim to Supabase with localStorage fallback retained.
+- Connected My Vouchers and Booking voucher reads to Supabase with localStorage fallback retained.
+- Added Supabase voucher validation before continuing from Booking to Payment.
+- Added Supabase referral code persistence and pending referral save.
+- Kept voucher/referral UI design unchanged.
+
 ## v1.4 - Stripe Payment Round 4
 
 - Connected the web Payment page to Stripe Checkout in test mode.

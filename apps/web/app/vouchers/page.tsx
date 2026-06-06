@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { readVouchers, type UserVoucher, type VoucherStatus } from "../lib/vouchers";
+import { loadVouchers, readVouchers, type UserVoucher, type VoucherStatus } from "../lib/vouchers";
 
 const tabs: VoucherStatus[] = ["available", "used", "expired"];
 
@@ -26,10 +26,19 @@ export default function VouchersPage() {
   const [activeTab, setActiveTab] = useState<VoucherStatus>("available");
 
   useEffect(() => {
-    const sync = () => setVouchers(readVouchers());
+    let active = true;
+    const sync = () => {
+      setVouchers(readVouchers());
+      void loadVouchers().then((nextVouchers) => {
+        if (active) setVouchers(nextVouchers);
+      });
+    };
     sync();
     window.addEventListener("pet-villa-vouchers", sync);
-    return () => window.removeEventListener("pet-villa-vouchers", sync);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-vouchers", sync);
+    };
   }, []);
 
   const filtered = useMemo(() => vouchers.filter((voucher) => voucher.status === activeTab), [activeTab, vouchers]);

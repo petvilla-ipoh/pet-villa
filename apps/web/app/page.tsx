@@ -8,7 +8,7 @@ import { getCurrentUserId } from "./lib/petProfiles";
 import { readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
 import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
 import { readPublicReviews, type PublicReview } from "./lib/reviews";
-import { claimVoucher, getReferralCode, readVouchers } from "./lib/vouchers";
+import { claimVoucherOnline, getReferralCode, loadReferralCode, loadVouchers, readVouchers } from "./lib/vouchers";
 
 const phone = "+60165236409";
 const whatsappUrl = "https://wa.me/60165236409?text=Hi%20Pet%20Villa%2C%20I%20would%20like%20to%20ask%20about%20boarding.";
@@ -408,6 +408,8 @@ export default function HomePage() {
   useEffect(() => {
     setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
     setReferralCode(getReferralCode());
+    void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
+    void loadReferralCode().then((code) => setReferralCode(code));
     setGuestPhotos(readHomeGuestPhotos(6));
     setPublicReviews(readPublicReviews());
     setCapacityMap(buildCapacityMap());
@@ -416,7 +418,10 @@ export default function HomePage() {
       setCapacityMap(buildCapacityMap());
       setOffDays(readHostOffDays());
     };
-    const syncVouchers = () => setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
+    const syncVouchers = () => {
+      setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
+      void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
+    };
     const syncGallery = () => setGuestPhotos(readHomeGuestPhotos(6));
     const syncReviews = () => setPublicReviews(readPublicReviews());
     window.addEventListener("pet-villa-orders", sync);
@@ -439,8 +444,8 @@ export default function HomePage() {
   const displayReviews = publicReviews.length ? [...publicReviews, ...reviews] : reviews;
   const activeReview = displayReviews[reviewIndex % displayReviews.length];
 
-  function claimCoupon(code: string) {
-    const result = claimVoucher(code);
+  async function claimCoupon(code: string) {
+    const result = await claimVoucherOnline(code);
     if (result.ok) {
       setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
       setCouponMessage(t({ en: "Voucher added to My Vouchers.", zh: "优惠券已加入优惠券钱包。" }));

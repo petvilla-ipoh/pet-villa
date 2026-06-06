@@ -5,15 +5,16 @@ These issues were discovered from the current repository state and should be rev
 ## P0 Risks
 
 1. Many business records are stored in browser localStorage.
-   - Customer accounts, vouchers, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
+   - Customer account fallback records, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
    - Pet profiles now use Supabase when configured, but keep a localStorage fallback mirror during migration.
    - Booking drafts and orders now use Supabase when configured, but keep localStorage fallback mirrors during migration.
+   - Vouchers, referral codes, and pending referrals now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - A browser reset can lose these records.
 
 2. Real backend database integration is incomplete for the customer-facing web flows.
    - PostgreSQL migrations and API exist.
-   - Auth, pet profiles, booking drafts, and orders have Supabase web integration.
-   - Vouchers, reviews, chat, gallery, host off days, and some host-created demo records still rely on localStorage helper modules.
+   - Auth, pet profiles, booking drafts, orders, vouchers, and referrals have Supabase web integration.
+   - Reviews, chat, gallery, host off days, and some host-created demo records still rely on localStorage helper modules.
 
 3. Real authentication is not production-grade yet.
    - Supabase Auth Round 1 is connected for login/register.
@@ -44,11 +45,11 @@ These issues were discovered from the current repository state and should be rev
    - Capacity/off day logic exists in frontend.
    - Real capacity should be computed from confirmed/paid/active/staying bookings in database by dog count.
 
-3. Referral reward flow is scaffolded in frontend.
-   - Real reward issuance should be server-side to prevent duplicate/abusive claims.
+3. Referral reward flow now has Supabase RPC support, but still needs production abuse controls.
+   - Add rate limiting, first-order qualification rules, and monitoring before launch.
 
-4. Voucher usage is frontend-driven.
-   - Real voucher validation should be server-side.
+4. Voucher validation now has Supabase RPC support, but checkout should continue to treat server-side order totals as authoritative.
+   - Keep Payment and webhook logic aligned with voucher-discounted order totals.
 
 5. Payment integration still needs live-mode verification before launch.
    - Web payments now use Stripe Checkout in test mode.

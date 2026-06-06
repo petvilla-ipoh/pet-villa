@@ -6,7 +6,7 @@ import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { loadPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { loadOrders, saveBookingDraft } from "../lib/orderFlow";
-import { getVoucherDiscount, getVoucherIneligibility, readVouchers, type UserVoucher } from "../lib/vouchers";
+import { getVoucherDiscount, getVoucherIneligibility, loadVouchers, readVouchers, validateVoucherForBooking, type UserVoucher } from "../lib/vouchers";
 import { isHostOffDay, readHostOffDays } from "../lib/hostAvailability";
 import {
   availableSlotsForDate,
@@ -124,12 +124,20 @@ export default function BookingPage() {
     void syncPets();
     void loadOrders();
     setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
+    void loadVouchers().then((nextVouchers) => {
+      if (!active) return;
+      setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
+    });
     setOffDays(readHostOffDays());
     function handlePetsChanged() {
       void syncPets();
     }
     function syncVouchers() {
       setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
+      void loadVouchers().then((nextVouchers) => {
+        if (!active) return;
+        setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
+      });
     }
     function syncAvailability() {
       setOffDays(readHostOffDays());
@@ -240,8 +248,19 @@ export default function BookingPage() {
     return "upcoming";
   }
 
-  function saveDraftForPayment() {
+  async function saveDraftForPayment() {
     if (!confirmCompleted) return;
+    const validation = await validateVoucherForBooking(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
+    if (selectedVoucher && !validation.ok) {
+      setSelectedVoucherId("");
+      const nextVouchers = await loadVouchers();
+      setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
+      return;
+    }
+    const appliedVoucherDiscount = selectedVoucher ? validation.discount : 0;
+    const appliedTotal = Math.max(0, subtotal - appliedVoucherDiscount);
+    const appliedDeposit = Math.ceil(appliedTotal / 2);
+    const appliedBalance = Math.max(0, appliedTotal - appliedDeposit);
     saveBookingDraft({
       id: `draft-${Date.now()}`,
       service,
@@ -258,14 +277,14 @@ export default function BookingPage() {
         weight: pet.weight,
         photoDataUrl: pet.photoDataUrl
       })),
-      total,
+      total: appliedTotal,
       subtotal,
       voucherId: selectedVoucher?.id,
       voucherCode: selectedVoucher?.code,
       voucherTitle: selectedVoucher?.title.en,
-      voucherDiscount,
-      deposit,
-      balance,
+      voucherDiscount: appliedVoucherDiscount,
+      deposit: appliedDeposit,
+      balance: appliedBalance,
       specialRequest,
       createdAt: new Date().toISOString()
     });
