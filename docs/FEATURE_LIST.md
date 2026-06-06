@@ -78,6 +78,7 @@ This file lists the v1.0 features discovered in the current project.
 - Voucher application.
 - Progress bar status sync.
 - Continue to Payment flow.
+- Booking draft save/load uses Supabase when configured, with `pet-villa-booking-draft:{userId}` fallback retained.
 
 ## Payment
 
@@ -89,7 +90,7 @@ This file lists the v1.0 features discovered in the current project.
 - DuitNow QR UI placeholder.
 - FPX, Touch 'n Go eWallet, GrabPay, Visa/Mastercard payment method cards.
 - Demo payment confirmation.
-- Order creation/update after payment.
+- Order creation/update after payment writes to Supabase when configured, with localStorage fallback retained.
 
 ## Orders
 
@@ -103,6 +104,8 @@ This file lists the v1.0 features discovered in the current project.
 - Leave Review panel for completed orders.
 - Review save/cancel behavior.
 - Time status calculations.
+- Order list, detail, payment status, cancellation status, and review updates use Supabase when configured.
+- Orders remain mirrored to `pet-villa-orders:{userId}` as fallback during migration.
 
 ## Diary
 
@@ -188,6 +191,7 @@ This file lists the v1.0 features discovered in the current project.
 - Gallery management.
 - Promotions area.
 - Reports/settings entry points.
+- Host/admin users can read all Supabase orders through role-based RLS.
 
 ## Backend/API
 

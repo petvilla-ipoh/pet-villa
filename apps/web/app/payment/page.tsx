@@ -5,7 +5,7 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { PaymentLogo, paymentMethods, type PaymentMethodId } from "../components/PaymentLogo";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { createOrderFromDraft, readBookingDraft, type BookingDraft } from "../lib/orderFlow";
+import { createOrderFromDraft, loadBookingDraft, type BookingDraft } from "../lib/orderFlow";
 
 type AmountMode = "deposit" | "full";
 
@@ -48,8 +48,17 @@ export default function PaymentPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setDraft(readBookingDraft());
-    setLoaded(true);
+    let active = true;
+    async function loadDraft() {
+      const nextDraft = await loadBookingDraft();
+      if (!active) return;
+      setDraft(nextDraft);
+      setLoaded(true);
+    }
+    void loadDraft();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const booking = draft;
@@ -70,12 +79,12 @@ export default function PaymentPage() {
       : t({ en: `Pay RM${amount} in Full`, zh: `支付 RM${amount} 全款` });
   }, [amount, amountMode, method, t]);
 
-  function confirmPayment() {
+  async function confirmPayment() {
     if (!draft) {
       setMessage(t({ en: "Please create a booking first before payment.", zh: "请先创建预约再付款。" }));
       return;
     }
-    const order = createOrderFromDraft(draft, amount);
+    const order = await createOrderFromDraft(draft, amount);
     setMessage(t({ en: "Payment recorded. Redirecting to My Orders...", zh: "付款已记录，正在前往我的订单..." }));
     window.setTimeout(() => {
       window.location.href = `/orders?order=${order.orderId}`;
@@ -273,7 +282,7 @@ export default function PaymentPage() {
               </p>
               <div className="mt-4 rounded-pill bg-white px-4 py-3 text-center text-xs font-bold shadow-sm">SSL Secure Payment</div>
               {message ? <p className="mt-3 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-bold text-villa-primary">{message}</p> : null}
-              <button type="button" onClick={confirmPayment} className="villa-button mt-4 w-full">
+              <button type="button" onClick={() => void confirmPayment()} className="villa-button mt-4 w-full">
                 {buttonText}
               </button>
             </aside>

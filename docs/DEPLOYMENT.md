@@ -74,6 +74,7 @@ Migration files:
 - `database/migrations/202605270002_add_host_availability_blocks.sql`
 - `database/migrations/202606060001_create_supabase_profiles.sql`
 - `database/migrations/202606060002_create_supabase_pets.sql`
+- `database/migrations/202606060003_create_supabase_bookings_orders.sql`
 
 Run migrations from Supabase SQL Editor or `psql` after setting `DATABASE_URL`.
 

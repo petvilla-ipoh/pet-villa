@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { readOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
+import { loadOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
 import { daysInclusive, formatDateRange, getOrderDateRange, startOfLocalDay } from "../lib/bookingCapacity";
 import { restoreVoucherForOrder } from "../lib/vouchers";
 
@@ -49,12 +49,21 @@ export default function OrdersPage() {
   const [cancelTarget, setCancelTarget] = useState<VillaOrder | null>(null);
 
   useEffect(() => {
-    function syncOrders() {
-      setOrders(readOrders());
+    let active = true;
+    async function syncOrders() {
+      const nextOrders = await loadOrders();
+      if (!active) return;
+      setOrders(nextOrders);
     }
-    syncOrders();
-    window.addEventListener("pet-villa-orders", syncOrders);
-    return () => window.removeEventListener("pet-villa-orders", syncOrders);
+    function handleOrdersChanged() {
+      void syncOrders();
+    }
+    void syncOrders();
+    window.addEventListener("pet-villa-orders", handleOrdersChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-orders", handleOrdersChanged);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -66,8 +75,8 @@ export default function OrdersPage() {
     });
   }, [filter, orders]);
 
-  function payBalance(order: VillaOrder) {
-    const nextOrders = updateOrder(order.orderId, (current) => {
+  async function payBalance(order: VillaOrder) {
+    const nextOrders = await updateOrder(order.orderId, (current) => {
       return {
         ...current,
         paid: current.total,
@@ -79,8 +88,8 @@ export default function OrdersPage() {
     setMessage(t({ en: "Demo payment success. Balance paid successfully.", zh: "测试付款成功，尾款已支付。" }));
   }
 
-  function cancelOrder(order: VillaOrder) {
-    const nextOrders = updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled", cancelledAt: new Date().toISOString() }));
+  async function cancelOrder(order: VillaOrder) {
+    const nextOrders = await updateOrder(order.orderId, (current) => ({ ...current, status: "cancelled", cancelledAt: new Date().toISOString() }));
     restoreVoucherForOrder(order.orderId);
     setOrders(nextOrders);
     setMessage(t({ en: "Booking cancelled.", zh: "预约已取消。" }));
@@ -99,12 +108,12 @@ export default function OrdersPage() {
     setReviewBody("");
   }
 
-  function saveReview(order: VillaOrder) {
+  async function saveReview(order: VillaOrder) {
     if (reviewStars < 1) {
       setMessage(t({ en: "Please choose a star rating first.", zh: "请先选择星级评分。" }));
       return;
     }
-    const nextOrders = updateOrder(order.orderId, (current) => ({
+    const nextOrders = await updateOrder(order.orderId, (current) => ({
       ...current,
       review: { stars: reviewStars, body: reviewBody || "Loved by Pet Villa.", createdAt: new Date().toISOString() }
     }));

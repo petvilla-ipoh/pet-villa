@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { readOrders, type VillaOrder } from "../lib/orderFlow";
+import { loadOrders, type VillaOrder } from "../lib/orderFlow";
 
 const whatsappUrl = "https://wa.me/60123456789?text=Hi%20Pet%20Villa%2C%20I%20would%20like%20to%20ask%20about%20my%20dog%27s%20stay.";
 
@@ -16,16 +16,22 @@ export default function DiaryPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextOrders = readOrders();
-    setOrders(nextOrders);
-    setSelectedOrderId(nextOrders[0]?.orderId || "");
-    function syncOrders() {
-      const latest = readOrders();
+    let active = true;
+    async function syncOrders() {
+      const latest = await loadOrders();
+      if (!active) return;
       setOrders(latest);
       setSelectedOrderId((current) => current || latest[0]?.orderId || "");
     }
-    window.addEventListener("pet-villa-orders", syncOrders);
-    return () => window.removeEventListener("pet-villa-orders", syncOrders);
+    function handleOrdersChanged() {
+      void syncOrders();
+    }
+    void syncOrders();
+    window.addEventListener("pet-villa-orders", handleOrdersChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-orders", handleOrdersChanged);
+    };
   }, []);
 
   const selectedOrder = orders.find((order) => order.orderId === selectedOrderId);

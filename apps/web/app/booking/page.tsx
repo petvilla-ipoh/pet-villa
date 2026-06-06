@@ -5,7 +5,7 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { loadPetProfiles, type PetProfile } from "../lib/petProfiles";
-import { saveBookingDraft } from "../lib/orderFlow";
+import { loadOrders, saveBookingDraft } from "../lib/orderFlow";
 import { getVoucherDiscount, getVoucherIneligibility, readVouchers, type UserVoucher } from "../lib/vouchers";
 import { isHostOffDay, readHostOffDays } from "../lib/hostAvailability";
 import {
@@ -122,6 +122,7 @@ export default function BookingPage() {
       setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
     }
     void syncPets();
+    void loadOrders();
     setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
     setOffDays(readHostOffDays());
     function handlePetsChanged() {

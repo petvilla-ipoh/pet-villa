@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3 - Supabase Booking and Orders Round 3
+
+- Added a Supabase bookings/orders migration with owner-scoped RLS.
+- Added host/admin role-based order read/update policies for Host Panel operations.
+- Connected booking draft save/load to Supabase with `pet-villa-booking-draft:{userId}` fallback retained.
+- Connected order creation, order list loading, order detail loading, and order status/review updates to Supabase with localStorage fallback retained.
+- Added first-load migration markers for booking and order localStorage fallback data.
+- Kept Payment UI unchanged while allowing the current demo payment confirmation to create Supabase orders.
+
 ## v1.2 - Supabase Pets Round 2
 
 - Added a Supabase `pets` migration with owner-scoped RLS policies.

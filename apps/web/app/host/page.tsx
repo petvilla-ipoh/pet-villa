@@ -14,7 +14,7 @@ import {
 import { deleteGuestPhoto, readGuestPhotos, saveGuestPhoto, updateGuestPhoto, type GuestPhoto } from "../lib/gallery";
 import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
-import { type VillaOrder } from "../lib/orderFlow";
+import { loadAllOrdersForHost, saveOrderSnapshotToSupabase, type VillaOrder } from "../lib/orderFlow";
 import { readPetProfiles, writePetProfiles, type PetProfile } from "../lib/petProfiles";
 import { deleteReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
 import { getVoucherDiscount, markVoucherUsed, readVouchers, VOUCHER_DEFINITIONS, writeVouchers, type UserVoucher, type VoucherDefinition } from "../lib/vouchers";
@@ -294,11 +294,14 @@ export default function HostPage() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    const sync = () => {
+    let active = true;
+    const sync = async () => {
       const nextThreads = readChatThreads();
       const nextSelected = selectedThreadId || nextThreads[0]?.id || "";
       const nextRegisteredUsers = readRegisteredUsers();
-      setOrders(readAllOrders());
+      const nextOrders = await loadAllOrdersForHost();
+      if (!active) return;
+      setOrders(nextOrders);
       setRegisteredUsers(nextRegisteredUsers);
       setDogs(readAllPets(nextRegisteredUsers));
       setPhotos(readGuestPhotos());
@@ -308,22 +311,24 @@ export default function HostPage() {
       setMessages(nextSelected ? readMessages(nextSelected) : []);
       setOffDays(readHostOffDays());
     };
-    sync();
-    window.addEventListener("pet-villa-orders", sync);
-    window.addEventListener("pet-villa-pets", sync);
-    window.addEventListener("pet-villa-gallery", sync);
-    window.addEventListener("pet-villa-reviews", sync);
-    window.addEventListener("pet-villa-messages", sync);
-    window.addEventListener("pet-villa-availability", sync);
-    window.addEventListener("pet-villa-customers", sync);
+    const handleSync = () => void sync();
+    void sync();
+    window.addEventListener("pet-villa-orders", handleSync);
+    window.addEventListener("pet-villa-pets", handleSync);
+    window.addEventListener("pet-villa-gallery", handleSync);
+    window.addEventListener("pet-villa-reviews", handleSync);
+    window.addEventListener("pet-villa-messages", handleSync);
+    window.addEventListener("pet-villa-availability", handleSync);
+    window.addEventListener("pet-villa-customers", handleSync);
     return () => {
-      window.removeEventListener("pet-villa-orders", sync);
-      window.removeEventListener("pet-villa-pets", sync);
-      window.removeEventListener("pet-villa-gallery", sync);
-      window.removeEventListener("pet-villa-reviews", sync);
-      window.removeEventListener("pet-villa-messages", sync);
-      window.removeEventListener("pet-villa-availability", sync);
-      window.removeEventListener("pet-villa-customers", sync);
+      active = false;
+      window.removeEventListener("pet-villa-orders", handleSync);
+      window.removeEventListener("pet-villa-pets", handleSync);
+      window.removeEventListener("pet-villa-gallery", handleSync);
+      window.removeEventListener("pet-villa-reviews", handleSync);
+      window.removeEventListener("pet-villa-messages", handleSync);
+      window.removeEventListener("pet-villa-availability", handleSync);
+      window.removeEventListener("pet-villa-customers", handleSync);
     };
   }, [selectedThreadId]);
 
@@ -508,9 +513,9 @@ export default function HostPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function refreshHostData() {
+  async function refreshHostData() {
     const nextRegisteredUsers = readRegisteredUsers();
-    setOrders(readAllOrders());
+    setOrders(await loadAllOrdersForHost());
     setRegisteredUsers(nextRegisteredUsers);
     setDogs(readAllPets(nextRegisteredUsers));
     setThreads(readChatThreads());
@@ -614,9 +619,13 @@ export default function HostPage() {
       const current = readJson<(VillaOrder & OrderWithOwner)[]>(key, []);
       if (!current.some((item) => item.orderId === order.orderId)) continue;
       const next = current.map((item) => (item.orderId === order.orderId ? updater(item) : item));
+      const updated = next.find((item) => item.orderId === order.orderId);
       window.localStorage.setItem(key, JSON.stringify(next));
       window.dispatchEvent(new Event("pet-villa-orders"));
-      refreshHostData();
+      if (updated) {
+        void saveOrderSnapshotToSupabase(updated, owner.id || (order as OrderWithOwner).customerId).finally(() => void refreshHostData());
+      }
+      void refreshHostData();
       setSelectedOrderId(order.orderId);
       return;
     }
@@ -827,6 +836,7 @@ export default function HostPage() {
     const orderKey = `pet-villa-orders:${customerId}`;
     const currentOrders = readJson<VillaOrder[]>(orderKey, []);
     window.localStorage.setItem(orderKey, JSON.stringify([order, ...currentOrders]));
+    void saveOrderSnapshotToSupabase(order, customerId);
     if (selectedVoucherForCalculation && voucherDiscount > 0) {
       if (selectedVoucherOption?.existing) {
         markVoucherUsed(selectedVoucherForCalculation.id, order.orderId, voucherDiscount, order.dateLabel, customerId);

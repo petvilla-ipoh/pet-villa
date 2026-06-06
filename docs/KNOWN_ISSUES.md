@@ -5,13 +5,15 @@ These issues were discovered from the current repository state and should be rev
 ## P0 Risks
 
 1. Many business records are stored in browser localStorage.
-   - Customer accounts, bookings, orders, vouchers, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
+   - Customer accounts, vouchers, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
    - Pet profiles now use Supabase when configured, but keep a localStorage fallback mirror during migration.
+   - Booking drafts and orders now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - A browser reset can lose these records.
 
 2. Real backend database integration is incomplete for the customer-facing web flows.
    - PostgreSQL migrations and API exist.
-   - Web pages still rely heavily on localStorage helper modules.
+   - Auth, pet profiles, booking drafts, and orders have Supabase web integration.
+   - Vouchers, reviews, chat, gallery, host off days, and some host-created demo records still rely on localStorage helper modules.
 
 3. Real authentication is not production-grade yet.
    - Supabase Auth Round 1 is connected for login/register.
@@ -49,7 +51,8 @@ These issues were discovered from the current repository state and should be rev
    - Real voucher validation should be server-side.
 
 5. Payment confirmation is demo/local in parts of the web UI.
-   - Real payment status should come from Stripe/payment gateway webhooks.
+   - Demo confirmation now creates Supabase orders when configured.
+   - Real payment status should still come from Stripe/payment gateway webhooks.
 
 ## UI / Content Issues
 
