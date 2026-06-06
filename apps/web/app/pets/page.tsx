@@ -4,7 +4,7 @@ import { type ChangeEvent, useEffect, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { createEmptyPet, readPetProfiles, type PetProfile, upsertPetProfile } from "../lib/petProfiles";
+import { createEmptyPet, deletePetProfile, loadPetProfiles, savePetProfile, type PetProfile } from "../lib/petProfiles";
 
 function PawIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -97,28 +97,37 @@ export default function PetsPage() {
   const [formPet, setFormPet] = useState<PetProfile>(createEmptyPet());
   const [openSection, setOpenSection] = useState<"basic" | "food" | "photo" | null>("basic");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const storedPets = readPetProfiles();
-    setPets(storedPets);
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") === "add") {
-      setFormPet(createEmptyPet());
-      setMode("form");
-      setOpenSection("basic");
-    } else if (params.get("petId")) {
-      const pet = storedPets.find((item) => item.id === params.get("petId"));
-      if (pet) {
-        setFormPet({ ...pet });
+    let active = true;
+    async function syncPets() {
+      const storedPets = await loadPetProfiles();
+      if (!active) return;
+      setPets(storedPets);
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") === "add") {
+        setFormPet(createEmptyPet());
         setMode("form");
         setOpenSection("basic");
+      } else if (params.get("petId")) {
+        const pet = storedPets.find((item) => item.id === params.get("petId"));
+        if (pet) {
+          setFormPet({ ...pet });
+          setMode("form");
+          setOpenSection("basic");
+        }
       }
     }
-    function syncPets() {
-      setPets(readPetProfiles());
+    function handlePetsChanged() {
+      void syncPets();
     }
-    window.addEventListener("pet-villa-pets", syncPets);
-    return () => window.removeEventListener("pet-villa-pets", syncPets);
+    void syncPets();
+    window.addEventListener("pet-villa-pets", handlePetsChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-pets", handlePetsChanged);
+    };
   }, []);
 
   function update<K extends keyof PetProfile>(key: K, value: PetProfile[K]) {
@@ -141,7 +150,7 @@ export default function PetsPage() {
     window.history.replaceState(null, "", `/pets?petId=${pet.id}`);
   }
 
-  function savePet() {
+  async function savePet() {
     if (!formPet.name.trim() || !formPet.breed.trim()) {
       setError(t({ en: "Please fill in name and breed before saving.", zh: "保存前请填写名字和品种。" }));
       setOpenSection("basic");
@@ -150,11 +159,34 @@ export default function PetsPage() {
     const normalizedWeight = formPet.weight.trim()
       ? `${formPet.weight.replace(/kg/gi, "").trim()}kg`
       : "";
-    const next = upsertPetProfile({ ...formPet, weight: normalizedWeight });
-    setPets(next);
-    setMode("list");
-    setError("");
-    window.history.replaceState(null, "", "/pets");
+    setSaving(true);
+    try {
+      const next = await savePetProfile({ ...formPet, weight: normalizedWeight });
+      setPets(next);
+      setMode("list");
+      setError("");
+      window.history.replaceState(null, "", "/pets");
+    } catch {
+      setError(t({ en: "Could not save pet profile. Please try again.", zh: "无法保存宠物资料，请重试。" }));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deletePet() {
+    if (!window.confirm(t({ en: "Delete this pet profile?", zh: "确定要删除这份宠物资料？" }))) return;
+    setSaving(true);
+    try {
+      const next = await deletePetProfile(formPet.id);
+      setPets(next);
+      setMode("list");
+      setError("");
+      window.history.replaceState(null, "", "/pets");
+    } catch {
+      setError(t({ en: "Could not delete pet profile. Please try again.", zh: "无法删除宠物资料，请重试。" }));
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -183,7 +215,7 @@ export default function PetsPage() {
 
             {error ? <div className="mb-3 rounded-[16px] bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
 
-            <form key={formPet.id} className="grid gap-3" onSubmit={(event) => { event.preventDefault(); savePet(); }}>
+            <form key={formPet.id} className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void savePet(); }}>
               <AccordionSection title={t({ en: "Basic Details", zh: "基本资料" })} open={openSection === "basic"} onToggle={() => setOpenSection(openSection === "basic" ? null : "basic")}>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="grid gap-2">
@@ -267,7 +299,14 @@ export default function PetsPage() {
                 </label>
               </AccordionSection>
 
-              <button type="submit" className="villa-button mt-2 w-full sm:w-fit sm:px-8">{t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button type="submit" disabled={saving} className="villa-button w-full disabled:opacity-60 sm:w-fit sm:px-8">{saving ? t({ en: "Saving...", zh: "保存中..." }) : t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
+                {pets.some((pet) => pet.id === formPet.id) ? (
+                  <button type="button" disabled={saving} onClick={() => void deletePet()} className="rounded-pill border border-red-200 bg-white px-5 py-3 text-sm font-black text-red-500 disabled:opacity-60">
+                    {t({ en: "Delete Pet", zh: "删除宠物" })}
+                  </button>
+                ) : null}
+              </div>
             </form>
           </section>
         </OwnerSidebar>

@@ -51,13 +51,15 @@ This file lists the v1.0 features discovered in the current project.
 - Empty state when no pets exist.
 - Add New Pet.
 - Edit Pet.
+- Delete Pet.
 - Save Pet Profile.
-- Pet photo upload.
+- Pet photo upload to Supabase Storage when Supabase is configured, with local data URL fallback retained.
 - Basic details accordion.
 - Food & Care accordion.
 - Photo Upload accordion.
 - Pet fields include name, breed, age, weight, gender, coat color, vaccination, neutered, friendliness/calm tags, food, allergies, medication, notes, and photos.
-- Pet data is scoped by current user in localStorage.
+- Pet data is scoped by current Supabase Auth user with RLS when Supabase is configured.
+- Existing `pet-villa-pets:{userId}` records are migrated on first authenticated Supabase pet load and remain mirrored as fallback.
 
 ## Booking
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { readPetProfiles, type PetProfile } from "../lib/petProfiles";
+import { loadPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { saveBookingDraft } from "../lib/orderFlow";
 import { getVoucherDiscount, getVoucherIneligibility, readVouchers, type UserVoucher } from "../lib/vouchers";
 import { isHostOffDay, readHostOffDays } from "../lib/hostAvailability";
@@ -114,13 +114,18 @@ export default function BookingPage() {
   const [offDays, setOffDays] = useState<string[]>([]);
 
   useEffect(() => {
-    setPets(readPetProfiles());
-    setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
-    setOffDays(readHostOffDays());
-    function syncPets() {
-      const nextPets = readPetProfiles();
+    let active = true;
+    async function syncPets() {
+      const nextPets = await loadPetProfiles();
+      if (!active) return;
       setPets(nextPets);
       setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
+    }
+    void syncPets();
+    setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
+    setOffDays(readHostOffDays());
+    function handlePetsChanged() {
+      void syncPets();
     }
     function syncVouchers() {
       setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
@@ -128,11 +133,12 @@ export default function BookingPage() {
     function syncAvailability() {
       setOffDays(readHostOffDays());
     }
-    window.addEventListener("pet-villa-pets", syncPets);
+    window.addEventListener("pet-villa-pets", handlePetsChanged);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
     window.addEventListener("pet-villa-availability", syncAvailability);
     return () => {
-      window.removeEventListener("pet-villa-pets", syncPets);
+      active = false;
+      window.removeEventListener("pet-villa-pets", handlePetsChanged);
       window.removeEventListener("pet-villa-vouchers", syncVouchers);
       window.removeEventListener("pet-villa-availability", syncAvailability);
     };

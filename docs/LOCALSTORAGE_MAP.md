@@ -13,7 +13,8 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-lang` | Current language, `en` or `zh`. |
 | `pet-villa-notifications:{userId}` | Per-user notification preferences/settings. |
 | `pet-villa-profile-avatar:{userId}` | Per-user avatar selection/upload. |
-| `pet-villa-pets:{userId}` | Per-user pet profiles. |
+| `pet-villa-pets:{userId}` | Per-user pet profiles fallback mirror during Supabase Pets migration. |
+| `pet-villa-pets-supabase-migrated:{userId}` | Marks that local pet profiles have been checked/migrated for the Supabase user. |
 | `pet-villa-booking-draft:{userId}` | Current booking draft passed to Payment. |
 | `pet-villa-orders:{userId}` | Per-user orders. |
 | `pet-villa-vouchers:{userId}` | Per-user voucher wallet. |
@@ -29,7 +30,7 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-host-id` | Browser API helper: latest host ID. |
 | `pet-villa-booking-id` | Browser API helper: latest booking ID. |
 
-Total documented localStorage key families: 22.
+Total documented localStorage key families: 23.
 
 ## Browser Event Names
 
@@ -55,4 +56,4 @@ The app also uses browser events for same-tab/cross-component sync:
 
 ## Reset Risk
 
-If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. This affects local customer accounts, pet profiles, bookings, reviews, messages, gallery uploads, vouchers, and off days in the current web implementation.
+If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. Supabase-configured pet profiles now migrate to Supabase and keep a local fallback mirror; customer accounts, bookings, reviews, messages, gallery uploads, vouchers, and off days still depend on localStorage in the current web implementation.

@@ -5,7 +5,8 @@ These issues were discovered from the current repository state and should be rev
 ## P0 Risks
 
 1. Many business records are stored in browser localStorage.
-   - Customer accounts, pets, bookings, orders, vouchers, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
+   - Customer accounts, bookings, orders, vouchers, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
+   - Pet profiles now use Supabase when configured, but keep a localStorage fallback mirror during migration.
    - A browser reset can lose these records.
 
 2. Real backend database integration is incomplete for the customer-facing web flows.
@@ -18,7 +19,8 @@ These issues were discovered from the current repository state and should be rev
    - OTP is still demo-only (`123456`) and needs real phone/email OTP before launch.
 
 4. Upload storage is not production-grade.
-   - Gallery and pet images may be stored as local data URLs.
+   - Pet images now upload to Supabase Storage when Supabase is configured.
+   - Gallery images may still be stored as local data URLs.
    - Use Supabase Storage or AWS S3 for real customer/host uploads.
 
 5. Real chat is not fully cloud/realtime.

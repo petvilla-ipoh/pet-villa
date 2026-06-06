@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2 - Supabase Pets Round 2
+
+- Added a Supabase `pets` migration with owner-scoped RLS policies.
+- Added a `pet-photos` Supabase Storage bucket and owner-folder upload/update/delete policies.
+- Connected My Pets list, add, edit, and delete actions to Supabase with localStorage fallback retained.
+- Added first-load migration from `pet-villa-pets:{userId}` into Supabase when an authenticated Supabase session is available.
+- Kept localStorage mirrored after Supabase reads/writes so Booking can continue using the existing pet selection flow during migration.
+
 ## v1.1 - Supabase Auth Round 1
 
 - Installed `@supabase/supabase-js` for the web app.
