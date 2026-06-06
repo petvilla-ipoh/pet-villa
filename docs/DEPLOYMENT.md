@@ -75,8 +75,34 @@ Migration files:
 - `database/migrations/202606060001_create_supabase_profiles.sql`
 - `database/migrations/202606060002_create_supabase_pets.sql`
 - `database/migrations/202606060003_create_supabase_bookings_orders.sql`
+- `database/migrations/202606060004_create_stripe_payment_helpers.sql`
 
 Run migrations from Supabase SQL Editor or `psql` after setting `DATABASE_URL`.
+
+## Stripe Web Payments
+
+The web app now uses Next.js API routes on Vercel for Stripe Checkout:
+
+- Create Checkout Session: `/api/stripe/checkout`
+- Stripe webhook endpoint: `/api/stripe/webhook`
+
+For Stripe Test Mode, configure the Vercel project with:
+
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+
+In Stripe Dashboard, add the webhook endpoint:
+
+```text
+https://YOUR_VERCEL_DOMAIN/api/stripe/webhook
+```
+
+Subscribe at minimum to:
+
+```text
+payment_intent.succeeded
+```
 
 ## Important Notes
 

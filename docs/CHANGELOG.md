@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4 - Stripe Payment Round 4
+
+- Connected the web Payment page to Stripe Checkout in test mode.
+- Added a Next.js API route to create Stripe Checkout Sessions backed by Supabase order payment targets.
+- Added a Next.js Stripe webhook route for `payment_intent.succeeded`.
+- Added Supabase RPC helpers to compute payable order amounts and mark Stripe orders as paid idempotently.
+- Changed Pay Balance from demo success to Stripe Checkout redirect.
+- Kept the existing Payment and Orders UI design unchanged.
+
 ## v1.3 - Supabase Booking and Orders Round 3
 
 - Added a Supabase bookings/orders migration with owner-scoped RLS.

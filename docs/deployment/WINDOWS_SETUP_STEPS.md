@@ -143,15 +143,21 @@ Use test keys first.
 3. Copy the publishable key beginning with `pk_test_`.
 4. Paste it when asked.
 
+For Vercel web payments, also set the same value as:
+
+```text
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+```
+
 ### `STRIPE_WEBHOOK_SECRET`
 
-If you have not deployed Render yet, keep:
+If you have not deployed Vercel yet, keep:
 
 ```text
 whsec_replace_after_webhook_setup
 ```
 
-After Render gives you an API URL:
+After Vercel gives you a web URL:
 
 1. Stripe Dashboard.
 2. Click **Developers > Webhooks**.
@@ -159,13 +165,13 @@ After Render gives you an API URL:
 4. Endpoint URL:
 
 ```text
-https://YOUR_RENDER_API_DOMAIN/api/v1/payments/stripe/webhook
+https://YOUR_VERCEL_DOMAIN/api/stripe/webhook
 ```
 
 5. Select event `payment_intent.succeeded`.
 6. Save.
 7. Copy the signing secret beginning with `whsec_`.
-8. Replace the placeholder in `.env` and in Render environment variables.
+8. Replace the placeholder in `.env` and in Vercel environment variables.
 
 ### `FIREBASE_SERVICE_ACCOUNT`
 

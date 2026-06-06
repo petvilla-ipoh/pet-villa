@@ -506,6 +506,12 @@ export async function createOrderFromDraft(draft: BookingDraft, paid: number, us
   return order;
 }
 
+export async function ensureOrderFromDraft(draft: BookingDraft, userId = getCurrentUserId()) {
+  const existing = readOrders(userId).find((order) => order.id === draft.id && order.status !== "cancelled");
+  if (existing) return existing;
+  return createOrderFromDraft(draft, 0, userId);
+}
+
 export async function updateOrder(orderId: string, updater: (order: VillaOrder) => VillaOrder, userId = getCurrentUserId()) {
   const current = readOrders(userId);
   const previous = current.find((order) => order.orderId === orderId);

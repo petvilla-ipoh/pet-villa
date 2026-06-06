@@ -29,7 +29,15 @@ Do not store secrets in GitHub. This file lists only key names and usage.
 | `NEXT_PUBLIC_API_URL` | Public API base URL for Next.js web app. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public Supabase project URL for browser Auth. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase anon key for browser Auth. |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Public Stripe publishable key for web payment configuration. |
 | `EXPO_PUBLIC_API_URL` | Public API base URL for Expo/mobile app. |
+
+## Web Server / Vercel
+
+| Key | Usage |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Stripe secret key used by Next.js API routes to create Checkout Sessions. |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret for `/api/stripe/webhook`. |
 
 ## Deployment
 
@@ -37,7 +45,7 @@ Do not store secrets in GitHub. This file lists only key names and usage.
 | --- | --- |
 | `RENDER_HEALTHCHECK_PATH` | Optional deployment health check path. |
 
-Total documented ENV keys: 20.
+Total documented ENV keys: 21.
 
 ## Important Backup Note
 

@@ -29,12 +29,12 @@
 ## Stripe
 
 - In Stripe Dashboard, copy `STRIPE_SECRET_KEY`.
-- Create webhook endpoint: `https://YOUR_RENDER_API_DOMAIN/api/v1/payments/stripe/webhook`.
+- Create webhook endpoint: `https://YOUR_VERCEL_DOMAIN/api/stripe/webhook`.
 - Subscribe at minimum to `payment_intent.succeeded`.
 - Copy `STRIPE_WEBHOOK_SECRET`.
-- Make a test booking and payment in test mode.
-- Confirm the booking moves from `confirmed_awaiting_deposit` to `deposit_paid` after deposit success.
-- Confirm final payment moves booking to `completed`.
+- Make a test booking and payment in Stripe test mode.
+- Confirm the order `paid_rm`, `balance_rm`, and `status` update in Supabase after deposit success.
+- Confirm balance payment updates the order through the webhook.
 
 ## Firebase FCM
 
@@ -50,6 +50,9 @@
 - Import the repo into Vercel.
 - Set root/project to this monorepo and use `vercel.json`.
 - Add `NEXT_PUBLIC_API_URL=https://YOUR_RENDER_API_DOMAIN/api/v1`.
+- Add `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+- Add `STRIPE_SECRET_KEY`.
+- Add `STRIPE_WEBHOOK_SECRET`.
 - Deploy.
 - Open the production URL and check home, services/pricing, booking, payment, orders, pets, diary, chat, auth, and host pages.
 

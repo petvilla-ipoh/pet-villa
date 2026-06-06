@@ -26,7 +26,7 @@ Use `.env.example` as the template. Do not commit real secrets.
 
 `STRIPE_PUBLISHABLE_KEY` — Get from Stripe Dashboard > Developers > API keys. Use `pk_test_...` locally/staging and `pk_live_...` in production frontend environments.
 
-`STRIPE_WEBHOOK_SECRET` — Get after creating the webhook endpoint in Stripe Dashboard. Add endpoint: `https://YOUR_API_DOMAIN/api/v1/payments/stripe/webhook`, then copy the signing secret, usually `whsec_...`.
+`STRIPE_WEBHOOK_SECRET` — Get after creating the webhook endpoint in Stripe Dashboard. For the web app, add endpoint: `https://YOUR_VERCEL_DOMAIN/api/stripe/webhook`, then copy the signing secret, usually `whsec_...`.
 
 ## Firebase FCM
 
@@ -45,6 +45,8 @@ Use `.env.example` as the template. Do not commit real secrets.
 ## Web App
 
 `NEXT_PUBLIC_API_URL` — Public API base URL for Next.js. Set in Vercel Project Settings > Environment Variables. Example: `https://the-pet-villa-api.onrender.com/api/v1`.
+
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — Public Stripe publishable key for web payment configuration. Set in Vercel Project Settings > Environment Variables.
 
 ## Deployment Platform
 

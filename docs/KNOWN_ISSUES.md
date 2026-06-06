@@ -50,9 +50,10 @@ These issues were discovered from the current repository state and should be rev
 4. Voucher usage is frontend-driven.
    - Real voucher validation should be server-side.
 
-5. Payment confirmation is demo/local in parts of the web UI.
-   - Demo confirmation now creates Supabase orders when configured.
-   - Real payment status should still come from Stripe/payment gateway webhooks.
+5. Payment integration still needs live-mode verification before launch.
+   - Web payments now use Stripe Checkout in test mode.
+   - Stripe webhook `payment_intent.succeeded` updates Supabase order payment status.
+   - Live Stripe keys and webhook endpoint verification are still required before production payments.
 
 ## UI / Content Issues
 

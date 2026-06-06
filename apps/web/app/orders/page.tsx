@@ -6,6 +6,7 @@ import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { loadOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
 import { daysInclusive, formatDateRange, getOrderDateRange, startOfLocalDay } from "../lib/bookingCapacity";
+import { startStripeCheckout } from "../lib/stripeCheckout";
 import { restoreVoucherForOrder } from "../lib/vouchers";
 
 type Filter = "all" | "active" | "balance" | "completed" | "cancelled";
@@ -76,16 +77,12 @@ export default function OrdersPage() {
   }, [filter, orders]);
 
   async function payBalance(order: VillaOrder) {
-    const nextOrders = await updateOrder(order.orderId, (current) => {
-      return {
-        ...current,
-        paid: current.total,
-        balance: 0,
-        status: "ready_pickup"
-      };
-    });
-    setOrders(nextOrders);
-    setMessage(t({ en: "Demo payment success. Balance paid successfully.", zh: "测试付款成功，尾款已支付。" }));
+    try {
+      setMessage(t({ en: "Redirecting to Stripe Checkout...", zh: "正在前往 Stripe 付款页面..." }));
+      await startStripeCheckout(order, "balance");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t({ en: "Could not start Stripe payment.", zh: "无法开始 Stripe 付款。" }));
+    }
   }
 
   async function cancelOrder(order: VillaOrder) {

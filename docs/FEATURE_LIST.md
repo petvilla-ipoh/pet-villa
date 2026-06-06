@@ -89,7 +89,7 @@ This file lists the v1.0 features discovered in the current project.
 - Payment method selection.
 - DuitNow QR UI placeholder.
 - FPX, Touch 'n Go eWallet, GrabPay, Visa/Mastercard payment method cards.
-- Demo payment confirmation.
+- Stripe Checkout redirect for deposit and full payment in test mode.
 - Order creation/update after payment writes to Supabase when configured, with localStorage fallback retained.
 
 ## Orders
@@ -106,6 +106,7 @@ This file lists the v1.0 features discovered in the current project.
 - Time status calculations.
 - Order list, detail, payment status, cancellation status, and review updates use Supabase when configured.
 - Orders remain mirrored to `pet-villa-orders:{userId}` as fallback during migration.
+- Pay Balance redirects to Stripe Checkout and updates order payment status through webhook.
 
 ## Diary
 
@@ -196,6 +197,7 @@ This file lists the v1.0 features discovered in the current project.
 ## Backend/API
 
 - Express API scaffold.
+- Next.js Stripe Checkout and webhook API routes for the web app.
 - PostgreSQL repository.
 - Users, pets, hosts, bookings, reviews, messages, notifications, payments routes/services.
 - Stripe payment intent and webhook service.

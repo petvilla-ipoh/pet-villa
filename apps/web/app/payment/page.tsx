@@ -5,7 +5,8 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { PaymentLogo, paymentMethods, type PaymentMethodId } from "../components/PaymentLogo";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { createOrderFromDraft, loadBookingDraft, type BookingDraft } from "../lib/orderFlow";
+import { ensureOrderFromDraft, loadBookingDraft, type BookingDraft } from "../lib/orderFlow";
+import { startStripeCheckout } from "../lib/stripeCheckout";
 
 type AmountMode = "deposit" | "full";
 
@@ -84,11 +85,13 @@ export default function PaymentPage() {
       setMessage(t({ en: "Please create a booking first before payment.", zh: "请先创建预约再付款。" }));
       return;
     }
-    const order = await createOrderFromDraft(draft, amount);
-    setMessage(t({ en: "Payment recorded. Redirecting to My Orders...", zh: "付款已记录，正在前往我的订单..." }));
-    window.setTimeout(() => {
-      window.location.href = `/orders?order=${order.orderId}`;
-    }, 600);
+    try {
+      const order = await ensureOrderFromDraft(draft);
+      setMessage(t({ en: "Redirecting to Stripe Checkout...", zh: "正在前往 Stripe 付款页面..." }));
+      await startStripeCheckout(order, amountMode === "deposit" ? "deposit" : "full");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t({ en: "Could not start Stripe payment.", zh: "无法开始 Stripe 付款。" }));
+    }
   }
 
   if (!loaded) {
