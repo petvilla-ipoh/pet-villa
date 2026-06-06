@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.6 - Supabase Gallery Storage Round 6
+
+- Added a Supabase gallery migration with `gallery_photos` table, public read RLS, and host/admin manage RLS.
+- Added the `gallery-photos` Supabase Storage bucket and host/admin storage policies.
+- Connected Host Gallery uploads to Supabase Storage with localStorage fallback retained.
+- Connected public Gallery and Home Happy Guests reads to Supabase with seed `/hero-dogs.png` fallback retained.
+- Added Supabase-backed `pet_name`, `caption`, and `visible_on_home` gallery fields.
+- Kept the Gallery, Home, and Host UI design unchanged.
+
 ## v1.5 - Supabase Voucher and Referral Round 5
 
 - Added a Supabase vouchers/referrals migration with owner-scoped voucher RLS.

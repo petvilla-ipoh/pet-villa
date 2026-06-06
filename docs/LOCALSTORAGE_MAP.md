@@ -28,12 +28,13 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-hidden-reviews` | Review IDs hidden by host. |
 | `pet-villa-chat-threads` | Customer/host chat threads. |
 | `pet-villa-host-off-days` | Host blocked/off dates. |
-| `pet-villa-happy-guests` | Host-published Happy Guests gallery items. |
+| `pet-villa-happy-guests` | Host-published Happy Guests gallery fallback mirror during Supabase Gallery migration. |
+| `pet-villa-gallery-supabase-migrated` | Marks gallery fallback data as checked/migrated into Supabase Storage/table. |
 | `pet-villa-pet-id` | Browser API helper: latest pet ID. |
 | `pet-villa-host-id` | Browser API helper: latest host ID. |
 | `pet-villa-booking-id` | Browser API helper: latest booking ID. |
 
-Total documented localStorage key families: 26.
+Total documented localStorage key families: 27.
 
 ## Browser Event Names
 
@@ -59,4 +60,4 @@ The app also uses browser events for same-tab/cross-component sync:
 
 ## Reset Risk
 
-If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. Supabase-configured pet profiles, booking drafts, orders, vouchers, referral codes, and pending referrals now migrate to Supabase and keep local fallback mirrors; customer account fallback records, reviews, messages, gallery uploads, and off days still depend on localStorage in the current web implementation.
+If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. Supabase-configured pet profiles, booking drafts, orders, vouchers, referral codes, pending referrals, and gallery photos now migrate to Supabase and keep local fallback mirrors; customer account fallback records, reviews, messages, and off days still depend on localStorage in the current web implementation.

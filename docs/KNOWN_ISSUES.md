@@ -5,7 +5,7 @@ These issues were discovered from the current repository state and should be rev
 ## P0 Risks
 
 1. Many business records are stored in browser localStorage.
-   - Customer account fallback records, reviews, chat, gallery uploads, and off days may not be cloud-persistent.
+   - Customer account fallback records, reviews, chat, and off days may not be cloud-persistent.
    - Pet profiles now use Supabase when configured, but keep a localStorage fallback mirror during migration.
    - Booking drafts and orders now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - Vouchers, referral codes, and pending referrals now use Supabase when configured, but keep localStorage fallback mirrors during migration.
@@ -14,7 +14,7 @@ These issues were discovered from the current repository state and should be rev
 2. Real backend database integration is incomplete for the customer-facing web flows.
    - PostgreSQL migrations and API exist.
    - Auth, pet profiles, booking drafts, orders, vouchers, and referrals have Supabase web integration.
-   - Reviews, chat, gallery, host off days, and some host-created demo records still rely on localStorage helper modules.
+   - Reviews, chat, host off days, and some host-created demo records still rely on localStorage helper modules.
 
 3. Real authentication is not production-grade yet.
    - Supabase Auth Round 1 is connected for login/register.
@@ -23,7 +23,7 @@ These issues were discovered from the current repository state and should be rev
 
 4. Upload storage is not production-grade.
    - Pet images now upload to Supabase Storage when Supabase is configured.
-   - Gallery images may still be stored as local data URLs.
+   - Gallery images now upload to Supabase Storage when Supabase is configured, with local data URL fallback retained.
    - Use Supabase Storage or AWS S3 for real customer/host uploads.
 
 5. Real chat is not fully cloud/realtime.

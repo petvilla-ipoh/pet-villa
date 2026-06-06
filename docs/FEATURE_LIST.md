@@ -134,6 +134,9 @@ This file lists the v1.0 features discovered in the current project.
 - Host upload form.
 - Publish / hide / delete gallery states.
 - Only published items should appear on Home.
+- Gallery photos use Supabase `gallery_photos` and `gallery-photos` Storage when configured, with localStorage fallback retained.
+- Gallery photo fields include pet name, breed, caption, image URL, visibility on Home, and featured state.
+- Default seed photos continue to use `/hero-dogs.png`.
 
 ## Reviews
 

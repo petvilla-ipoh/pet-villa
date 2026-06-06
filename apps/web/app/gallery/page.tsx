@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppNav } from "../components/AppNav";
 import { useLanguage } from "../components/LanguageProvider";
-import { readGuestPhotos, type GuestPhoto } from "../lib/gallery";
+import { loadGuestPhotos, readGuestPhotos, type GuestPhoto } from "../lib/gallery";
 
 export default function GalleryPage() {
   const { t } = useLanguage();
@@ -12,10 +12,19 @@ export default function GalleryPage() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
   useEffect(() => {
-    const sync = () => setPhotos(readGuestPhotos());
+    let active = true;
+    const sync = () => {
+      setPhotos(readGuestPhotos());
+      void loadGuestPhotos().then((nextPhotos) => {
+        if (active) setPhotos(nextPhotos);
+      });
+    };
     sync();
     window.addEventListener("pet-villa-gallery", sync);
-    return () => window.removeEventListener("pet-villa-gallery", sync);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-gallery", sync);
+    };
   }, []);
 
   function move(direction: 1 | -1) {

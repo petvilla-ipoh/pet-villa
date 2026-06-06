@@ -11,7 +11,7 @@ import {
   MAX_DOGS_PER_DAY,
   toDateKey
 } from "../lib/bookingCapacity";
-import { deleteGuestPhoto, readGuestPhotos, saveGuestPhoto, updateGuestPhoto, type GuestPhoto } from "../lib/gallery";
+import { deleteGuestPhoto, loadGuestPhotos, saveGuestPhoto, updateGuestPhoto, type GuestPhoto } from "../lib/gallery";
 import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
 import { loadAllOrdersForHost, saveOrderSnapshotToSupabase, type VillaOrder } from "../lib/orderFlow";
@@ -304,7 +304,7 @@ export default function HostPage() {
       setOrders(nextOrders);
       setRegisteredUsers(nextRegisteredUsers);
       setDogs(readAllPets(nextRegisteredUsers));
-      setPhotos(readGuestPhotos());
+      setPhotos(await loadGuestPhotos());
       setReviews(readPublicReviews({ includeHidden: true }));
       setThreads(nextThreads);
       setSelectedThreadId(nextSelected);
@@ -520,7 +520,7 @@ export default function HostPage() {
     setDogs(readAllPets(nextRegisteredUsers));
     setThreads(readChatThreads());
     setReviews(readPublicReviews({ includeHidden: true }));
-    setPhotos(readGuestPhotos());
+    setPhotos(await loadGuestPhotos());
   }
 
   function writeRegisteredUser(nextUser: RegisteredUser) {
@@ -681,12 +681,12 @@ export default function HostPage() {
     reader.readAsDataURL(file);
   }
 
-  function publishPhoto() {
+  async function publishPhoto() {
     if (!photoForm.petName.trim()) {
       setNotice(t({ en: "Please add a pet name before publishing.", zh: "发布前请填写宠物名字。" }));
       return;
     }
-    saveGuestPhoto({
+    const nextPhotos = await saveGuestPhoto({
       petName: photoForm.petName.trim(),
       breed: photoForm.breed.trim() || "Small dog",
       caption: photoForm.caption.trim() || "Happy guest at Pet Villa.",
@@ -695,6 +695,7 @@ export default function HostPage() {
       color: "#f0b46e"
     });
     setPhotoForm({ petName: "", breed: "", caption: "", imageUrl: "" });
+    setPhotos(nextPhotos);
     setNotice(t({ en: "Happy Guest photo published to Home.", zh: "Happy Guests 照片已发布到首页。" }));
   }
 
@@ -1458,9 +1459,9 @@ export default function HostPage() {
                           </div>
                           {!photo.id.startsWith("guest-") ? (
                             <div className="mt-3 flex flex-wrap gap-2">
-                              <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={() => updateGuestPhoto(photo.id, { visibleOnHome: !photo.visibleOnHome })}>{photo.visibleOnHome ? "Hide" : "Show"}</button>
-                              <button type="button" className="rounded-pill border border-amber-200 px-3 py-1 text-xs font-black text-amber-700" onClick={() => updateGuestPhoto(photo.id, { featured: !(photo as GuestPhoto & { featured?: boolean }).featured } as Partial<GuestPhoto>)}>{(photo as GuestPhoto & { featured?: boolean }).featured ? "Unfeature" : "Feature"}</button>
-                              <button type="button" className="rounded-pill border border-red-200 px-3 py-1 text-xs font-black text-red-500" onClick={() => deleteGuestPhoto(photo.id)}>Delete</button>
+                              <button type="button" className="rounded-pill border border-villa-primary px-3 py-1 text-xs font-black text-villa-primary" onClick={async () => setPhotos(await updateGuestPhoto(photo.id, { visibleOnHome: !photo.visibleOnHome }))}>{photo.visibleOnHome ? "Hide" : "Show"}</button>
+                              <button type="button" className="rounded-pill border border-amber-200 px-3 py-1 text-xs font-black text-amber-700" onClick={async () => setPhotos(await updateGuestPhoto(photo.id, { featured: !(photo as GuestPhoto & { featured?: boolean }).featured } as Partial<GuestPhoto>))}>{(photo as GuestPhoto & { featured?: boolean }).featured ? "Unfeature" : "Feature"}</button>
+                              <button type="button" className="rounded-pill border border-red-200 px-3 py-1 text-xs font-black text-red-500" onClick={async () => setPhotos(await deleteGuestPhoto(photo.id))}>Delete</button>
                             </div>
                           ) : null}
                         </div>

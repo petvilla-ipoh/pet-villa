@@ -5,7 +5,7 @@ import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
 import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
 import { getCurrentUserId } from "./lib/petProfiles";
-import { readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
+import { loadHomeGuestPhotos, readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
 import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
 import { readPublicReviews, type PublicReview } from "./lib/reviews";
 import { claimVoucherOnline, getReferralCode, loadReferralCode, loadVouchers, readVouchers } from "./lib/vouchers";
@@ -411,6 +411,7 @@ export default function HomePage() {
     void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
     void loadReferralCode().then((code) => setReferralCode(code));
     setGuestPhotos(readHomeGuestPhotos(6));
+    void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
     setPublicReviews(readPublicReviews());
     setCapacityMap(buildCapacityMap());
     setOffDays(readHostOffDays());
@@ -422,7 +423,10 @@ export default function HomePage() {
       setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
       void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
     };
-    const syncGallery = () => setGuestPhotos(readHomeGuestPhotos(6));
+    const syncGallery = () => {
+      setGuestPhotos(readHomeGuestPhotos(6));
+      void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
+    };
     const syncReviews = () => setPublicReviews(readPublicReviews());
     window.addEventListener("pet-villa-orders", sync);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
