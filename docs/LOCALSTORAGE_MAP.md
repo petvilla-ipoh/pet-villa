@@ -24,8 +24,9 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-coupons:{userId}` | Home promotion claimed coupon tracking fallback mirror. |
 | `pet-villa-referral-code-map` | Referral code ownership map fallback while referral codes are stored in Supabase. |
 | `pet-villa-pending-referral:{userId}` | Pending referral relationship fallback while referrals are stored in Supabase. |
-| `pet-villa-host-reviews` | Host-created reviews. |
-| `pet-villa-hidden-reviews` | Review IDs hidden by host. |
+| `pet-villa-host-reviews` | Host-created reviews fallback mirror during Supabase Reviews migration. |
+| `pet-villa-hidden-reviews` | Review IDs hidden by host fallback mirror during Supabase Reviews migration. |
+| `pet-villa-reviews-supabase-migrated` | Marks review fallback data as checked/migrated into Supabase. |
 | `pet-villa-chat-threads` | Customer/host chat threads. |
 | `pet-villa-host-off-days` | Host blocked/off dates. |
 | `pet-villa-happy-guests` | Host-published Happy Guests gallery fallback mirror during Supabase Gallery migration. |
@@ -34,7 +35,7 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-host-id` | Browser API helper: latest host ID. |
 | `pet-villa-booking-id` | Browser API helper: latest booking ID. |
 
-Total documented localStorage key families: 27.
+Total documented localStorage key families: 28.
 
 ## Browser Event Names
 
@@ -60,4 +61,4 @@ The app also uses browser events for same-tab/cross-component sync:
 
 ## Reset Risk
 
-If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. Supabase-configured pet profiles, booking drafts, orders, vouchers, referral codes, pending referrals, and gallery photos now migrate to Supabase and keep local fallback mirrors; customer account fallback records, reviews, messages, and off days still depend on localStorage in the current web implementation.
+If a computer/browser is reset, localStorage data is lost unless it has been exported or migrated to backend/cloud storage. Supabase-configured pet profiles, booking drafts, orders, vouchers, referral codes, pending referrals, gallery photos, and reviews now migrate to Supabase and keep local fallback mirrors; customer account fallback records, messages, and off days still depend on localStorage in the current web implementation.

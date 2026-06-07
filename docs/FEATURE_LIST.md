@@ -147,6 +147,8 @@ This file lists the v1.0 features discovered in the current project.
 - Host can add manual reviews.
 - Host can show/hide/delete reviews.
 - Home only shows live reviews and does not reveal source.
+- Customer and host reviews use Supabase when configured, with localStorage fallback retained.
+- Reviews store star rating, text, source, visibility, and related `order_id`.
 
 ## Vouchers / Promotions
 

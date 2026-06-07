@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7 - Supabase Reviews Round 7
+
+- Added a Supabase reviews migration with customer/host review fields and order ID association.
+- Connected customer order reviews to Supabase writes while keeping order local/Supabase fallback behavior intact.
+- Connected Home review reads to Supabase with localStorage fallback retained.
+- Connected Host review management to Supabase for add, hide, show, and delete actions.
+- Kept the Reviews, Home, Orders, and Host UI design unchanged.
+
 ## v1.6 - Supabase Gallery Storage Round 6
 
 - Added a Supabase gallery migration with `gallery_photos` table, public read RLS, and host/admin manage RLS.

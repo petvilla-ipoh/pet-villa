@@ -16,7 +16,7 @@ import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
 import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
 import { loadAllOrdersForHost, saveOrderSnapshotToSupabase, type VillaOrder } from "../lib/orderFlow";
 import { readPetProfiles, writePetProfiles, type PetProfile } from "../lib/petProfiles";
-import { deleteReview, hideReview, readPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
+import { deleteReview, hideReview, loadPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
 import { getVoucherDiscount, markVoucherUsed, readVouchers, VOUCHER_DEFINITIONS, writeVouchers, type UserVoucher, type VoucherDefinition } from "../lib/vouchers";
 
 const hostPhotoPlaceholder = "/hero-dogs.png";
@@ -305,7 +305,7 @@ export default function HostPage() {
       setRegisteredUsers(nextRegisteredUsers);
       setDogs(readAllPets(nextRegisteredUsers));
       setPhotos(await loadGuestPhotos());
-      setReviews(readPublicReviews({ includeHidden: true }));
+      setReviews(await loadPublicReviews({ includeHidden: true }));
       setThreads(nextThreads);
       setSelectedThreadId(nextSelected);
       setMessages(nextSelected ? readMessages(nextSelected) : []);
@@ -519,7 +519,7 @@ export default function HostPage() {
     setRegisteredUsers(nextRegisteredUsers);
     setDogs(readAllPets(nextRegisteredUsers));
     setThreads(readChatThreads());
-    setReviews(readPublicReviews({ includeHidden: true }));
+    setReviews(await loadPublicReviews({ includeHidden: true }));
     setPhotos(await loadGuestPhotos());
   }
 
@@ -699,12 +699,12 @@ export default function HostPage() {
     setNotice(t({ en: "Happy Guest photo published to Home.", zh: "Happy Guests 照片已发布到首页。" }));
   }
 
-  function publishReview() {
+  async function publishReview() {
     if (!reviewForm.name.trim() || !reviewForm.en.trim()) {
       setNotice(t({ en: "Please add reviewer name and review text.", zh: "请填写顾客名字和评价内容。" }));
       return;
     }
-    saveHostReview({
+    const nextReviews = await saveHostReview({
       name: reviewForm.name.trim(),
       pet: [reviewForm.dogName, reviewForm.breed].filter(Boolean).join(" · ") || "Small dog",
       dogName: reviewForm.dogName.trim() || "Pet",
@@ -715,19 +715,18 @@ export default function HostPage() {
       quote: { en: reviewForm.en.trim(), zh: reviewForm.zh.trim() || reviewForm.en.trim() }
     });
     setReviewForm({ name: "", dogName: "", breed: "", rating: 5, en: "", zh: "", date: new Date().toISOString().slice(0, 10), photo: "" });
-    setReviews(readPublicReviews({ includeHidden: true }));
+    setReviews(nextReviews);
     setNotice(t({ en: "Review published to Home.", zh: "评价已发布到首页。" }));
   }
 
-  function toggleReviewVisibility(review: PublicReview) {
-    review.hidden ? showReview(review.id) : hideReview(review.id);
-    setReviews(readPublicReviews({ includeHidden: true }));
+  async function toggleReviewVisibility(review: PublicReview) {
+    const nextReviews = review.hidden ? await showReview(review.id) : await hideReview(review.id);
+    setReviews(nextReviews);
     setNotice(review.hidden ? t({ en: "Review is visible on Home again.", zh: "评价已重新显示在首页。" }) : t({ en: "Review hidden from Home.", zh: "评价已从首页隐藏。" }));
   }
 
-  function removeReview(review: PublicReview) {
-    deleteReview(review);
-    setReviews(readPublicReviews({ includeHidden: true }));
+  async function removeReview(review: PublicReview) {
+    setReviews(await deleteReview(review));
     setNotice(t({ en: "Review deleted.", zh: "评价已删除。" }));
   }
 

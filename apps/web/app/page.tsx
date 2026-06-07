@@ -7,7 +7,7 @@ import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocal
 import { getCurrentUserId } from "./lib/petProfiles";
 import { loadHomeGuestPhotos, readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
 import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
-import { readPublicReviews, type PublicReview } from "./lib/reviews";
+import { loadPublicReviews, readPublicReviews, type PublicReview } from "./lib/reviews";
 import { claimVoucherOnline, getReferralCode, loadReferralCode, loadVouchers, readVouchers } from "./lib/vouchers";
 
 const phone = "+60165236409";
@@ -413,6 +413,7 @@ export default function HomePage() {
     setGuestPhotos(readHomeGuestPhotos(6));
     void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
     setPublicReviews(readPublicReviews());
+    void loadPublicReviews().then((nextReviews) => setPublicReviews(nextReviews));
     setCapacityMap(buildCapacityMap());
     setOffDays(readHostOffDays());
     const sync = () => {
@@ -427,7 +428,10 @@ export default function HomePage() {
       setGuestPhotos(readHomeGuestPhotos(6));
       void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
     };
-    const syncReviews = () => setPublicReviews(readPublicReviews());
+    const syncReviews = () => {
+      setPublicReviews(readPublicReviews());
+      void loadPublicReviews().then((nextReviews) => setPublicReviews(nextReviews));
+    };
     window.addEventListener("pet-villa-orders", sync);
     window.addEventListener("pet-villa-vouchers", syncVouchers);
     window.addEventListener("pet-villa-gallery", syncGallery);

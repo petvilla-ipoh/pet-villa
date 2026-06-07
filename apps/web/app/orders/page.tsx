@@ -8,6 +8,7 @@ import { loadOrders, updateOrder, type VillaOrder } from "../lib/orderFlow";
 import { daysInclusive, formatDateRange, getOrderDateRange, startOfLocalDay } from "../lib/bookingCapacity";
 import { startStripeCheckout } from "../lib/stripeCheckout";
 import { restoreVoucherForOrder } from "../lib/vouchers";
+import { saveCustomerOrderReview } from "../lib/reviews";
 
 type Filter = "all" | "active" | "balance" | "completed" | "cancelled";
 
@@ -110,10 +111,13 @@ export default function OrdersPage() {
       setMessage(t({ en: "Please choose a star rating first.", zh: "请先选择星级评分。" }));
       return;
     }
+    const createdAt = new Date().toISOString();
     const nextOrders = await updateOrder(order.orderId, (current) => ({
       ...current,
-      review: { stars: reviewStars, body: reviewBody || "Loved by Pet Villa.", createdAt: new Date().toISOString() }
+      review: { stars: reviewStars, body: reviewBody || "Loved by Pet Villa.", createdAt }
     }));
+    const updatedOrder = nextOrders.find((item) => item.orderId === order.orderId);
+    if (updatedOrder) await saveCustomerOrderReview(updatedOrder);
     setOrders(nextOrders);
     window.dispatchEvent(new Event("pet-villa-reviews"));
     closeReview();
