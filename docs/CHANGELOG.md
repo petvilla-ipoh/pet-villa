@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.8 - Supabase Host Panel Round 8
+
+- Added a Supabase Host Panel migration for host off days and chat messages.
+- Added host/admin role-based RLS read access for profiles and pets.
+- Connected Host Dashboard and Booking Center to Supabase orders through existing host order policies.
+- Connected Customers CRM to Supabase profiles and pets with localStorage fallback retained.
+- Connected Host off day management to Supabase while keeping `pet-villa-host-off-days` as a fallback mirror.
+- Connected customer/host chat messages to Supabase while keeping `pet-villa-chat-threads` as a fallback mirror.
+- Kept the Host Panel, Home, Booking, and Chat UI design unchanged.
+
 ## v1.7 - Supabase Reviews Round 7
 
 - Added a Supabase reviews migration with customer/host review fields and order ID association.

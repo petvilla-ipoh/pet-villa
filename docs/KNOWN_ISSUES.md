@@ -5,16 +5,17 @@ These issues were discovered from the current repository state and should be rev
 ## P0 Risks
 
 1. Many business records are stored in browser localStorage.
-   - Customer account fallback records, chat, and off days may not be cloud-persistent.
+   - Customer account fallback records and some host-created demo helper records may not be cloud-persistent.
    - Pet profiles now use Supabase when configured, but keep a localStorage fallback mirror during migration.
    - Booking drafts and orders now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - Vouchers, referral codes, and pending referrals now use Supabase when configured, but keep localStorage fallback mirrors during migration.
+   - Chat messages and host off days now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - A browser reset can lose these records.
 
 2. Real backend database integration is incomplete for the customer-facing web flows.
    - PostgreSQL migrations and API exist.
    - Auth, pet profiles, booking drafts, orders, vouchers, and referrals have Supabase web integration.
-   - Chat, host off days, and some host-created demo records still rely on localStorage helper modules.
+   - Chat messages and host off days have Supabase web integration; some host-created demo records still rely on localStorage helper modules.
 
 3. Real authentication is not production-grade yet.
    - Supabase Auth Round 1 is connected for login/register.
@@ -27,8 +28,8 @@ These issues were discovered from the current repository state and should be rev
    - Use Supabase Storage or AWS S3 for real customer/host uploads.
 
 5. Real chat is not fully cloud/realtime.
-   - Chat currently uses localStorage thread sync.
-   - Multi-device host/customer chat needs backend persistence and realtime delivery.
+   - Chat messages persist to Supabase when configured, with localStorage fallback retained.
+   - Multi-device host/customer chat still needs realtime delivery/subscriptions before launch.
 
 6. Production environment variables may not be fully configured.
    - `.env.example` exists.

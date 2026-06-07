@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { getCurrentThreadId, readMessages, sendMessage, type VillaMessage } from "../lib/messages";
+import { getCurrentThreadId, loadMessages, readMessages, sendMessage, type VillaMessage } from "../lib/messages";
 
 export default function ChatPage() {
   const { t } = useLanguage();
@@ -13,10 +13,20 @@ export default function ChatPage() {
   const threadId = getCurrentThreadId();
 
   useEffect(() => {
-    const sync = () => setMessages(readMessages(threadId));
+    let active = true;
+    const sync = () => {
+      setMessages(readMessages(threadId));
+      void loadMessages(threadId).then((nextMessages) => {
+        if (!active) return;
+        setMessages(nextMessages);
+      });
+    };
     sync();
     window.addEventListener("pet-villa-messages", sync);
-    return () => window.removeEventListener("pet-villa-messages", sync);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-messages", sync);
+    };
   }, [threadId]);
 
   function send() {
@@ -24,6 +34,7 @@ export default function ChatPage() {
     sendMessage("owner", message, threadId);
     setMessage("");
     setMessages(readMessages(threadId));
+    void loadMessages(threadId).then((nextMessages) => setMessages(nextMessages));
   }
 
   return (

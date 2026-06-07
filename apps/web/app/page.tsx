@@ -6,7 +6,7 @@ import { useLanguage } from "./components/LanguageProvider";
 import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
 import { getCurrentUserId } from "./lib/petProfiles";
 import { loadHomeGuestPhotos, readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
-import { isHostOffDay, readHostOffDays } from "./lib/hostAvailability";
+import { isHostOffDay, loadHostOffDays, readHostOffDays } from "./lib/hostAvailability";
 import { loadPublicReviews, readPublicReviews, type PublicReview } from "./lib/reviews";
 import { claimVoucherOnline, getReferralCode, loadReferralCode, loadVouchers, readVouchers } from "./lib/vouchers";
 
@@ -416,9 +416,11 @@ export default function HomePage() {
     void loadPublicReviews().then((nextReviews) => setPublicReviews(nextReviews));
     setCapacityMap(buildCapacityMap());
     setOffDays(readHostOffDays());
+    void loadHostOffDays().then((days) => setOffDays(days));
     const sync = () => {
       setCapacityMap(buildCapacityMap());
       setOffDays(readHostOffDays());
+      void loadHostOffDays().then((days) => setOffDays(days));
     };
     const syncVouchers = () => {
       setClaimedCoupons(readVouchers().map((voucher) => voucher.code));

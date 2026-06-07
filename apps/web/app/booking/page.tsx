@@ -7,7 +7,7 @@ import { useLanguage } from "../components/LanguageProvider";
 import { loadPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { loadOrders, saveBookingDraft } from "../lib/orderFlow";
 import { getVoucherDiscount, getVoucherIneligibility, loadVouchers, readVouchers, validateVoucherForBooking, type UserVoucher } from "../lib/vouchers";
-import { isHostOffDay, readHostOffDays } from "../lib/hostAvailability";
+import { isHostOffDay, loadHostOffDays, readHostOffDays } from "../lib/hostAvailability";
 import {
   availableSlotsForDate,
   buildCapacityMap,
@@ -129,6 +129,10 @@ export default function BookingPage() {
       setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
     });
     setOffDays(readHostOffDays());
+    void loadHostOffDays().then((days) => {
+      if (!active) return;
+      setOffDays(days);
+    });
     function handlePetsChanged() {
       void syncPets();
     }
@@ -141,6 +145,10 @@ export default function BookingPage() {
     }
     function syncAvailability() {
       setOffDays(readHostOffDays());
+      void loadHostOffDays().then((days) => {
+        if (!active) return;
+        setOffDays(days);
+      });
     }
     window.addEventListener("pet-villa-pets", handlePetsChanged);
     window.addEventListener("pet-villa-vouchers", syncVouchers);

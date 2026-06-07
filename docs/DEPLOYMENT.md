@@ -79,6 +79,7 @@ Migration files:
 - `database/migrations/202606060005_create_supabase_vouchers_referrals.sql`
 - `database/migrations/202606060006_create_supabase_gallery.sql`
 - `database/migrations/202606070001_create_supabase_reviews.sql`
+- `database/migrations/202606070002_create_supabase_host_panel.sql`
 
 Run migrations from Supabase SQL Editor or `psql` after setting `DATABASE_URL`.
 

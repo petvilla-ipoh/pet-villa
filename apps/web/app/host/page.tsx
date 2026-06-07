@@ -12,8 +12,9 @@ import {
   toDateKey
 } from "../lib/bookingCapacity";
 import { deleteGuestPhoto, loadGuestPhotos, saveGuestPhoto, updateGuestPhoto, type GuestPhoto } from "../lib/gallery";
-import { readHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
-import { readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
+import { loadHostOffDays, writeHostOffDays } from "../lib/hostAvailability";
+import { loadHostPets, loadHostProfiles } from "../lib/hostData";
+import { loadChatThreads, loadMessages, readChatThreads, readMessages, sendMessage, type ChatThread, type VillaMessage } from "../lib/messages";
 import { loadAllOrdersForHost, saveOrderSnapshotToSupabase, type VillaOrder } from "../lib/orderFlow";
 import { readPetProfiles, writePetProfiles, type PetProfile } from "../lib/petProfiles";
 import { deleteReview, hideReview, loadPublicReviews, saveHostReview, showReview, type PublicReview } from "../lib/reviews";
@@ -296,20 +297,29 @@ export default function HostPage() {
   useEffect(() => {
     let active = true;
     const sync = async () => {
-      const nextThreads = readChatThreads();
+      const localRegisteredUsers = readRegisteredUsers();
+      const nextRegisteredUsers = await loadHostProfiles(localRegisteredUsers);
+      const localDogs = readAllPets(nextRegisteredUsers);
+      const [nextOrders, nextDogs, nextPhotos, nextReviews, nextThreads, nextOffDays] = await Promise.all([
+        loadAllOrdersForHost(),
+        loadHostPets(nextRegisteredUsers, localDogs),
+        loadGuestPhotos(),
+        loadPublicReviews({ includeHidden: true }),
+        loadChatThreads(),
+        loadHostOffDays()
+      ]);
       const nextSelected = selectedThreadId || nextThreads[0]?.id || "";
-      const nextRegisteredUsers = readRegisteredUsers();
-      const nextOrders = await loadAllOrdersForHost();
+      const nextMessages = nextSelected ? await loadMessages(nextSelected) : [];
       if (!active) return;
       setOrders(nextOrders);
       setRegisteredUsers(nextRegisteredUsers);
-      setDogs(readAllPets(nextRegisteredUsers));
-      setPhotos(await loadGuestPhotos());
-      setReviews(await loadPublicReviews({ includeHidden: true }));
+      setDogs(nextDogs);
+      setPhotos(nextPhotos);
+      setReviews(nextReviews);
       setThreads(nextThreads);
       setSelectedThreadId(nextSelected);
-      setMessages(nextSelected ? readMessages(nextSelected) : []);
-      setOffDays(readHostOffDays());
+      setMessages(nextMessages);
+      setOffDays(nextOffDays);
     };
     const handleSync = () => void sync();
     void sync();
@@ -333,7 +343,21 @@ export default function HostPage() {
   }, [selectedThreadId]);
 
   useEffect(() => {
-    setMessages(selectedThreadId ? readMessages(selectedThreadId) : []);
+    let active = true;
+    if (!selectedThreadId) {
+      setMessages([]);
+      return () => {
+        active = false;
+      };
+    }
+    setMessages(readMessages(selectedThreadId));
+    void loadMessages(selectedThreadId).then((nextMessages) => {
+      if (!active) return;
+      setMessages(nextMessages);
+    });
+    return () => {
+      active = false;
+    };
   }, [selectedThreadId]);
 
   const capacityMap = useMemo(() => buildCapacityMap(orders), [orders]);
@@ -514,11 +538,18 @@ export default function HostPage() {
   }
 
   async function refreshHostData() {
-    const nextRegisteredUsers = readRegisteredUsers();
+    const nextRegisteredUsers = await loadHostProfiles(readRegisteredUsers());
+    const nextDogs = await loadHostPets(nextRegisteredUsers, readAllPets(nextRegisteredUsers));
+    const nextThreads = await loadChatThreads();
+    const nextSelected = selectedThreadId || nextThreads[0]?.id || "";
+    const nextMessages = nextSelected ? await loadMessages(nextSelected) : [];
     setOrders(await loadAllOrdersForHost());
     setRegisteredUsers(nextRegisteredUsers);
-    setDogs(readAllPets(nextRegisteredUsers));
-    setThreads(readChatThreads());
+    setDogs(nextDogs);
+    setThreads(nextThreads);
+    setSelectedThreadId(nextSelected);
+    setMessages(nextMessages);
+    setOffDays(await loadHostOffDays());
     setReviews(await loadPublicReviews({ includeHidden: true }));
     setPhotos(await loadGuestPhotos());
   }
@@ -736,6 +767,8 @@ export default function HostPage() {
     setReply("");
     setMessages(readMessages(selectedThreadId));
     setThreads(readChatThreads());
+    void loadMessages(selectedThreadId).then((nextMessages) => setMessages(nextMessages));
+    void loadChatThreads().then((nextThreads) => setThreads(nextThreads));
   }
 
   function openCreateBooking(customer?: CustomerRecord) {

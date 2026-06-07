@@ -124,7 +124,7 @@ This file lists the v1.0 features discovered in the current project.
 - Host/customer message thread storage.
 - Host Panel message inbox.
 - Thread list, conversation area, and customer card concept.
-- Messages currently use localStorage event sync.
+- Messages use Supabase `chat_messages` when configured, with localStorage event sync retained as fallback.
 
 ## Gallery
 
@@ -178,6 +178,7 @@ This file lists the v1.0 features discovered in the current project.
 - Maximum 3 dogs per day.
 - Capacity counts dogs, not orders.
 - Off Day support from Host Panel.
+- Host off days use Supabase when configured, with `pet-villa-host-off-days` fallback retained.
 - Full and off days should block customer booking.
 - Cancelled/refunded/failed/expired bookings should not consume capacity.
 
@@ -202,6 +203,10 @@ This file lists the v1.0 features discovered in the current project.
 - Promotions area.
 - Reports/settings entry points.
 - Host/admin users can read all Supabase orders through role-based RLS.
+- Host Dashboard statistics and Booking Center read Supabase orders when configured.
+- Customers CRM reads Supabase profiles and pets when configured.
+- Host/admin users can update Supabase order status through role-based RLS.
+- Host role checks use `profiles.role = 'host'` or `profiles.role = 'admin'`.
 
 ## Backend/API
 
