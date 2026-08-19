@@ -1,24 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { loadPetProfiles, type PetProfile } from "../lib/petProfiles";
+import { createEmptyPet, dogAvatarSrc, loadPetProfiles, savePetProfile, type PetProfile } from "../lib/petProfiles";
 import { loadOrders, saveBookingDraft } from "../lib/orderFlow";
-import { getVoucherDiscount, getVoucherIneligibility, loadVouchers, readVouchers, validateVoucherForBooking, type UserVoucher } from "../lib/vouchers";
-import { isHostOffDay, loadHostOffDays, readHostOffDays } from "../lib/hostAvailability";
-import {
-  availableSlotsForDate,
-  buildCapacityMap,
-  daysInclusive,
-  firstCapacityIssue,
-  formatDateRange,
-  startOfLocalDay,
-  toDateKey
-} from "../lib/bookingCapacity";
+import { isHostOffDay, loadHostOffDays } from "../lib/hostAvailability";
+import { daysInclusive, eachDateInRange, startOfLocalDay, toDateKey } from "../lib/bookingCapacity";
+import { loadBusinessSettings, type BusinessSettings } from "../lib/businessSettings";
+import { calculateServiceSubtotal } from "../lib/pricing";
 
 const timeOptions = ["9:00am", "10:00am", "11:00am", "12:00pm", "1:00pm", "2:00pm", "3:00pm", "4:00pm", "5:00pm", "6:00pm", "7:00pm", "8:00pm"];
+type AvailabilityStatus = "loading" | "ready" | "refreshing" | "stale" | "error";
+type PricingStatus = "loading" | "ready" | "error";
 
 function hourIndex(value: string) {
   return timeOptions.indexOf(value) + 9;
@@ -30,6 +25,18 @@ function createLocalDate(year: number, month: number, day: number) {
 
 function monthLabel(date: Date) {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function formatFullDate(date: Date) {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatFullDateRange(start: Date, end: Date) {
+  if (toDateKey(start) === toDateKey(end)) return formatFullDate(start);
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${formatFullDate(end)}`;
+  }
+  return `${formatFullDate(start)} - ${formatFullDate(end)}`;
 }
 
 function monthCells(month: Date) {
@@ -70,7 +77,7 @@ function CalendarIcon() {
 
 function DogAvatar({ pet }: { pet?: PetProfile }) {
   if (pet?.photoDataUrl) {
-    return <img src={pet.photoDataUrl} alt="" className="h-14 w-14 shrink-0 rounded-[16px] object-cover" />;
+    return <img src={dogAvatarSrc(pet.photoDataUrl)} alt="" className="h-14 w-14 shrink-0 rounded-[16px] object-cover" />;
   }
   return (
     <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[16px] bg-villa-primary-bg">
@@ -97,7 +104,7 @@ function CheckMark({ active }: { active: boolean }) {
 }
 
 export default function BookingPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const today = startOfLocalDay(new Date());
   const [pets, setPets] = useState<PetProfile[]>([]);
   const [service, setService] = useState<"overnight" | "daycare">("overnight");
@@ -109,57 +116,110 @@ export default function BookingPage() {
   const [startTime, setStartTime] = useState("10:00am");
   const [endTime, setEndTime] = useState("2:00pm");
   const [specialRequest, setSpecialRequest] = useState("");
-  const [vouchers, setVouchers] = useState<UserVoucher[]>([]);
-  const [selectedVoucherId, setSelectedVoucherId] = useState("");
+  const [operationalWhatsAppConsent, setOperationalWhatsAppConsent] = useState(false);
   const [offDays, setOffDays] = useState<string[]>([]);
+  const [availabilityStatus, setAvailabilityStatus] = useState<AvailabilityStatus>("loading");
+  const availabilityLoadedRef = useRef(false);
+  const [quickPetOpen, setQuickPetOpen] = useState(false);
+  const [quickPet, setQuickPet] = useState<PetProfile>(() => createEmptyPet());
+  const [quickPetError, setQuickPetError] = useState("");
+  const [savingQuickPet, setSavingQuickPet] = useState(false);
+  const [paymentPromptKind, setPaymentPromptKind] = useState<"date" | "pet" | null>(null);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [pricingStatus, setPricingStatus] = useState<PricingStatus>("loading");
+  const [bookingDataMessage, setBookingDataMessage] = useState("");
+  const [petsLoaded, setPetsLoaded] = useState(false);
+  const [refreshingData, setRefreshingData] = useState(false);
+
+  const refreshAvailability = useCallback(async () => {
+    setAvailabilityStatus(availabilityLoadedRef.current ? "refreshing" : "loading");
+    try {
+      const days = await loadHostOffDays();
+      setOffDays(days);
+      availabilityLoadedRef.current = true;
+      setAvailabilityStatus("ready");
+      return days;
+    } catch (error) {
+      setAvailabilityStatus(availabilityLoadedRef.current ? "stale" : "error");
+      throw error;
+    }
+  }, []);
+
+  useEffect(() => {
+    document.body.dataset.petVillaSurface = "booking";
+    return () => {
+      delete document.body.dataset.petVillaSurface;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
-    async function syncPets() {
-      const nextPets = await loadPetProfiles();
+    let hasLoadedOnce = false;
+    function reportFailure(error: unknown) {
       if (!active) return;
-      setPets(nextPets);
-      setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
+      setBookingDataMessage(hasLoadedOnce
+        ? t({ en: "Unable to refresh — showing last known booking data.", zh: "暂时无法刷新，正在显示上次同步的预约资料。" })
+        : error instanceof Error ? error.message : t({ en: "Booking data could not be loaded.", zh: "无法读取预约资料。" }));
     }
-    void syncPets();
-    void loadOrders();
-    setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
-    void loadVouchers().then((nextVouchers) => {
+    async function syncPets() {
+      try {
+        const nextPets = await loadPetProfiles();
+        if (!active) return;
+        setPets(nextPets);
+        setPetsLoaded(true);
+        setSelectedPets((current) => current.filter((id) => nextPets.some((pet) => pet.id === id)));
+      } catch (error) {
+        reportFailure(error);
+      }
+    }
+    async function syncRemoteData() {
+      if (hasLoadedOnce) setRefreshingData(true);
+      const results = await Promise.allSettled([
+        syncPets(),
+        loadOrders(),
+        loadBusinessSettings()
+          .then((settings) => {
+            if (!active) return;
+            setBusinessSettings(settings);
+            setPricingStatus("ready");
+          })
+          .catch((error) => {
+            if (active) setPricingStatus("error");
+            throw error;
+          })
+      ]);
       if (!active) return;
-      setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
-    });
-    setOffDays(readHostOffDays());
-    void loadHostOffDays().then((days) => {
-      if (!active) return;
-      setOffDays(days);
-    });
+      const rejection = results.find((result) => result.status === "rejected");
+      if (rejection?.status === "rejected") reportFailure(rejection.reason);
+      else {
+        hasLoadedOnce = true;
+        setBookingDataMessage("");
+      }
+      setRefreshingData(false);
+    }
+    void syncRemoteData();
+    void refreshAvailability().catch(() => undefined);
     function handlePetsChanged() {
       void syncPets();
     }
-    function syncVouchers() {
-      setVouchers(readVouchers().filter((voucher) => voucher.status === "available"));
-      void loadVouchers().then((nextVouchers) => {
-        if (!active) return;
-        setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
-      });
-    }
     function syncAvailability() {
-      setOffDays(readHostOffDays());
-      void loadHostOffDays().then((days) => {
-        if (!active) return;
-        setOffDays(days);
-      });
+      void refreshAvailability().catch(() => undefined);
+    }
+    function handleVisibleRefresh() {
+      if (document.visibilityState === "visible") void syncRemoteData();
     }
     window.addEventListener("pet-villa-pets", handlePetsChanged);
-    window.addEventListener("pet-villa-vouchers", syncVouchers);
     window.addEventListener("pet-villa-availability", syncAvailability);
+    window.addEventListener("focus", handleVisibleRefresh);
+    document.addEventListener("visibilitychange", handleVisibleRefresh);
     return () => {
       active = false;
       window.removeEventListener("pet-villa-pets", handlePetsChanged);
-      window.removeEventListener("pet-villa-vouchers", syncVouchers);
       window.removeEventListener("pet-villa-availability", syncAvailability);
+      window.removeEventListener("focus", handleVisibleRefresh);
+      document.removeEventListener("visibilitychange", handleVisibleRefresh);
     };
-  }, []);
+  }, [refreshAvailability]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -185,36 +245,74 @@ export default function BookingPage() {
   const selectedPetNames = selectedPetObjects.map((pet) => pet.name);
   const daycareHours = Math.max(1, hourIndex(endTime) - hourIndex(startTime));
   const overnightNights = daysInclusive(startDate, endDate);
-  const unitTotal = service === "overnight" ? overnightNights * 35 : daycareHours * 5;
-  const subtotal = selectedPets.length > 0 ? unitTotal * petCount : 0;
-  const selectedVoucher = vouchers.find((voucher) => voucher.id === selectedVoucherId) || null;
-  const voucherDiscount = getVoucherDiscount(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
-  const total = Math.max(0, subtotal - voucherDiscount);
-  const deposit = Math.ceil(total / 2);
+  const configuredBoardingRate = Number(businessSettings?.boardingRate);
+  const configuredDaycareRate = Number(businessSettings?.daycareRate);
+  const pricingReady = pricingStatus === "ready"
+    && Number.isFinite(configuredBoardingRate)
+    && configuredBoardingRate >= 0
+    && Number.isFinite(configuredDaycareRate)
+    && configuredDaycareRate >= 0;
+  const pricingMessage = pricingStatus === "error"
+    ? t({ en: "Price unavailable", zh: "价格暂时无法读取" })
+    : t({ en: "Loading price...", zh: "正在读取价格..." });
+  const pricingNotice = pricingStatus === "error"
+    ? t({ en: "Current pricing is unavailable. Please try again shortly.", zh: "目前无法读取最新价格，请稍后再试。" })
+    : t({ en: "Loading current pricing...", zh: "正在读取最新价格..." });
+  const boardingRate = pricingReady ? configuredBoardingRate : 0;
+  const daycareRate = pricingReady ? configuredDaycareRate : 0;
+  const subtotal = pricingReady && selectedPets.length > 0 ? calculateServiceSubtotal({
+    service,
+    startDate: toDateKey(startDate),
+    endDate: toDateKey(endDate),
+    hours: daycareHours,
+    petCount,
+    settings: {
+      boardingRate,
+      daycareRate,
+      specialDateRates: businessSettings?.specialDateRates
+    }
+  }) : 0;
+  const unitTotal = petCount > 0 ? subtotal / petCount : 0;
+  const total = subtotal;
+  const deposit = service === "daycare" || total < 50 ? 0 : 50;
   const balance = Math.max(0, total - deposit);
-  const capacityUsage = useMemo(() => buildCapacityMap(), [dateTouched, selectedPets.length]);
-  const capacityIssue = selectedPets.length > 0 ? firstCapacityIssue(startDate, endDate, selectedPets.length, capacityUsage) : null;
-  const offDayIssue = isHostOffDay(toDateKey(startDate), offDays) || isHostOffDay(toDateKey(endDate), offDays);
+  const availabilityKnown = availabilityStatus === "ready" || availabilityStatus === "refreshing" || availabilityStatus === "stale";
+  const offDayIssue = availabilityKnown && eachDateInRange(startDate, endDate).some((date) => isHostOffDay(toDateKey(date), offDays));
 
   const dateLabel = useMemo(() => {
-    if (service === "daycare") return `${formatDateRange(startDate, startDate)}, ${startTime} - ${endTime}`;
-    return formatDateRange(startDate, endDate);
+    if (service === "daycare") return `${formatFullDate(startDate)}, ${startTime} - ${endTime}`;
+    return formatFullDateRange(startDate, endDate);
   }, [endDate, endTime, service, startDate, startTime]);
+  const displayDateLabel = dateTouched ? dateLabel : t({ en: "Please select your date", zh: "请先选择日期" });
+  const displayDateSubcopy = dateTouched
+    ? !pricingReady
+      ? pricingMessage
+      : service === "overnight"
+      ? t({ en: `${overnightNights} Nights Selected · RM${unitTotal} / pet`, zh: `已选 ${overnightNights} 晚 · 每只 RM${unitTotal}` })
+      : t({ en: `${daycareHours} Hours Selected · RM${unitTotal} / pet`, zh: `已选 ${daycareHours} 小时 · 每只 RM${unitTotal}` })
+    : t({ en: "Tap one calendar date below before payment.", zh: "请点击下方日历日期后再继续付款。" });
 
   const serviceCompleted = Boolean(service);
   const dateCompleted = serviceCompleted && dateTouched;
   const petCompleted = dateCompleted && selectedPets.length > 0;
-  const confirmCompleted = petCompleted && total > 0 && !capacityIssue && !offDayIssue;
+  const confirmCompleted = petCompleted && pricingReady && total > 0 && availabilityKnown && !offDayIssue;
   const currentStep = !serviceCompleted ? 0 : !dateCompleted ? 1 : !petCompleted ? 2 : 3;
 
   function chooseService(nextService: "overnight" | "daycare") {
     setService(nextService);
-    if (nextService === "daycare") setEndDate(startDate);
+    if (nextService === "daycare") {
+      setEndDate(startDate);
+    }
   }
 
   function chooseDate(date: Date) {
-    if (date < today || isHostOffDay(toDateKey(date), offDays) || availableSlotsForDate(date, capacityUsage) <= 0) return;
+    if (!availabilityKnown || date < today || isHostOffDay(toDateKey(date), offDays)) return;
     setDateTouched(true);
+    if (!dateTouched) {
+      setStartDate(date);
+      setEndDate(date);
+      return;
+    }
     if (service === "daycare") {
       setStartDate(date);
       setEndDate(date);
@@ -242,12 +340,40 @@ export default function BookingPage() {
   }
 
   function togglePet(id: string) {
+    const alreadySelected = selectedPets.includes(id);
     setSelectedPets((current) => {
       if (current.includes(id)) {
         return current.filter((petId) => petId !== id);
       }
       return [...current, id];
     });
+    if (!alreadySelected) setPaymentPromptKind(null);
+  }
+
+  async function saveQuickPet(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!quickPet.name.trim() || !quickPet.breed.trim()) {
+      setQuickPetError(t({ en: "Please add your pet's name and breed.", zh: "请填写宠物名字和品种。" }));
+      return;
+    }
+    const normalizedWeight = quickPet.weight.trim()
+      ? `${quickPet.weight.replace(/kg/gi, "").trim()}kg`
+      : "";
+    setSavingQuickPet(true);
+    try {
+      const petToSave = { ...quickPet, weight: normalizedWeight };
+      const nextPets = await savePetProfile(petToSave);
+      setPets(nextPets);
+      setSelectedPets((current) => Array.from(new Set([...current, petToSave.id])));
+      setQuickPet(createEmptyPet());
+      setQuickPetOpen(false);
+      setQuickPetError("");
+      setPaymentPromptKind(null);
+    } catch {
+      setQuickPetError(t({ en: "Could not save this pet. Please try again.", zh: "无法保存这只宠物，请再试一次。" }));
+    } finally {
+      setSavingQuickPet(false);
+    }
   }
 
   function stepState(index: number) {
@@ -257,19 +383,35 @@ export default function BookingPage() {
   }
 
   async function saveDraftForPayment() {
-    if (!confirmCompleted) return;
-    const validation = await validateVoucherForBooking(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
-    if (selectedVoucher && !validation.ok) {
-      setSelectedVoucherId("");
-      const nextVouchers = await loadVouchers();
-      setVouchers(nextVouchers.filter((voucher) => voucher.status === "available"));
+    if (!dateTouched) {
+      setPaymentPromptKind("date");
+      window.setTimeout(() => {
+        document.getElementById("booking-choose-date")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
       return;
     }
-    const appliedVoucherDiscount = selectedVoucher ? validation.discount : 0;
-    const appliedTotal = Math.max(0, subtotal - appliedVoucherDiscount);
-    const appliedDeposit = Math.ceil(appliedTotal / 2);
+    if (selectedPets.length === 0) {
+      setPaymentPromptKind("pet");
+      window.setTimeout(() => {
+        document.getElementById("booking-choose-pets")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
+      return;
+    }
+    if (!operationalWhatsAppConsent) {
+      setBookingDataMessage(t({ en: "Please agree to the required operational WhatsApp service updates before continuing to payment.", zh: "请先同意必要的 WhatsApp 服务通知，才可以继续付款。" }));
+      document.getElementById("booking-whatsapp-consent")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!pricingReady) {
+      setBookingDataMessage(pricingNotice);
+      return;
+    }
+    if (!confirmCompleted) return;
+    const appliedTotal = subtotal;
+    const appliedDeposit = service === "daycare" || appliedTotal < 50 ? 0 : 50;
     const appliedBalance = Math.max(0, appliedTotal - appliedDeposit);
-    saveBookingDraft({
+    try {
+      await saveBookingDraft({
       id: `draft-${Date.now()}`,
       service,
       serviceLabel: service === "overnight" ? "Overnight Boarding" : "Daycare",
@@ -287,16 +429,20 @@ export default function BookingPage() {
       })),
       total: appliedTotal,
       subtotal,
-      voucherId: selectedVoucher?.id,
-      voucherCode: selectedVoucher?.code,
-      voucherTitle: selectedVoucher?.title.en,
-      voucherDiscount: appliedVoucherDiscount,
+      voucherDiscount: 0,
+      appliedVouchers: [],
       deposit: appliedDeposit,
       balance: appliedBalance,
       specialRequest,
+      operationalWhatsappConsentLanguage: lang === "zh" ? "zh" : "en",
       createdAt: new Date().toISOString()
-    });
-    window.location.href = "/payment";
+      });
+      window.location.href = "/payment";
+    } catch (error) {
+      setBookingDataMessage(error instanceof Error
+        ? error.message
+        : t({ en: "Your booking could not be saved. Please try again.", zh: "预约无法保存，请重试。" }));
+    }
   }
 
   const steps = [
@@ -305,41 +451,136 @@ export default function BookingPage() {
     t({ en: "Pet", zh: "宠物" }),
     t({ en: "Confirm", zh: "确认" })
   ];
+  const selectedServiceTitle = service === "overnight"
+    ? t({ en: "Boarding", zh: "寄宿" })
+    : t({ en: "Daycare", zh: "日托" });
+  const boardingPriceLabel = pricingReady ? `RM${boardingRate}/night` : pricingMessage;
+  const daycarePriceLabel = pricingReady ? `RM${daycareRate}/hour` : pricingMessage;
+  const selectedServicePrice = service === "overnight" ? boardingPriceLabel : daycarePriceLabel;
+  const pricingAmount = (amount: number) => pricingReady ? `RM${amount}` : pricingMessage;
+  const selectedServiceMeta = !dateTouched
+    ? t({ en: "Pick a calendar date to continue.", zh: "请先选择日历日期再继续。" })
+    : service === "overnight"
+      ? t({ en: `${overnightNights} night${overnightNights === 1 ? "" : "s"} selected`, zh: `已选 ${overnightNights} 晚` })
+      : t({ en: `${daycareHours} hours selected`, zh: `已选 ${daycareHours} 小时` });
+  const heroImage = service === "overnight"
+    ? "/petvilla-booking-boarding-banner.webp"
+    : "/petvilla-booking-daycare-banner.webp";
+  const depositLabel = !pricingReady
+    ? t({ en: "Pricing", zh: "价格" })
+    : service === "daycare" || (total > 0 && deposit === 0)
+    ? t({ en: "No Deposit", zh: "无需订金" })
+    : t({ en: "Deposit", zh: "订金" });
+  const petLabel = selectedPets.length > 0
+    ? `${selectedPets.length} ${selectedPets.length === 1 ? t({ en: "pet", zh: "只宠物" }) : t({ en: "pets", zh: "只宠物" })}`
+    : t({ en: "Choose pet", zh: "选择宠物" });
 
   return (
     <ProtectedPage>
       <OwnerSidebar>
-        <section className="p-4 lg:p-8">
-          <h1 className="page-title">{t({ en: "Book a Stay", zh: "预约照顾" })}</h1>
-          <p className="body-copy mt-1">{t({ en: "Choose service, dates, pets, and confirm the deposit amount.", zh: "选择服务、日期、宠物，并确认订金金额。" })}</p>
+        <section className="booking-page">
+          <header className="booking-hero booking-live-hero">
+            <img key={heroImage} src={heroImage} alt="" />
+            <span className="booking-float-pill" data-position="left">
+              <CalendarIcon />
+              {dateTouched ? dateLabel : t({ en: "Pick your date", zh: "选择日期" })}
+            </span>
+            <div className="booking-live-copy">
+              <span className="booking-live-chip">{t({ en: "Pet Villa Booking", zh: "Pet Villa 预约" })}</span>
+              <h1 className="m-0 mt-3 font-title text-[30px] font-black leading-[1.02] text-villa-text-primary">{t({ en: "Book a Stay", zh: "预约照顾" })}</h1>
+              <div className="booking-service-pill" data-service={service}>
+                <span className="booking-service-icon"><ServiceIcon type={service} /></span>
+                <span>
+                  <strong>{selectedServiceTitle}</strong>
+                  <small>{selectedServicePrice}</small>
+                </span>
+              </div>
+              <p className="m-0 mt-2 text-[12px] font-black leading-snug text-villa-text-secondary">{selectedServiceMeta}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="booking-live-stat">
+                  <span className="whitespace-nowrap text-[9px] font-black text-villa-text-secondary">{depositLabel}</span>
+                  <strong className="mt-1 text-[18px] font-black leading-none text-[#d97867]">{pricingAmount(deposit)}</strong>
+                </div>
+                <div className="booking-live-stat">
+                  <span className="text-[10px] font-black text-villa-text-secondary">{t({ en: "Pets", zh: "宠物" })}</span>
+                  <strong className="mt-1 text-[18px] font-black leading-none text-villa-text-primary">{selectedPets.length}</strong>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {refreshingData ? <p className="booking-sync-note">{t({ en: "Refreshing booking details...", zh: "正在同步预约资料..." })}</p> : null}
+          {bookingDataMessage ? <p className="booking-sync-note" role="status">{bookingDataMessage}</p> : null}
+          {!pricingReady && !bookingDataMessage ? (
+            <p className="booking-sync-note" role={pricingStatus === "error" ? "alert" : "status"} aria-busy={pricingStatus === "loading"}>
+              {pricingNotice}
+            </p>
+          ) : null}
+          {!petsLoaded && !bookingDataMessage ? <p className="booking-sync-note" aria-busy="true">{t({ en: "Syncing your pets and availability...", zh: "正在同步宠物与可预约日期..." })}</p> : null}
+          {availabilityStatus === "loading" ? <p className="booking-sync-note" aria-busy="true">{t({ en: "Checking live date availability...", zh: "正在查询最新可预约日期..." })}</p> : null}
+          {availabilityStatus === "refreshing" ? <p className="booking-sync-note" aria-busy="true">{t({ en: "Refreshing date availability...", zh: "正在刷新可预约日期..." })}</p> : null}
+          {availabilityStatus === "stale" ? (
+            <div className="booking-sync-note flex items-center justify-between gap-3" role="status">
+              <span>{t({ en: "Unable to refresh — showing last known availability.", zh: "暂时无法刷新，正在显示上次同步的预约状态。" })}</span>
+              <button type="button" className="font-black text-villa-primary underline" onClick={() => void refreshAvailability().catch(() => undefined)}>{t({ en: "Retry", zh: "重试" })}</button>
+            </div>
+          ) : null}
+          {availabilityStatus === "error" ? (
+            <div className="booking-sync-note flex items-center justify-between gap-3 text-red-700" role="alert">
+              <span>{t({ en: "Availability is temporarily unavailable. Dates are disabled until it is restored.", zh: "预约状态暂时无法读取，恢复前所有日期均不可选择。" })}</span>
+              <button type="button" className="shrink-0 font-black underline" onClick={() => void refreshAvailability().catch(() => undefined)}>{t({ en: "Retry", zh: "重试" })}</button>
+            </div>
+          ) : null}
+
+          <section className="booking-choice-dock" aria-label={t({ en: "Current booking choices", zh: "当前预约选择" })}>
+            <div className="booking-choice-chip" data-tone="warm">
+              <span><ServiceIcon type={service} /></span>
+              <div>
+                <strong>{selectedServiceTitle}</strong>
+                <small>{selectedServicePrice}</small>
+              </div>
+            </div>
+            <div className="booking-choice-chip" data-tone="lavender">
+              <span><CalendarIcon /></span>
+              <div>
+                <strong>{dateTouched ? (service === "overnight" ? `${overnightNights} ${t({ en: "night", zh: "晚" })}` : `${daycareHours}h`) : t({ en: "Pick date", zh: "选择日期" })}</strong>
+                <small>{dateTouched ? formatFullDate(startDate) : t({ en: "Required", zh: "必选" })}</small>
+              </div>
+            </div>
+            <div className="booking-choice-chip" data-tone="mint">
+              <span><DogAvatar /></span>
+              <div>
+                <strong>{petLabel}</strong>
+                <small>{selectedPetNames.length ? selectedPetNames.join(", ") : t({ en: "Required", zh: "必选" })}</small>
+              </div>
+            </div>
+          </section>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
             <div className="grid gap-4">
-              <div className="rounded-[20px] border border-villa-primary-light bg-white/88 px-4 py-3 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
+              <div className="booking-stepper">
                 <div className="grid grid-cols-4 items-start gap-1">
                   {steps.map((step, index) => {
                     const state = stepState(index);
                     return (
                       <div key={step} className="relative grid justify-items-center gap-1 text-center">
-                        {index > 0 ? <span className={`absolute right-1/2 top-[10px] h-0.5 w-full ${stepState(index - 1) === "done" ? "bg-villa-primary" : "bg-villa-primary-light/75"}`} /> : null}
-                        <span className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border-2 text-[11px] font-black ${
-                          state === "upcoming" ? "border-villa-primary-light bg-white text-villa-text-muted" : "border-villa-primary bg-villa-primary text-white"
-                        }`}>
+                        {index > 0 ? <span className={`absolute right-1/2 top-[15px] h-1 w-full rounded-full ${stepState(index - 1) === "done" ? "bg-[#c6a7ff]" : "bg-white/80"}`} /> : null}
+                        <span className="booking-step-dot" data-state={state}>
                           {state === "done" ? "✓" : index + 1}
                         </span>
-                        <span className={`text-[11px] font-black ${state === "upcoming" ? "text-villa-text-muted" : "text-villa-primary"}`}>{step}</span>
+                        <span className={`text-[11px] font-black ${state === "upcoming" ? "text-villa-text-muted" : "text-[#8d65da]"}`}>{step}</span>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">{t({ en: "Choose Service", zh: "选择服务" })}</h2>
+              <section id="booking-choose-service" className="booking-panel">
+                <h2 className="booking-panel-title">{t({ en: "Choose Service", zh: "选择服务" })}</h2>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {[
-                    { id: "overnight" as const, title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }), price: "RM35/night", desc: t({ en: "No cages · 24h Care", zh: "不关笼 · 24小时照顾" }) },
-                    { id: "daycare" as const, title: t({ en: "Daycare", zh: "日托" }), price: "RM5/hour", desc: "9:00am – 8:00pm" }
+                    { id: "overnight" as const, title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }), price: boardingPriceLabel, desc: t({ en: "No cages · 24h Care", zh: "不关笼 · 24小时照顾" }) },
+                    { id: "daycare" as const, title: t({ en: "Daycare", zh: "日托" }), price: daycarePriceLabel, desc: "9:00am – 8:00pm" }
                   ].map((item) => {
                     const active = service === item.id;
                     return (
@@ -347,11 +588,11 @@ export default function BookingPage() {
                         key={item.id}
                         type="button"
                         onClick={() => chooseService(item.id)}
-                        className={`flex min-h-[104px] items-center gap-3 rounded-[18px] border p-3 text-left transition hover:-translate-y-px ${
-                          active ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white shadow-sm"
-                        }`}
+                        className="booking-option"
+                        data-active={active}
+                        data-service={item.id}
                       >
-                        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-[#fff0ec]"><ServiceIcon type={item.id} /></span>
+                        <span className="booking-icon-cup"><ServiceIcon type={item.id} /></span>
                         <span className="min-w-0 flex-1">
                           <strong className="block font-title text-[18px] font-black leading-tight text-villa-text-primary">{item.title}</strong>
                           <span className="mt-1 block text-sm font-black text-villa-primary">{item.price}</span>
@@ -364,46 +605,46 @@ export default function BookingPage() {
                 </div>
               </section>
 
-              <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">{t({ en: "Choose Date / Time", zh: "选择日期 / 时间" })}</h2>
-                <div className="mt-3 rounded-[14px] bg-villa-primary-bg p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="m-0 text-sm font-black text-villa-text-primary">{dateLabel}</p>
-                      <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">
-                        {service === "overnight"
-                          ? t({ en: `${overnightNights} Nights Selected · RM${unitTotal} / dog`, zh: `已选 ${overnightNights} 晚 · 每只 RM${unitTotal}` })
-                          : t({ en: `${daycareHours} Hours Selected · RM${unitTotal} / dog`, zh: `已选 ${daycareHours} 小时 · 每只 RM${unitTotal}` })}
-                      </p>
-                    </div>
-                    <div className="text-right text-lg font-black text-villa-primary">RM{unitTotal}</div>
+              <section id="booking-choose-date" className="booking-panel">
+                <h2 className="booking-panel-title">{t({ en: "Choose Date / Time", zh: "选择日期 / 时间" })}</h2>
+                <div className="booking-date-summary" data-empty={!dateTouched}>
+                  <span className="booking-date-summary-icon"><CalendarIcon /></span>
+                  <div className="booking-date-summary-copy">
+                    <p>{dateTouched ? displayDateLabel : t({ en: "Pick your stay date", zh: "请选择入住日期" })}</p>
+                    <small>{dateTouched ? displayDateSubcopy : t({ en: "Tap a calendar day below before payment.", zh: "请先点击下方日历日期，再继续付款。" })}</small>
                   </div>
+                  <button
+                    type="button"
+                    className="booking-date-summary-action"
+                    onClick={() => document.querySelector(".booking-calendar-card")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                  >
+                    {dateTouched && pricingReady ? `RM${unitTotal}` : dateTouched ? pricingMessage : t({ en: "Choose", zh: "选择" })}
+                  </button>
                 </div>
 
                 {service === "daycare" ? (
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <label className="grid gap-2">
                       <span className="villa-label">{t({ en: "Start time", zh: "开始时间" })}</span>
-                      <select className="villa-input" value={startTime} onChange={(event) => { setStartTime(event.target.value); setDateTouched(true); }}>
+                      <select className="villa-input" value={startTime} onChange={(event) => setStartTime(event.target.value)}>
                         {timeOptions.slice(0, -1).map((time) => <option key={time}>{time}</option>)}
                       </select>
                     </label>
                     <label className="grid gap-2">
                       <span className="villa-label">{t({ en: "End time", zh: "结束时间" })}</span>
-                      <select className="villa-input" value={endTime} onChange={(event) => { setEndTime(event.target.value); setDateTouched(true); }}>
+                      <select className="villa-input" value={endTime} onChange={(event) => setEndTime(event.target.value)}>
                         {timeOptions.slice(1).map((time) => <option key={time}>{time}</option>)}
                       </select>
                     </label>
                   </div>
                 ) : null}
 
-                <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/40 p-3">
+                <div className="booking-calendar-card">
                   <div className="mb-3 flex items-center justify-between">
-                    <button type="button" className="rounded-full px-2 text-lg font-black text-villa-text-primary" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>‹</button>
+                    <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-white/80 text-lg font-black text-villa-text-primary shadow-[0_7px_14px_rgba(61,31,13,0.08)]" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>‹</button>
                     <strong className="text-sm">{monthLabel(visibleMonth)}</strong>
-                    <button type="button" className="rounded-full px-2 text-lg font-black text-villa-text-primary" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>›</button>
+                    <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-white/80 text-lg font-black text-villa-text-primary shadow-[0_7px_14px_rgba(61,31,13,0.08)]" onClick={() => setVisibleMonth(createLocalDate(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>›</button>
                   </div>
-                  <p className="mb-3 text-center text-[11px] font-bold text-villa-text-muted">{t({ en: "Past dates are disabled. Full dates only appear after real capacity is reached.", zh: "过去日期不可选；只有真实满位后才会显示 Full。" })}</p>
                   <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-villa-text-muted">
                     {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
                   </div>
@@ -412,10 +653,8 @@ export default function BookingPage() {
                       if (!date) return <span key={`blank-${index}`} />;
                       const past = date < today;
                       const off = isHostOffDay(toDateKey(date), offDays);
-                      const slots = availableSlotsForDate(date, capacityUsage);
-                      const full = slots <= 0;
-                      const disabled = past || full || off;
-                      const active = date >= startOfLocalDay(startDate) && date <= startOfLocalDay(endDate);
+                      const disabled = !availabilityKnown || past || off;
+                      const active = dateTouched && date >= startOfLocalDay(startDate) && date <= startOfLocalDay(endDate);
                       const isToday = toDateKey(date) === toDateKey(today);
                       return (
                         <button
@@ -423,16 +662,9 @@ export default function BookingPage() {
                           type="button"
                           disabled={disabled}
                           onClick={() => chooseDate(date)}
-                          title={off ? "Off day" : full ? "Full" : past ? "Past date" : `${slots} slots left`}
-                          className={`min-h-[40px] rounded-[12px] border text-xs font-black transition ${
-                            disabled
-                              ? "cursor-not-allowed border-[#eaded7] bg-[#eee6e1] text-villa-text-muted"
-                              : active
-                                ? "border-villa-primary bg-villa-primary text-white shadow-sm"
-                                : isToday
-                                  ? "border-villa-primary bg-white text-villa-primary hover:bg-villa-primary-bg"
-                                  : "border-villa-primary-light bg-white text-villa-text-secondary hover:border-villa-primary"
-                          }`}
+                          title={!availabilityKnown ? "Availability unavailable" : off ? "Full" : past ? "Past date" : "Available"}
+                          className="booking-day"
+                          data-state={disabled ? "disabled" : active ? "active" : isToday ? "today" : "available"}
                         >
                           {date.getDate()}
                         </button>
@@ -442,16 +674,21 @@ export default function BookingPage() {
                 </div>
               </section>
 
-              <section className="rounded-[20px] border border-villa-primary-light bg-white/88 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-                <h2 className="section-title">{t({ en: "Choose Pets", zh: "选择宠物" })}</h2>
+              <section id="booking-choose-pets" className="booking-panel">
+                <h2 className="booking-panel-title">{t({ en: "Choose Pets", zh: "选择宠物" })}</h2>
                 {pets.length === 0 ? (
-                  <div className="mt-3 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-4 text-center">
+                  <div className="mt-3 rounded-[24px] border border-white/90 bg-[#fff0d5] p-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_12px_24px_rgba(61,31,13,0.08)]">
                     <h3 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Please add your pet first before booking.", zh: "预约前请先添加宠物资料。" })}</h3>
-                    <a href="/pets?mode=add" className="villa-button mt-4 w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
+                    <button type="button" className="booking-primary mt-4" onClick={() => setQuickPetOpen(true)}>{t({ en: "Add Pet Here", zh: "在这里新增宠物" })}</button>
                   </div>
                 ) : (
                   <>
-                    <p className="mt-1 text-xs font-bold text-villa-text-secondary">{t({ en: "Select the dog(s) staying with us.", zh: "选择这次要入住的狗狗。" })}</p>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <p className="m-0 text-xs font-bold text-villa-text-secondary">{t({ en: "Select the pet(s) staying with us.", zh: "选择这次要入住的宠物。" })}</p>
+                      <button type="button" className="booking-add-pet-link" onClick={() => setQuickPetOpen((value) => !value)}>
+                        {quickPetOpen ? t({ en: "Close", zh: "收起" }) : t({ en: "+ Add pet", zh: "+ 新增宠物" })}
+                      </button>
+                    </div>
                     <div className="mt-3 grid gap-2">
                       {pets.map((pet) => {
                         const active = selectedPets.includes(pet.id);
@@ -460,9 +697,8 @@ export default function BookingPage() {
                             key={pet.id}
                             type="button"
                             onClick={() => togglePet(pet.id)}
-                            className={`relative flex min-h-[86px] items-center gap-3 rounded-[18px] border p-3 text-left transition hover:-translate-y-px ${
-                              active ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white shadow-sm"
-                            }`}
+                            className="booking-option relative min-h-[92px]"
+                            data-active={active}
                           >
                             <DogAvatar pet={pet} />
                             <span className="min-w-0 flex-1">
@@ -481,21 +717,119 @@ export default function BookingPage() {
                   </>
                 )}
 
+                {quickPetOpen ? (
+                  <form className="booking-add-pet-card mt-3" onSubmit={(event) => void saveQuickPet(event)}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="m-0 text-[11px] font-black uppercase text-[#8d65da]">{t({ en: "Quick Add", zh: "快速新增" })}</p>
+                        <h3 className="m-0 mt-1 font-title text-[20px] font-black leading-tight text-villa-text-primary">{t({ en: "Another Pet", zh: "另一只宠物" })}</h3>
+                      </div>
+                      <button type="button" className="booking-add-pet-link" onClick={() => setQuickPetOpen(false)}>{t({ en: "Cancel", zh: "取消" })}</button>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <label className="grid gap-1.5">
+                        <span className="villa-label">{t({ en: "Name", zh: "名字" })}</span>
+                        <input className="villa-input" value={quickPet.name} onChange={(event) => setQuickPet((current) => ({ ...current, name: event.target.value }))} placeholder="Mochi" />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="villa-label">{t({ en: "Breed", zh: "品种" })}</span>
+                        <input className="villa-input" value={quickPet.breed} onChange={(event) => setQuickPet((current) => ({ ...current, breed: event.target.value }))} placeholder="Poodle" />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="villa-label">{t({ en: "Weight", zh: "体重" })}</span>
+                        <input className="villa-input" type="number" min="1" max="12" step="0.1" value={quickPet.weight.replace(/kg/gi, "")} onChange={(event) => setQuickPet((current) => ({ ...current, weight: event.target.value }))} placeholder="5" />
+                      </label>
+                    </div>
+                    {quickPetError ? <p className="m-0 mt-2 rounded-[14px] bg-red-50 p-2 text-xs font-black text-red-700">{quickPetError}</p> : null}
+                    <button type="submit" className="booking-primary mt-3" disabled={savingQuickPet}>
+                      {savingQuickPet ? t({ en: "Saving...", zh: "保存中..." }) : t({ en: "Save & Select Pet", zh: "保存并选择宠物" })}
+                    </button>
+                  </form>
+                ) : null}
+
                 <label className="mt-3 grid gap-2">
                   <span className="villa-label">{t({ en: "Special Request (Optional)", zh: "特别要求（选填）" })}</span>
                   <textarea
                     className="villa-input h-16 py-3"
                     value={specialRequest}
                     onChange={(event) => setSpecialRequest(event.target.value)}
-                    placeholder={t({ en: "Tell us anything important for your dog's comfort.", zh: "告诉我们狗狗照顾上需要注意的事项。" })}
+                    placeholder={t({ en: "Tell us anything important for your pet's comfort.", zh: "告诉我们宠物照顾上需要注意的事项。" })}
                   />
                 </label>
+                <label id="booking-whatsapp-consent" className="mt-3 flex cursor-pointer items-start gap-3 rounded-[16px] border border-villa-primary-light bg-white p-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={operationalWhatsAppConsent}
+                    onChange={(event) => {
+                      setOperationalWhatsAppConsent(event.target.checked);
+                      if (event.target.checked) setBookingDataMessage("");
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-villa-primary"
+                  />
+                  <span className="text-xs font-bold leading-relaxed text-villa-text-secondary">
+                    {t({
+                      en: "I agree to receive essential booking, payment and pet-care service updates from The Pet Villa via WhatsApp. No marketing messages will be sent.",
+                      zh: "我同意通过 WhatsApp 接收 The Pet Villa 必要的预订、付款及宠物照护服务通知。我们不会发送营销信息。"
+                    })}
+                  </span>
+                </label>
+              </section>
+
+              <section className="booking-mobile-summary booking-checkout-panel">
+                <div className="booking-checkout-topline">
+                  <div className="booking-checkout-topline-row">
+                    <span>{t({ en: "Secure checkout", zh: "安全确认" })}</span>
+                    <div className="booking-checkout-badges">
+                      <strong>{dateTouched && selectedPets.length > 0 ? t({ en: "Ready", zh: "可付款" }) : !dateTouched ? t({ en: "Needs date", zh: "需选日期" }) : t({ en: "Needs pet", zh: "需选宠物" })}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="m-0 text-[11px] font-black uppercase text-[#8d65da]">{t({ en: "Review & Pay", zh: "确认付款" })}</p>
+                    <h2 className="m-0 mt-1 font-title text-[22px] font-black leading-tight text-villa-text-primary">{selectedServiceTitle}</h2>
+                    <p className="m-0 mt-1 text-xs font-bold leading-snug text-villa-text-secondary">{displayDateLabel} · {selectedPetNames.length ? selectedPetNames.join(", ") : t({ en: "Choose pet", zh: "选择宠物" })}</p>
+                  </div>
+                  <div className="booking-deposit-bubble">
+                    <span className="block text-[11px] font-black text-villa-text-secondary">{depositLabel}</span>
+                    <strong className="block text-[24px] font-black leading-none text-[#d97867]">{pricingAmount(deposit)}</strong>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="booking-quick-total">
+                    <span>{t({ en: "Total", zh: "总计" })}</span>
+                    <strong>{pricingAmount(total)}</strong>
+                  </div>
+                  <div className="booking-quick-total">
+                    <span>{t({ en: "Pets", zh: "宠物" })}</span>
+                    <strong>{selectedPets.length}</strong>
+                  </div>
+                  <div className="booking-quick-total">
+                    <span>{t({ en: "Later", zh: "尾款" })}</span>
+                    <strong>{pricingAmount(balance)}</strong>
+                  </div>
+                </div>
+                {offDayIssue ? (
+                  <p className="mb-0 mt-3 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-700">
+                    {t({ en: "One of the selected dates is full. Please choose another date.", zh: "所选日期已满，请重新选择其他日期。" })}
+                  </p>
+                ) : null}
+                {selectedPets.length === 0 && pets.length > 0 ? (
+                  <p className="booking-pay-hint">
+                    {t({ en: "Choose at least one pet before payment.", zh: "请先选择至少一只宠物，才可以继续付款。" })}
+                  </p>
+                ) : null}
+                {pets.length === 0 ? (
+                  <button type="button" className="booking-primary mt-3" onClick={() => setQuickPetOpen(true)}>{t({ en: "Add Pet Here", zh: "在这里新增宠物" })}</button>
+                ) : (
+                  <button type="button" onClick={saveDraftForPayment} disabled={dateTouched && selectedPets.length > 0 && !confirmCompleted} className="booking-primary mt-3">{t({ en: "Continue to Payment", zh: "继续付款" })}</button>
+                )}
               </section>
             </div>
 
-            <aside className="h-fit rounded-[22px] border border-villa-primary-light bg-white/90 p-4 shadow-[0_8px_28px_rgba(61,31,13,0.10)] lg:sticky lg:top-24">
-              <h2 className="section-title">{t({ en: "Booking Summary", zh: "预约摘要" })}</h2>
-              <div className="mt-4 rounded-[18px] bg-villa-primary-bg/55 p-4">
+            <aside className="booking-summary-card hidden lg:block">
+              <h2 className="booking-panel-title">{t({ en: "Booking Summary", zh: "预约摘要" })}</h2>
+              <div className="mt-4 rounded-[24px] bg-[#f2e7ff] p-4 shadow-[inset_0_-8px_14px_rgba(255,255,255,0.26)]">
                 <div className="grid gap-3 text-sm font-black text-villa-text-primary">
                   <div className="flex items-center gap-3">
                     <ServiceIcon type={service} />
@@ -503,85 +837,77 @@ export default function BookingPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <CalendarIcon />
-                    <span>{dateLabel}{service === "overnight" ? ` (${overnightNights} ${t({ en: "Nights", zh: "晚" })})` : ""}</span>
+                    <span>{displayDateLabel}{dateTouched && service === "overnight" ? ` (${overnightNights} ${t({ en: "Nights", zh: "晚" })})` : ""}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <DogAvatar pet={selectedPetObjects[0]} />
                     <span>{selectedPetNames.length ? selectedPetNames.join(", ") : t({ en: "No pet selected", zh: "未选择宠物" })}</span>
                   </div>
-                  <div className="text-xs font-bold text-villa-text-secondary">{selectedPets.length} {selectedPets.length === 1 ? t({ en: "Dog", zh: "只狗" }) : t({ en: "Dogs", zh: "只狗" })}</div>
+                  <div className="text-xs font-bold text-villa-text-secondary">{selectedPets.length} {selectedPets.length === 1 ? t({ en: "Pet", zh: "只宠物" }) : t({ en: "Pets", zh: "只宠物" })}</div>
                 </div>
               </div>
 
-              <div className="my-4 h-px bg-villa-primary-light" />
               <div className="grid gap-3">
-                <div className="rounded-[16px] border border-villa-primary-light bg-white p-3">
-                  <label className="villa-label" htmlFor="booking-voucher">{t({ en: "Apply Voucher", zh: "使用优惠券" })}</label>
-                  <select
-                    id="booking-voucher"
-                    className="villa-input mt-2"
-                    value={selectedVoucherId}
-                    onChange={(event) => setSelectedVoucherId(event.target.value)}
-                  >
-                    <option value="">{t({ en: "No voucher", zh: "不使用优惠券" })}</option>
-                    {vouchers.map((voucher) => {
-                      const unavailable = getVoucherIneligibility(voucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal });
-                      return (
-                        <option key={voucher.id} value={voucher.id}>
-                          {t(voucher.title)}{unavailable ? ` - ${unavailable}` : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedVoucher && voucherDiscount <= 0 ? (
-                    <p className="m-0 mt-2 text-[11px] font-bold text-villa-primary">{getVoucherIneligibility(selectedVoucher, { subtotal, selectedPetCount: selectedPets.length, unitTotal })}</p>
-                  ) : null}
-                </div>
                 <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
                   <span>{t({ en: "Subtotal", zh: "小计" })}</span>
-                  <span>RM{subtotal}</span>
+                  <span>{pricingAmount(subtotal)}</span>
                 </div>
-                {voucherDiscount > 0 ? (
-                  <div className="flex justify-between text-sm font-black text-villa-accent-green">
-                    <span>{selectedVoucher?.code}</span>
-                    <span>-RM{voucherDiscount}</span>
-                  </div>
-                ) : null}
                 <div className="flex items-end justify-between">
                   <span className="text-base font-black text-villa-text-primary">{t({ en: "Total", zh: "总计" })}</span>
-                  <span className="text-2xl font-black text-villa-text-primary">RM{total}</span>
+                  <span className="text-2xl font-black text-villa-text-primary">{pricingAmount(total)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black">
-                  <span className="text-villa-text-secondary">{t({ en: "Deposit Today (50%)", zh: "今日订金（50%）" })}</span>
-                  <span className="text-villa-primary">RM{deposit}</span>
+                  <span className="text-villa-text-secondary">{depositLabel}</span>
+                  <span className="text-villa-primary">{pricingAmount(deposit)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
                   <span>{t({ en: "Balance Later", zh: "尾款稍后支付" })}</span>
-                  <span>RM{balance}</span>
+                  <span>{pricingAmount(balance)}</span>
                 </div>
               </div>
               <div className="my-4 h-px bg-villa-primary-light" />
-              {capacityIssue ? (
-                <p className="mb-3 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-700">
-                  {t({
-                    en: `Only ${capacityIssue.available} slot${capacityIssue.available === 1 ? "" : "s"} left on ${formatDateRange(capacityIssue.date, capacityIssue.date)}.`,
-                    zh: `${formatDateRange(capacityIssue.date, capacityIssue.date)} 只剩 ${capacityIssue.available} 个位置。`
-                  })}
-                </p>
-              ) : null}
               {offDayIssue ? (
                 <p className="mb-3 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-700">
-                  {t({ en: "One of the selected dates is marked as an off day.", zh: "所选日期包含休息日，请重新选择。" })}
+                  {t({ en: "One of the selected dates is full. Please choose another date.", zh: "所选日期已满，请重新选择其他日期。" })}
                 </p>
               ) : null}
               {pets.length === 0 ? (
-                <a href="/pets?mode=add" className="villa-button w-full">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
+                <a href="/pets?mode=add" className="booking-primary">{t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</a>
               ) : (
-                <button type="button" onClick={saveDraftForPayment} disabled={!confirmCompleted} className={`villa-button w-full ${confirmCompleted ? "" : "opacity-60"}`}>{t({ en: "Continue to Payment", zh: "继续付款" })}</button>
+                <button type="button" onClick={saveDraftForPayment} disabled={dateTouched && selectedPets.length > 0 && !confirmCompleted} className="booking-primary">{t({ en: "Continue to Payment", zh: "继续付款" })}</button>
               )}
               <p className="mt-3 text-center text-[11px] font-bold leading-relaxed text-villa-text-muted">{t({ en: "Your booking is only confirmed after deposit payment.", zh: "付款订金后，预约才会确认。" })}</p>
             </aside>
           </div>
+          {paymentPromptKind ? (
+            <div className="booking-payment-prompt" role="dialog" aria-live="polite" aria-label={paymentPromptKind === "date" ? t({ en: "Pick a date first", zh: "请先选择日期" }) : t({ en: "Choose a pet first", zh: "请先选择宠物" })}>
+              <div className="booking-payment-prompt-icon">
+                {paymentPromptKind === "date" ? <CalendarIcon /> : <DogAvatar />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-[11px] font-black uppercase text-[#8d65da]">{t({ en: "Almost ready", zh: "差一点就完成" })}</p>
+                <h3 className="m-0 mt-1 font-title text-[20px] font-black leading-tight text-villa-text-primary">
+                  {paymentPromptKind === "date" ? t({ en: "Pick your date first", zh: "请先选择日期" }) : t({ en: "Choose your pet first", zh: "请先选择宠物" })}
+                </h3>
+                <p className="m-0 mt-1 text-xs font-bold leading-snug text-villa-text-secondary">
+                  {paymentPromptKind === "date"
+                    ? t({ en: "Tap a calendar date, then continue to payment.", zh: "点击日历日期后，就可以继续付款。" })
+                    : t({ en: "Tap one pet card above, then continue to payment.", zh: "点击上方宠物卡片后，就可以继续付款。" })}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="booking-payment-prompt-action"
+                onClick={() => {
+                  const nextTarget = paymentPromptKind === "date" ? "booking-choose-date" : "booking-choose-pets";
+                  setPaymentPromptKind(null);
+                  document.getElementById(nextTarget)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+              >
+                {paymentPromptKind === "date" ? t({ en: "Pick", zh: "去选日期" }) : t({ en: "Choose", zh: "去选择" })}
+              </button>
+            </div>
+          ) : null}
         </section>
       </OwnerSidebar>
     </ProtectedPage>

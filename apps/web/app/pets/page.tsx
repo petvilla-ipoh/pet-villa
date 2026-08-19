@@ -4,7 +4,8 @@ import { type ChangeEvent, useEffect, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { createEmptyPet, deletePetProfile, loadPetProfiles, savePetProfile, type PetProfile } from "../lib/petProfiles";
+import { createEmptyPet, deletePetProfile, dogAvatarOptions, dogAvatarSrc, loadPetProfiles, savePetProfile, type PetProfile } from "../lib/petProfiles";
+import { loadOrders, readOrders } from "../lib/orderFlow";
 
 function PawIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -18,23 +19,28 @@ function PawIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function DogAvatar({ pet }: { pet: PetProfile }) {
-  if (pet.photoDataUrl) {
-    return <img src={pet.photoDataUrl} alt="" className="h-16 w-16 shrink-0 rounded-[18px] object-cover shadow-[0_8px_20px_rgba(61,31,13,0.08)]" />;
-  }
-
+function VaccineIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
-    <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-[18px] bg-villa-primary-bg shadow-[0_8px_20px_rgba(61,31,13,0.08)]">
-      <svg viewBox="0 0 72 72" className="h-full w-full" aria-hidden="true">
-        <circle cx="36" cy="37" r="22" fill="#d99a62" />
-        <path d="M17 34c-8 2-11 12-8 20 3 7 12 8 17 1M55 34c8 2 11 12 8 20-3 7-12 8-17 1" fill="#bd7844" />
-        <circle cx="28" cy="38" r="3" fill="#3d1f0d" />
-        <circle cx="44" cy="38" r="3" fill="#3d1f0d" />
-        <ellipse cx="36" cy="47" rx="6" ry="4" fill="#3d1f0d" />
-        <path d="M30 54c4 4 8 4 12 0" fill="none" stroke="#3d1f0d" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
-    </div>
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path d="M14 10h20l3 14c1.5 7.1-3.2 14.2-13 18-9.8-3.8-14.5-10.9-13-18l3-14Z" fill="#ffffff" />
+      <path d="M15 10h18.5l2.8 13.8c1.3 6.4-3 12.9-12.3 16.4-9.3-3.5-13.6-10-12.3-16.4L15 10Z" fill="#e9f9e7" stroke="#7fbc8b" strokeWidth="2.4" />
+      <path d="m18.5 25.2 4.2 4.2 8.6-10" fill="none" stroke="#e8927c" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
+}
+
+function ReadyIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <rect x="9" y="11" width="30" height="29" rx="9" fill="#fff4df" stroke="#d9ad46" strokeWidth="2.4" />
+      <path d="M16 8v7M32 8v7M11 20h26" stroke="#d9ad46" strokeWidth="3" strokeLinecap="round" />
+      <path d="m18 30 4 4 8-9" fill="none" stroke="#8d65da" strokeWidth="3.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DogAvatar({ pet }: { pet: PetProfile }) {
+  return <img src={dogAvatarSrc(pet.photoDataUrl)} alt="" className="h-16 w-16 shrink-0 rounded-[18px] object-cover shadow-[0_8px_20px_rgba(61,31,13,0.08)]" />;
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -80,7 +86,7 @@ function AccordionSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[20px] border border-villa-primary-light bg-white/88 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
+    <section className="rounded-[20px] border border-villa-primary-light bg-white/90 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
       <button type="button" onClick={onToggle} className="flex min-h-[58px] w-full items-center justify-between px-4 text-left">
         <h2 className="text-[16px] font-black text-villa-text-primary">{title}</h2>
         <Chevron open={open} />
@@ -96,42 +102,93 @@ export default function PetsPage() {
   const [mode, setMode] = useState<"list" | "form">("list");
   const [formPet, setFormPet] = useState<PetProfile>(createEmptyPet());
   const [openSection, setOpenSection] = useState<"basic" | "food" | "photo" | null>("basic");
+  const [orderCount, setOrderCount] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [hasLoadedPets, setHasLoadedPets] = useState(false);
+  const [refreshingPets, setRefreshingPets] = useState(false);
+
+  useEffect(() => {
+    document.body.dataset.petVillaSurface = "pets";
+    return () => {
+      delete document.body.dataset.petVillaSurface;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
+    let hasLoadedOnce = false;
     async function syncPets() {
-      const storedPets = await loadPetProfiles();
-      if (!active) return;
-      setPets(storedPets);
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("mode") === "add") {
-        setFormPet(createEmptyPet());
-        setMode("form");
-        setOpenSection("basic");
-      } else if (params.get("petId")) {
-        const pet = storedPets.find((item) => item.id === params.get("petId"));
-        if (pet) {
-          setFormPet({ ...pet });
+      if (hasLoadedOnce) setRefreshingPets(true);
+      try {
+        const storedPets = await loadPetProfiles();
+        if (!active) return;
+        setPets(storedPets);
+        hasLoadedOnce = true;
+        setHasLoadedPets(true);
+        setError("");
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("mode") === "add") {
+          setFormPet(createEmptyPet());
           setMode("form");
           setOpenSection("basic");
+        } else if (params.get("petId")) {
+          const pet = storedPets.find((item) => item.id === params.get("petId"));
+          if (pet) {
+            setFormPet({ ...pet });
+            setMode("form");
+            setOpenSection("basic");
+          }
         }
+      } catch (loadError) {
+        if (!active) return;
+        setError(hasLoadedOnce
+          ? t({ en: "Unable to refresh — showing last known pets.", zh: "暂时无法刷新，正在显示上次同步的宠物资料。" })
+          : loadError instanceof Error ? loadError.message : t({ en: "Your pets could not be loaded.", zh: "无法读取您的宠物资料。" }));
+      } finally {
+        if (active) setRefreshingPets(false);
       }
     }
     function handlePetsChanged() {
       void syncPets();
     }
     void syncPets();
+    const syncOrders = () => {
+      const activeOrders = readOrders().filter((order) => order.status !== "cancelled").length;
+      setOrderCount(activeOrders);
+      void loadOrders()
+        .then((orders) => {
+          if (active) setOrderCount(orders.filter((order) => order.status !== "cancelled").length);
+        })
+        .catch(() => undefined);
+    };
+    function handleVisibleRefresh() {
+      if (document.visibilityState === "visible") void syncPets();
+    }
+    syncOrders();
     window.addEventListener("pet-villa-pets", handlePetsChanged);
+    window.addEventListener("pet-villa-orders", syncOrders);
+    window.addEventListener("focus", handleVisibleRefresh);
+    document.addEventListener("visibilitychange", handleVisibleRefresh);
     return () => {
       active = false;
       window.removeEventListener("pet-villa-pets", handlePetsChanged);
+      window.removeEventListener("pet-villa-orders", syncOrders);
+      window.removeEventListener("focus", handleVisibleRefresh);
+      document.removeEventListener("visibilitychange", handleVisibleRefresh);
     };
   }, []);
 
   function update<K extends keyof PetProfile>(key: K, value: PetProfile[K]) {
     setFormPet((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectDogAvatar(src: string, breed?: string) {
+    setFormPet((current) => ({
+      ...current,
+      photoDataUrl: src,
+      breed: current.breed.trim() || breed || current.breed
+    }));
   }
 
   function addPet() {
@@ -200,23 +257,62 @@ export default function PetsPage() {
     reader.readAsDataURL(file);
   }
 
+  const vaccinatedCount = pets.filter((pet) => pet.vaccinated).length;
   if (mode === "form") {
     return (
       <ProtectedPage>
         <OwnerSidebar>
-          <section className="p-4 lg:p-8">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <button type="button" className="text-sm font-black text-villa-text-primary" onClick={() => { setMode("list"); window.history.replaceState(null, "", "/pets"); }}>
+          <section className="pets-page">
+            <div className="pets-editor-top">
+              <button type="button" className="pets-back-button" onClick={() => { setMode("list"); window.history.replaceState(null, "", "/pets"); }}>
                 ‹ {t({ en: "Back", zh: "返回" })}
               </button>
               <h1 className="text-center text-base font-black text-villa-text-primary">{formPet.name ? t({ en: "Edit Pet Profile", zh: "编辑宠物资料" }) : t({ en: "Add Pet Profile", zh: "新增宠物资料" })}</h1>
               <span className="w-10" />
             </div>
 
-            {error ? <div className="mb-3 rounded-[16px] bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
+            <header className="pets-form-hero">
+              <div className="pets-form-avatar">
+                <img src={dogAvatarSrc(formPet.photoDataUrl)} alt="" />
+              </div>
+              <div className="min-w-0">
+                <p className="m-0 text-[11px] font-black uppercase text-[#8d65da]">{t({ en: "Pet Villa Profile", zh: "Pet Villa 档案" })}</p>
+                <h2 className="m-0 mt-1 font-title text-[26px] font-black leading-tight text-villa-text-primary">{formPet.name || t({ en: "New Pet", zh: "新宠物" })}</h2>
+                <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{t({ en: "Small pets 1-12kg · safer booking details", zh: "小型宠物 1-12kg · 预约资料更清楚" })}</p>
+              </div>
+            </header>
+
+            {error ? <div className="pets-error-card">{error}</div> : null}
 
             <form key={formPet.id} className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void savePet(); }}>
               <AccordionSection title={t({ en: "Basic Details", zh: "基本资料" })} open={openSection === "basic"} onToggle={() => setOpenSection(openSection === "basic" ? null : "basic")}>
+                <div className="pet-avatar-picker mb-4">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <span className="villa-label">{t({ en: "Choose pet avatar", zh: "选择宠物头像" })}</span>
+                      <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{t({ en: "Pick the closest look, or upload a real photo below.", zh: "选择最接近的外观，也可以在下方上传真实照片。" })}</p>
+                    </div>
+                    <span className="pet-avatar-hint">{t({ en: "Tap to select", zh: "点击选择" })}</span>
+                  </div>
+                  <div className="pet-dog-avatar-grid mt-3">
+                    {dogAvatarOptions.map((option) => {
+                      const src = `/avatars/${option.id}.png`;
+                      const active = dogAvatarSrc(formPet.photoDataUrl) === src;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className="pet-dog-avatar-choice"
+                          data-active={active}
+                          onClick={() => selectDogAvatar(src, option.breed)}
+                        >
+                          <img src={src} alt={t({ en: option.en, zh: option.zh })} />
+                          <span>{t({ en: option.en, zh: option.zh })}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Name", zh: "名字" })}</span>
@@ -228,7 +324,14 @@ export default function PetsPage() {
                   </label>
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Age", zh: "年龄" })}</span>
-                    <input className="villa-input" value={formPet.age} onChange={(event) => update("age", event.target.value)} placeholder="3 years" />
+                    <select className="villa-input" value={formPet.age} onChange={(event) => update("age", event.target.value)}>
+                      <option value="">{t({ en: "Select age", zh: "选择年龄" })}</option>
+                      {Array.from({ length: 31 }, (_, age) => (
+                        <option key={age} value={age === 1 ? "1 year" : `${age} years`}>
+                          {age === 1 ? t({ en: "1 year", zh: "1 岁" }) : t({ en: `${age} years`, zh: `${age} 岁` })}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Weight (kg)", zh: "体重 (kg)" })}</span>
@@ -294,15 +397,18 @@ export default function PetsPage() {
 
               <AccordionSection title={t({ en: "Photo Upload", zh: "照片上传" })} open={openSection === "photo"} onToggle={() => setOpenSection(openSection === "photo" ? null : "photo")}>
                 <label className="grid min-h-[124px] cursor-pointer place-items-center rounded-[18px] border-2 border-dashed border-villa-primary-light bg-villa-primary-bg/45 p-4 text-center text-sm font-bold text-villa-text-secondary">
-                  {formPet.photoDataUrl ? <img src={formPet.photoDataUrl} alt="" className="h-28 w-28 rounded-[18px] object-cover" /> : t({ en: "Upload pet photo", zh: "上传宠物照片" })}
+                  <span className="grid gap-2 justify-items-center">
+                    <img src={dogAvatarSrc(formPet.photoDataUrl)} alt="" className="h-28 w-28 rounded-[24px] object-cover shadow-[0_12px_26px_rgba(61,31,13,0.10)]" />
+                    <span>{t({ en: "Upload real pet photo", zh: "上传真实宠物照片" })}</span>
+                  </span>
                   <input type="file" accept="image/*" className="sr-only" onChange={handlePhoto} />
                 </label>
               </AccordionSection>
 
-              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button type="submit" disabled={saving} className="villa-button w-full disabled:opacity-60 sm:w-fit sm:px-8">{saving ? t({ en: "Saving...", zh: "保存中..." }) : t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
+              <div className="pets-save-dock">
+                <button type="submit" disabled={saving} className="pets-primary-action disabled:opacity-60">{saving ? t({ en: "Saving...", zh: "保存中..." }) : t({ en: "Save Pet Profile", zh: "保存宠物档案" })}</button>
                 {pets.some((pet) => pet.id === formPet.id) ? (
-                  <button type="button" disabled={saving} onClick={() => void deletePet()} className="rounded-pill border border-red-200 bg-white px-5 py-3 text-sm font-black text-red-500 disabled:opacity-60">
+                  <button type="button" disabled={saving} onClick={() => void deletePet()} className="pets-delete-action disabled:opacity-60">
                     {t({ en: "Delete Pet", zh: "删除宠物" })}
                   </button>
                 ) : null}
@@ -314,29 +420,67 @@ export default function PetsPage() {
     );
   }
 
-  return (
-    <ProtectedPage>
-      <OwnerSidebar>
-        <section className="p-4 lg:p-8">
-          <div className="mb-5">
-            <div className="flex items-center gap-2">
-              <h1 className="page-title">{t({ en: "My Pets", zh: "我的宠物" })}</h1>
-              <PawIcon className="h-7 w-7" />
+    return (
+      <ProtectedPage>
+        <OwnerSidebar>
+        <section className="pets-page">
+          <header className="pets-hero">
+            <img src="/petvilla-pets-playground-banner.webp" alt="" className="pets-hero-art" />
+            <div className="pets-hero-copy">
+              <span className="pets-kicker">{t({ en: "Pet Profiles", zh: "宠物档案" })}</span>
+              <h1>{t({ en: "My Pets", zh: "我的宠物" })}</h1>
+              <p>{t({ en: "Add each pet here before booking.", zh: "预约前先在这里添加宠物资料。" })}</p>
             </div>
-            <p className="body-copy mt-1">{t({ en: "Your dogs staying with Pet Villa", zh: "管理入住 Pet Villa 的狗狗资料" })}</p>
-          </div>
+            <button type="button" className="pets-hero-action" onClick={addPet}>
+              <span><PawIcon className="h-6 w-6" /></span>
+              <span className="pets-hero-action-copy">
+                <strong>{t({ en: "Add Pet", zh: "新增宠物" })}</strong>
+                <small>{t({ en: "Tap here first", zh: "先点这里添加" })}</small>
+              </span>
+            </button>
+          </header>
 
-          {pets.length === 0 ? (
-            <div className="rounded-[24px] border border-villa-primary-light bg-white/88 p-6 text-center shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-villa-primary-bg"><PawIcon className="h-8 w-8" /></div>
+          <section className="pets-stats-grid" aria-label={t({ en: "Pet profile summary", zh: "宠物资料摘要" })}>
+            <div className="pets-stat-card" data-tone="warm">
+              <span><PawIcon className="h-6 w-6" /></span>
+              <small>{t({ en: "Pets", zh: "宠物" })}</small>
+              <strong>{hasLoadedPets ? pets.length : "—"}</strong>
+            </div>
+            <div className="pets-stat-card" data-tone="mint">
+              <span><VaccineIcon className="h-7 w-7" /></span>
+              <small>{t({ en: "Vaccinated", zh: "已接种" })}</small>
+              <strong>{hasLoadedPets ? vaccinatedCount : "—"}</strong>
+            </div>
+            <a className="pets-stat-card" data-tone="lavender" href="/orders" aria-label={t({ en: "View orders", zh: "查看订单" })}>
+              <span><ReadyIcon className="h-7 w-7" /></span>
+              <small>{t({ en: "Orders", zh: "订单" })}</small>
+              <strong>{orderCount}</strong>
+            </a>
+          </section>
+
+          <span className="sr-only" aria-live="polite">{refreshingPets ? t({ en: "Refreshing pets", zh: "正在同步宠物资料" }) : ""}</span>
+          {error ? <div className="pets-error-card">{error}</div> : null}
+
+          {!hasLoadedPets && !error ? (
+            <div className="pets-empty-card" aria-busy="true">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-white shadow-[inset_0_-6px_12px_rgba(183,142,255,0.10),0_10px_18px_rgba(61,31,13,0.10)]"><PawIcon className="h-8 w-8" /></div>
+              <h2 className="card-title mt-4">{t({ en: "Loading your pets", zh: "正在读取宠物资料" })}</h2>
+              <p className="body-copy mt-2">{t({ en: "Securely syncing profiles from your account.", zh: "正在安全同步您的宠物档案。" })}</p>
+            </div>
+          ) : null}
+
+          {hasLoadedPets && pets.length === 0 ? (
+            <div className="pets-empty-card">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-white shadow-[inset_0_-6px_12px_rgba(183,142,255,0.10),0_10px_18px_rgba(61,31,13,0.10)]"><PawIcon className="h-8 w-8" /></div>
               <h2 className="card-title mt-4">{t({ en: "No pets yet", zh: "还没有宠物资料" })}</h2>
-              <p className="body-copy mt-2">{t({ en: "Add your dog profile before booking", zh: "预约前请先添加狗狗资料" })}</p>
-              <button type="button" className="villa-button mt-5 w-full sm:w-fit sm:px-8" onClick={addPet}>{t({ en: "Add New Pet", zh: "新增宠物" })}</button>
+              <p className="body-copy mt-2">{t({ en: "Add your pet profile before booking", zh: "预约前请先添加宠物资料" })}</p>
+              <p className="pets-empty-hint">{t({ en: "Start by tapping the button below.", zh: "请按下面按钮开始添加。" })}</p>
+              <button type="button" className="pets-primary-action mt-5" onClick={addPet}>{t({ en: "Add New Pet", zh: "新增宠物" })}</button>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="pets-card-grid">
               {pets.map((pet) => (
-                <article key={pet.id} className="flex items-center gap-3 rounded-[20px] border border-villa-primary-light bg-white/88 p-3 text-left shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
+                <article key={pet.id} className="pets-profile-card">
                   <DogAvatar pet={pet} />
                   <div className="min-w-0 flex-1">
                     <h2 className="font-title text-[20px] font-black leading-tight text-villa-text-primary">{pet.name}</h2>
@@ -348,20 +492,21 @@ export default function PetsPage() {
                       {pet.calm ? <span className="rounded-full bg-villa-primary-bg px-2 py-1 text-[11px] font-black text-villa-primary">✓ {t({ en: "Calm", zh: "稳定" })}</span> : null}
                     </div>
                   </div>
-                  <button type="button" className="self-start whitespace-nowrap text-xs font-black text-villa-primary" onClick={() => editPet(pet)}>
+                  <button type="button" className="pets-edit-button" onClick={() => editPet(pet)}>
                     {t({ en: "Edit", zh: "编辑" })} →
                   </button>
                 </article>
               ))}
 
-              <button type="button" onClick={addPet} className="flex min-h-[118px] items-center gap-3 rounded-[20px] border-2 border-dashed border-villa-primary-light bg-white/55 p-4 text-left shadow-[0_4px_16px_rgba(61,31,13,0.05)]">
+              <button type="button" onClick={addPet} className="pets-add-card">
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-villa-primary-bg">
                   <PawIcon className="h-7 w-7" />
                 </span>
                 <span>
                   <span className="block text-base font-black text-villa-text-primary">{t({ en: "Add New Pet", zh: "新增宠物" })}</span>
-                  <span className="mt-1 block text-xs font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Add your dog's profile before booking.", zh: "预约前先添加狗狗资料。" })}</span>
+                  <span className="mt-1 block text-xs font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Add your pet profile before booking.", zh: "预约前先添加宠物资料。" })}</span>
                 </span>
+                <span className="pets-add-card-cta">{t({ en: "Tap to add", zh: "点击添加" })}</span>
               </button>
             </div>
           )}

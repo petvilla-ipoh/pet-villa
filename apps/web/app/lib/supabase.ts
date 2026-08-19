@@ -1,40 +1,14 @@
 "use client";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserAuthCookieStorage } from "./authCookieStorage";
 
 const SUPABASE_COOKIE_KEY = "sb-pet-villa-auth-token";
+const AUTH_PERSISTENCE_KEY = "pet-villa-auth-persistence";
 let browserClient: SupabaseClient | null = null;
+let googleOAuthClient: SupabaseClient | null = null;
 
-function getCookie(name: string) {
-  if (typeof document === "undefined") return null;
-  const value = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${encodeURIComponent(name)}=`))
-    ?.split("=")[1];
-  return value ? decodeURIComponent(value) : null;
-}
-
-function setCookie(name: string, value: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; Max-Age=2592000; SameSite=Lax`;
-}
-
-function removeCookie(name: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = `${encodeURIComponent(name)}=; Path=/; Max-Age=0; SameSite=Lax`;
-}
-
-const cookieStorage = {
-  getItem(key: string) {
-    return getCookie(key);
-  },
-  setItem(key: string, value: string) {
-    setCookie(key, value);
-  },
-  removeItem(key: string) {
-    removeCookie(key);
-  }
-};
+const cookieStorage = createBrowserAuthCookieStorage(AUTH_PERSISTENCE_KEY);
 
 export function isSupabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -58,4 +32,35 @@ export function getSupabaseBrowserClient() {
     );
   }
   return browserClient;
+}
+
+export function getSupabaseGoogleOAuthClient() {
+  if (!isSupabaseConfigured()) return null;
+  if (!googleOAuthClient) {
+    googleOAuthClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+          flowType: "pkce",
+          persistSession: true,
+          storage: cookieStorage,
+          storageKey: SUPABASE_COOKIE_KEY
+        }
+      }
+    );
+  }
+  return googleOAuthClient;
+}
+
+export function setAuthPersistence(remember: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(AUTH_PERSISTENCE_KEY, remember ? "persistent" : "session");
+}
+
+export function clearAuthPersistence() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(AUTH_PERSISTENCE_KEY);
 }

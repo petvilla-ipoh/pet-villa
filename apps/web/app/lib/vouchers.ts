@@ -5,7 +5,7 @@ import { getCurrentUserId } from "./petProfiles";
 import { getSupabaseBrowserClient } from "./supabase";
 
 export type VoucherStatus = "available" | "used" | "expired";
-export type VoucherType = "fixed" | "second_dog_half";
+export type VoucherType = "fixed" | "second_dog_percent" | "long_stay_flat";
 
 export type VoucherDefinition = {
   code: string;
@@ -17,6 +17,18 @@ export type VoucherDefinition = {
   title: { en: string; zh: string };
   body: { en: string; zh: string };
   label: { en: string; zh: string };
+};
+
+export type VoucherCampaign = VoucherDefinition & {
+  enabled: boolean;
+  updatedAt?: string;
+};
+
+export type AppliedVoucher = {
+  id: string;
+  code: string;
+  title: string;
+  discount: number;
 };
 
 export type UserVoucher = VoucherDefinition & {
@@ -34,6 +46,8 @@ export type VoucherContext = {
   subtotal: number;
   selectedPetCount: number;
   unitTotal: number;
+  service?: "overnight" | "daycare";
+  nights?: number;
 };
 
 type VoucherRow = {
@@ -62,28 +76,53 @@ type ReferralCodeRow = {
   code: string;
 };
 
+type VoucherCampaignRow = {
+  code: string;
+  voucher_type: VoucherType;
+  value_rm: number | string | null;
+  min_spend_rm: number | string | null;
+  claimable: boolean;
+  source: "promotion" | "referral";
+  title: { en?: string; zh?: string } | null;
+  body: { en?: string; zh?: string } | null;
+  label: { en?: string; zh?: string } | null;
+  enabled: boolean;
+  updated_at?: string;
+};
+
 export const VOUCHER_DEFINITIONS: VoucherDefinition[] = [
   {
-    code: "WELCOME10",
+    code: "WELCOMEPETVILLA",
     type: "fixed",
     value: 10,
-    minSpend: 35,
+    minSpend: 70,
     claimable: true,
     source: "promotion",
-    label: { en: "New Guest", zh: "新客专享" },
-    title: { en: "RM10 OFF", zh: "RM10 OFF" },
-    body: { en: "First boarding discount", zh: "首次寄宿优惠" }
+    label: { en: "New Guest", zh: "新客优惠" },
+    title: { en: "RM10 OFF First Boarding", zh: "首次寄宿减 RM10" },
+    body: { en: "Minimum spend RM70. One use per account. Boarding only.", zh: "最低消费 RM70。每个账号限用一次。只限寄宿。" }
   },
   {
-    code: "SECOND50",
-    type: "second_dog_half",
-    value: 50,
+    code: "SECOND20%",
+    type: "second_dog_percent",
+    value: 20,
     minSpend: 0,
     claimable: true,
     source: "promotion",
-    label: { en: "Multi-dog", zh: "多只狗狗优惠" },
-    title: { en: "50% OFF", zh: "50% OFF" },
-    body: { en: "Second dog half price", zh: "第二只狗狗半价" }
+    label: { en: "Second Dog", zh: "第二只狗优惠" },
+    title: { en: "Second Dog 20% OFF", zh: "第二只狗寄宿费 20% OFF" },
+    body: { en: "At least 2 dogs in the same boarding order.", zh: "同一订单至少 2 只狗。只限寄宿。" }
+  },
+  {
+    code: "LONGSTAY",
+    type: "long_stay_flat",
+    value: 30,
+    minSpend: 0,
+    claimable: true,
+    source: "promotion",
+    label: { en: "Long Stay", zh: "长期寄宿优惠" },
+    title: { en: "RM30 / night Long Stay", zh: "满 7 晚统一 RM30 / 晚 / 只" },
+    body: { en: "Boarding for 7 consecutive nights or more.", zh: "连续寄宿满 7 晚，全部晚数统一 RM30 / 晚 / 只。" }
   },
   {
     code: "REFER10",
@@ -100,6 +139,124 @@ export const VOUCHER_DEFINITIONS: VoucherDefinition[] = [
     }
   }
 ];
+
+const DEFAULT_VOUCHER_CAMPAIGNS: VoucherCampaign[] = VOUCHER_DEFINITIONS
+  .filter((voucher) => voucher.source === "promotion")
+  .map((voucher) => ({ ...voucher, enabled: true }));
+const voucherCampaignsKey = "pet-villa-voucher-campaigns";
+const allowVoucherDevelopmentFallback = process.env.NODE_ENV !== "production"
+  && process.env.NEXT_PUBLIC_ENABLE_CUSTOMER_LOCAL_FALLBACK === "true";
+
+function campaignFromRow(row: VoucherCampaignRow): VoucherCampaign {
+  const fallback = DEFAULT_VOUCHER_CAMPAIGNS.find((campaign) => campaign.code === row.code) || DEFAULT_VOUCHER_CAMPAIGNS[0];
+  return {
+    code: row.code,
+    type: row.voucher_type || fallback.type,
+    value: toNumber(row.value_rm),
+    minSpend: toNumber(row.min_spend_rm),
+    claimable: row.claimable,
+    source: row.source,
+    title: copyValue(row.title, fallback.title),
+    body: copyValue(row.body, fallback.body),
+    label: copyValue(row.label, fallback.label),
+    enabled: row.enabled,
+    updatedAt: row.updated_at
+  };
+}
+
+function campaignToRow(campaign: VoucherCampaign) {
+  return {
+    code: campaign.code.trim().toUpperCase(),
+    voucher_type: campaign.type,
+    value_rm: campaign.value,
+    min_spend_rm: campaign.minSpend,
+    claimable: campaign.claimable,
+    source: campaign.source,
+    title: campaign.title,
+    body: campaign.body,
+    label: campaign.label,
+    enabled: campaign.enabled
+  };
+}
+
+function applyVoucherCampaigns(campaigns: VoucherCampaign[]) {
+  const referralDefinitions = VOUCHER_DEFINITIONS.filter((voucher) => voucher.source === "referral");
+  const activeCampaigns = campaigns
+    .filter((campaign) => campaign.enabled && campaign.claimable)
+    .map(({ enabled: _enabled, updatedAt: _updatedAt, ...definition }) => definition);
+  VOUCHER_DEFINITIONS.splice(0, VOUCHER_DEFINITIONS.length, ...activeCampaigns, ...referralDefinitions);
+}
+
+export function readVoucherCampaigns(): VoucherCampaign[] {
+  if (typeof window === "undefined") return DEFAULT_VOUCHER_CAMPAIGNS.map((campaign) => ({ ...campaign }));
+  try {
+    const raw = window.localStorage.getItem(voucherCampaignsKey);
+    const campaigns = raw ? JSON.parse(raw) as VoucherCampaign[] : DEFAULT_VOUCHER_CAMPAIGNS.map((campaign) => ({ ...campaign }));
+    applyVoucherCampaigns(campaigns);
+    return campaigns;
+  } catch {
+    return DEFAULT_VOUCHER_CAMPAIGNS.map((campaign) => ({ ...campaign }));
+  }
+}
+
+function writeVoucherCampaigns(campaigns: VoucherCampaign[], notify = true) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(voucherCampaignsKey, JSON.stringify(campaigns));
+  applyVoucherCampaigns(campaigns);
+  if (notify) window.dispatchEvent(new Event("pet-villa-voucher-campaigns"));
+}
+
+export async function loadVoucherCampaigns() {
+  const fallback = readVoucherCampaigns();
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return fallback;
+  try {
+    const { data, error } = await supabase
+      .from("voucher_campaigns")
+      .select("code, voucher_type, value_rm, min_spend_rm, claimable, source, title, body, label, enabled, updated_at")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    const campaigns = ((data || []) as VoucherCampaignRow[]).map(campaignFromRow);
+    if (campaigns.length === 0) return fallback;
+    writeVoucherCampaigns(campaigns, false);
+    return campaigns;
+  } catch (error) {
+    console.warn("Voucher campaign load failed; using localStorage fallback.", error);
+    return fallback;
+  }
+}
+
+export async function saveVoucherCampaigns(campaigns: VoucherCampaign[]) {
+  const normalized = campaigns.map((campaign) => ({
+    ...campaign,
+    code: campaign.code.trim().toUpperCase(),
+    value: Math.max(0, Number(campaign.value) || 0),
+    minSpend: Math.max(0, Number(campaign.minSpend) || 0)
+  }));
+  const context = await getSupabaseContext();
+  if (!context) {
+    if (allowVoucherDevelopmentFallback) {
+      writeVoucherCampaigns(normalized);
+      return { campaigns: normalized, persisted: false };
+    }
+    throw new Error("A verified Host session is required to save voucher campaigns.");
+  }
+  try {
+    const { error } = await context.supabase
+      .from("voucher_campaigns")
+      .upsert(normalized.map(campaignToRow), { onConflict: "code" });
+    if (error) throw error;
+    const persistedCampaigns = await loadVoucherCampaigns();
+    return { campaigns: persistedCampaigns, persisted: true };
+  } catch (error) {
+    if (allowVoucherDevelopmentFallback) {
+      writeVoucherCampaigns(normalized);
+      console.warn("Voucher campaign save failed; using the explicit development fallback.", error);
+      return { campaigns: normalized, persisted: false };
+    }
+    throw new Error("Voucher campaigns could not be saved to Supabase.");
+  }
+}
 
 function voucherKey(userId = getCurrentUserId()) {
   return `pet-villa-vouchers:${userId}`;
@@ -383,6 +540,7 @@ export function writeVouchers(vouchers: UserVoucher[], userId = getCurrentUserId
 }
 
 export async function loadVouchers() {
+  await loadVoucherCampaigns();
   const fallbackUserId = getCurrentUserId();
   const fallback = readVouchers(fallbackUserId);
   const context = await getSupabaseContext();
@@ -444,6 +602,7 @@ export function claimVoucher(code: string, userId = getCurrentUserId()) {
   if (!userId || userId === "guest") {
     return { ok: false as const, reason: "login" as const };
   }
+  readVoucherCampaigns();
   const definition = VOUCHER_DEFINITIONS.find((voucher) => voucher.code === code);
   if (!definition) {
     return { ok: false as const, reason: "missing" as const };
@@ -470,13 +629,15 @@ export async function claimVoucherOnline(code: string, userId = getCurrentUserId
     return { ok: false as const, reason: "login" as const };
   }
 
+  await loadVoucherCampaigns();
   const definition = VOUCHER_DEFINITIONS.find((voucher) => voucher.code === code);
   if (!definition) return { ok: false as const, reason: "missing" as const };
   if (!definition.claimable) return { ok: false as const, reason: "referral_only" as const };
 
   const context = await getSupabaseContext();
   if (!context || context.userId !== userId) {
-    return claimVoucher(code, userId);
+    if (allowVoucherDevelopmentFallback) return claimVoucher(code, userId);
+    return { ok: false as const, reason: "service" as const };
   }
 
   try {
@@ -497,24 +658,72 @@ export async function claimVoucherOnline(code: string, userId = getCurrentUserId
     const vouchers = await refreshLocalVouchersFromSupabase(context.supabase, context.userId);
     return { ok: true as const, voucher: vouchers.find((item) => item.id === voucher.id) || voucher };
   } catch (error) {
-    console.warn("Supabase voucher claim failed; using localStorage fallback.", error);
-    return claimVoucher(code, userId);
+    if (allowVoucherDevelopmentFallback) {
+      console.warn("Supabase voucher claim failed; using the explicit development fallback.", error);
+      return claimVoucher(code, userId);
+    }
+    return { ok: false as const, reason: "service" as const };
   }
 }
 
 export function getVoucherDiscount(voucher: UserVoucher | null | undefined, context: VoucherContext) {
   if (!voucher || voucher.status !== "available") return 0;
+  if (context.service && context.service !== "overnight") return 0;
   if (context.subtotal < voucher.minSpend) return 0;
-  if (voucher.type === "second_dog_half") {
-    return context.selectedPetCount >= 2 ? Math.min(context.subtotal, Math.round(context.unitTotal * 0.5)) : 0;
+  if (voucher.type === "second_dog_percent") {
+    return context.selectedPetCount >= 2 ? Math.min(context.subtotal, Math.round(context.unitTotal * (voucher.value / 100))) : 0;
+  }
+  if (voucher.type === "long_stay_flat") {
+    if ((context.nights || 0) < 7 || context.selectedPetCount < 1) return 0;
+    const longStayTotal = (context.nights || 0) * voucher.value * context.selectedPetCount;
+    return Math.max(0, context.subtotal - longStayTotal);
   }
   return Math.min(context.subtotal, voucher.value);
 }
 
+export function getVoucherDiscountBreakdown(vouchers: UserVoucher[], context: VoucherContext): AppliedVoucher[] {
+  const eligible = vouchers.filter((voucher) => !getVoucherIneligibility(voucher, context));
+  const longStayVoucher = eligible.find((voucher) => voucher.type === "long_stay_flat");
+  const ordered = [
+    ...eligible.filter((voucher) => voucher.type === "long_stay_flat"),
+    ...eligible.filter((voucher) => voucher.type === "second_dog_percent"),
+    ...eligible.filter((voucher) => voucher.type === "fixed")
+  ];
+  let remaining = context.subtotal;
+
+  return ordered.flatMap((voucher) => {
+    let discount = 0;
+    if (voucher.type === "long_stay_flat") {
+      const longStayTotal = (context.nights || 0) * voucher.value * context.selectedPetCount;
+      discount = Math.max(0, context.subtotal - longStayTotal);
+    } else if (voucher.type === "second_dog_percent") {
+      const secondPetBase = longStayVoucher
+        ? (context.nights || 0) * longStayVoucher.value
+        : context.unitTotal;
+      discount = Math.round(secondPetBase * (voucher.value / 100));
+    } else {
+      discount = voucher.value;
+    }
+
+    discount = Math.min(remaining, Math.max(0, discount));
+    if (discount <= 0) return [];
+    remaining -= discount;
+    return [{ id: voucher.id, code: voucher.code, title: voucher.title.en, discount }];
+  });
+}
+
+export function getCombinedVoucherDiscount(vouchers: UserVoucher[], context: VoucherContext) {
+  return getVoucherDiscountBreakdown(vouchers, context).reduce((sum, voucher) => sum + voucher.discount, 0);
+}
+
 export function getVoucherIneligibility(voucher: UserVoucher, context: VoucherContext) {
+  const campaign = readVoucherCampaigns().find((item) => item.code === voucher.code);
+  if (campaign && !campaign.enabled) return "Voucher campaign is paused.";
   if (voucher.status !== "available") return "Voucher is not available.";
+  if (context.service && context.service !== "overnight") return "Boarding only.";
   if (context.subtotal < voucher.minSpend) return `Minimum spend RM${voucher.minSpend}.`;
-  if (voucher.type === "second_dog_half" && context.selectedPetCount < 2) return "Select at least 2 dogs.";
+  if (voucher.type === "second_dog_percent" && context.selectedPetCount < 2) return "Select at least 2 dogs.";
+  if (voucher.type === "long_stay_flat" && (context.nights || 0) < 7) return "Select at least 7 nights.";
   return "";
 }
 
@@ -524,7 +733,9 @@ export async function validateVoucherForBooking(voucher: UserVoucher | null | un
   if (localDiscount <= 0) return { ok: false as const, reason: getVoucherIneligibility(voucher, context) || "Voucher is not available.", discount: 0 };
 
   const supabaseContext = await getSupabaseContext();
-  if (!supabaseContext) return { ok: true as const, discount: localDiscount };
+  if (!supabaseContext) return allowVoucherDevelopmentFallback
+    ? { ok: true as const, discount: localDiscount }
+    : { ok: false as const, reason: "voucher_service_unavailable", discount: 0 };
 
   try {
     const { data, error } = await supabaseContext.supabase.rpc("validate_voucher_for_booking", {
@@ -540,12 +751,38 @@ export async function validateVoucherForBooking(voucher: UserVoucher | null | un
     }
     return { ok: true as const, discount: toNumber(data.discount) || localDiscount };
   } catch (error) {
-    console.warn("Supabase voucher validation failed; using localStorage fallback.", error);
-    return { ok: true as const, discount: localDiscount };
+    if (allowVoucherDevelopmentFallback) {
+      console.warn("Supabase voucher validation failed; using the explicit development fallback.", error);
+      return { ok: true as const, discount: localDiscount };
+    }
+    return { ok: false as const, reason: "voucher_service_unavailable", discount: 0 };
   }
 }
 
-export function markVoucherUsed(voucherId: string, orderId: string, discountAmount: number, bookingDateRange: string, userId = getCurrentUserId()) {
+export async function validateVouchersForBooking(vouchers: UserVoucher[], context: VoucherContext) {
+  for (const voucher of vouchers) {
+    const validation = await validateVoucherForBooking(voucher, context);
+    if (!validation.ok) return { ...validation, voucherId: voucher.id, breakdown: [] as AppliedVoucher[] };
+  }
+  const breakdown = getVoucherDiscountBreakdown(vouchers, context);
+  return {
+    ok: true as const,
+    discount: breakdown.reduce((sum, voucher) => sum + voucher.discount, 0),
+    breakdown
+  };
+}
+
+export async function markVoucherUsed(voucherId: string, orderId: string, discountAmount: number, bookingDateRange: string, userId = getCurrentUserId()) {
+  const selectedVoucher = readVouchers(userId).find((voucher) => voucher.id === voucherId);
+  if (selectedVoucher?.code === "LONGSTAY") return true;
+  try {
+    const persisted = await markVoucherUsedInSupabase(voucherId, orderId, discountAmount, bookingDateRange, userId);
+    if (persisted) return true;
+    if (!allowVoucherDevelopmentFallback) throw new Error("A verified customer session is required to use this voucher.");
+  } catch (error) {
+    if (!allowVoucherDevelopmentFallback) throw new Error("The voucher could not be reserved for this order.");
+    console.warn("Supabase voucher use failed; using the explicit development fallback.", error);
+  }
   const next = readVouchers(userId).map((voucher) =>
     voucher.id === voucherId
       ? {
@@ -560,10 +797,18 @@ export function markVoucherUsed(voucherId: string, orderId: string, discountAmou
       : voucher
   );
   writeVouchers(next, userId);
-  void markVoucherUsedInSupabase(voucherId, orderId, discountAmount, bookingDateRange, userId).catch((error) => console.warn("Supabase voucher use failed; using localStorage fallback.", error));
+  return false;
 }
 
-export function restoreVoucherForOrder(orderId: string, userId = getCurrentUserId()) {
+export async function restoreVoucherForOrder(orderId: string, userId = getCurrentUserId()) {
+  try {
+    const persisted = await restoreVoucherForOrderInSupabase(orderId, userId);
+    if (persisted) return true;
+    if (!allowVoucherDevelopmentFallback) throw new Error("A verified customer session is required to restore this voucher.");
+  } catch (error) {
+    if (!allowVoucherDevelopmentFallback) throw new Error("The voucher could not be restored for this order.");
+    console.warn("Supabase voucher restore failed; using the explicit development fallback.", error);
+  }
   const next = readVouchers(userId).map((voucher) =>
     voucher.orderId === orderId && voucher.status === "used"
       ? {
@@ -578,5 +823,5 @@ export function restoreVoucherForOrder(orderId: string, userId = getCurrentUserI
       : voucher
   );
   writeVouchers(next, userId);
-  void restoreVoucherForOrderInSupabase(orderId, userId).catch((error) => console.warn("Supabase voucher restore failed; using localStorage fallback.", error));
+  return false;
 }

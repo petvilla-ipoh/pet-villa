@@ -3,23 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppNav } from "./components/AppNav";
 import { useLanguage } from "./components/LanguageProvider";
-import { availableSlotsForDate, buildCapacityMap, MAX_DOGS_PER_DAY, startOfLocalDay } from "./lib/bookingCapacity";
-import { getCurrentUserId } from "./lib/petProfiles";
-import { loadHomeGuestPhotos, readHomeGuestPhotos, type GuestPhoto } from "./lib/gallery";
-import { isHostOffDay, loadHostOffDays, readHostOffDays } from "./lib/hostAvailability";
+import { startOfLocalDay } from "./lib/bookingCapacity";
+import { getCurrentUser } from "./lib/petProfiles";
+import { avatarToImageSrc, readProfileAvatar } from "./lib/profileAvatar";
+import { isHostOffDay, loadHostOffDays } from "./lib/hostAvailability";
 import { loadPublicReviews, readPublicReviews, type PublicReview } from "./lib/reviews";
-import { claimVoucherOnline, getReferralCode, loadReferralCode, loadVouchers, readVouchers } from "./lib/vouchers";
+import { loadOrders, readOrders, type VillaOrder } from "./lib/orderFlow";
+import { loadBusinessSettings, type BusinessSettings } from "./lib/businessSettings";
 
-const phone = "+60165236409";
-const whatsappUrl = "https://wa.me/60165236409?text=Hi%20Pet%20Villa%2C%20I%20would%20like%20to%20ask%20about%20boarding.";
+const phone = "+601163830339";
+const whatsappUrl = "https://wa.me/601163830339";
 const socialLinks = {
   whatsapp: whatsappUrl,
-  instagram: "https://instagram.com/thepetvillaipoh", // TODO_UPDATE_SOCIAL_LINK
-  facebook: "https://facebook.com/thepetvillaipoh", // TODO_UPDATE_SOCIAL_LINK
-  xhs: "https://www.xiaohongshu.com/search_result?keyword=The%20Pet%20Villa%20Ipoh" // TODO_UPDATE_SOCIAL_LINK
+  instagram: "https://www.instagram.com/thepetvilla_boarding?igsh=MWtjMjd4MmdjMmQ0NA%3D%3D&utm_source=qr",
+  facebook: "https://www.instagram.com/thepetvilla_boarding?igsh=MWtjMjd4MmdjMmQ0NA%3D%3D&utm_source=qr",
+  xhs: "https://xhslink.cn/m/72j2fF2R1x1"
 };
 
 type Copy = { en: string; zh: string };
+type AvailabilityStatus = "loading" | "ready" | "refreshing" | "stale" | "error";
 type HomeIconName =
   | "moon"
   | "sun"
@@ -29,8 +31,10 @@ type HomeIconName =
   | "camera"
   | "shield"
   | "calendar"
+  | "orders"
   | "gift"
   | "friend"
+  | "chat"
   | "vaccine"
   | "food"
   | "no"
@@ -46,7 +50,6 @@ const services = [
     id: "overnight",
     icon: "moon",
     title: { en: "Overnight Boarding", zh: "寄宿服务" },
-    price: { en: "RM35 / night", zh: "RM35 / 晚" },
     details: {
       en: ["No cages", "Same-room sleeping", "24h companionship", "Daily photo updates"],
       zh: ["不关笼", "晚上一起睡", "24小时陪伴", "每日照片更新"]
@@ -58,7 +61,6 @@ const services = [
     id: "daycare",
     icon: "sun",
     title: { en: "Daycare", zh: "日托服务" },
-    price: { en: "RM5 / hour", zh: "RM5 / 小时" },
     details: {
       en: ["Daytime care", "9:00am - 8:00pm", "Safe activity space"],
       zh: ["白天照顾", "9:00am - 8:00pm", "安全活动空间"]
@@ -70,41 +72,17 @@ const services = [
   id: string;
   icon: HomeIconName;
   title: Copy;
-  price: Copy;
+  price?: Copy;
   details: { en: string[]; zh: string[] };
   href: string;
   cta: Copy;
 }>;
 
-const promotions = [
-  {
-    code: "WELCOME10",
-    icon: "gift",
-    label: { en: "New Guest", zh: "新客专享" },
-    title: { en: "RM10 OFF", zh: "RM10 OFF" },
-    body: { en: "First boarding discount", zh: "首次寄宿优惠" }
-  },
-  {
-    code: "SECOND50",
-    icon: "dog",
-    label: { en: "Multi-dog", zh: "多只家庭优惠" },
-    title: { en: "50% OFF", zh: "50% OFF" },
-    body: { en: "Second dog discount", zh: "第二只狗狗优惠" }
-  },
-  {
-    code: "REFER10",
-    icon: "friend",
-    label: { en: "Referral", zh: "推荐好友" },
-    title: { en: "RM10 Voucher", zh: "RM10 Voucher" },
-    body: { en: "Both sides receive a voucher", zh: "双方各得优惠券" }
-  }
-] satisfies Array<{ code: string; icon: HomeIconName; label: Copy; title: Copy; body: Copy }>;
-
 const whyItems = [
   {
     icon: "no",
     title: { en: "No Cages", zh: "不关笼" },
-    body: { en: "Free movement in a calm home.", zh: "狗狗在宽敞的家庭空间自由活动" }
+    body: { en: "Free movement in a calm home.", zh: "宠物在宽敞的家庭空间自由活动" }
   },
   {
     icon: "heart",
@@ -114,7 +92,7 @@ const whyItems = [
   {
     icon: "dog",
     title: { en: "1-12kg Only", zh: "仅接待 1-12kg" },
-    body: { en: "Small dogs feel safer.", zh: "只接待小型犬，让狗狗更安心" }
+    body: { en: "Small pets feel safer.", zh: "只接待小型宠物，让宠物更安心" }
   },
   {
     icon: "camera",
@@ -132,69 +110,6 @@ const whyItems = [
     body: { en: "Soft beds and a calm home setting.", zh: "柔软床铺与安静家庭空间" }
   }
 ] satisfies Array<{ icon: HomeIconName; title: Copy; body: Copy }>;
-
-const requirements = [
-  { icon: "vaccine", title: { en: "Vaccinated", zh: "已打疫苗" } },
-  { icon: "food", title: { en: "Bring Own Food", zh: "自备狗粮" } },
-  { icon: "dog", title: { en: "Small Dogs 1-12kg", zh: "小型犬 1-12kg" } },
-  { icon: "no", title: { en: "No Aggressive Dogs", zh: "不接攻击性犬" } },
-  { icon: "flea", title: { en: "Flea Free", zh: "无跳蚤" } },
-  { icon: "vet", title: { en: "Emergency Vet Support", zh: "紧急兽医支持" } }
-] satisfies Array<{ icon: HomeIconName; title: Copy }>;
-
-const reviews: PublicReview[] = [
-  {
-    id: "fallback-review-grace",
-    name: "Grace Sam",
-    pet: "Toy Poodle",
-    dogName: "Mochi",
-    breed: "Toy Poodle",
-    date: "2026-05-18",
-    rating: 5,
-    source: "customer",
-    quote: {
-      en: "We received photos every day. My dog looked happy, safe, and relaxed. I will choose Pet Villa again!",
-      zh: "每天都会收到照片，狗狗玩得很开心！第一次寄宿也很放心，会继续选择 Pet Villa！"
-    }
-  },
-  {
-    id: "fallback-review-michelle",
-    name: "Michelle Tan",
-    pet: "French Bulldog",
-    dogName: "Bobo",
-    breed: "French Bulldog",
-    date: "2026-05-12",
-    rating: 5,
-    source: "customer",
-    quote: {
-      en: "Warm updates, clean home, and very thoughtful care for small dogs.",
-      zh: "更新很温暖，环境干净，对小型犬照顾得很细心。"
-    }
-  },
-  {
-    id: "fallback-review-rachel",
-    name: "Rachel Lee",
-    pet: "Maltese",
-    dogName: "Luna",
-    breed: "Maltese",
-    date: "2026-05-05",
-    rating: 5,
-    source: "customer",
-    quote: {
-      en: "The booking was simple and my dog settled in quickly.",
-      zh: "预约很简单，狗狗也很快适应，真的很安心。"
-    }
-  }
-];
-
-const galleryDogs = [
-  { breed: "Poodle", color: "#f0b46e" },
-  { breed: "French Bulldog", color: "#f8f1e9" },
-  { breed: "Maltese", color: "#fffaf2" },
-  { breed: "Corgi", color: "#e8a45d" },
-  { breed: "Shih Tzu", color: "#d8b28a" },
-  { breed: "Pomeranian", color: "#efc27e" }
-];
 
 function Icon({ name, className = "h-9 w-9" }: { name: HomeIconName; className?: string }) {
   const deep = "#3d1f0d";
@@ -262,6 +177,14 @@ function Icon({ name, className = "h-9 w-9" }: { name: HomeIconName; className?:
       </svg>
     );
   }
+  if (name === "chat") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <path d="M14 15h36a8 8 0 0 1 8 8v15a8 8 0 0 1-8 8H32L20 54v-8h-6a8 8 0 0 1-8-8V23a8 8 0 0 1 8-8Z" fill="#fff8f5" stroke={coral} strokeWidth="4" strokeLinejoin="round" />
+        <path d="M20 28h24M20 36h16" stroke={deep} strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  }
   if (name === "dog" || name === "friend") {
     return (
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
@@ -279,6 +202,16 @@ function Icon({ name, className = "h-9 w-9" }: { name: HomeIconName; className?:
       <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
         <rect x="13" y="15" width="38" height="38" rx="7" fill="#fff8f5" stroke={coral} strokeWidth="3" />
         <path d="M13 26h38M23 10v10M41 10v10" stroke={coral} strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "orders") {
+    return (
+      <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+        <rect x="14" y="10" width="36" height="44" rx="10" fill="#fff8f5" stroke={coral} strokeWidth="4" />
+        <path d="M23 22h18M23 32h18M23 42h11" stroke={deep} strokeWidth="4" strokeLinecap="round" />
+        <circle cx="44" cy="44" r="9" fill="#ffd45b" stroke="#d9922e" strokeWidth="3" />
+        <path d="m40 44 3 3 6-7" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -375,122 +308,143 @@ function localDateKey(date: Date) {
   ].join("-");
 }
 
-function couponKey() {
-  return `pet-villa-coupons:${getCurrentUserId()}`;
-}
-
-function readCoupons() {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(window.localStorage.getItem(couponKey()) || "[]") as string[];
-  } catch {
-    return [];
-  }
+function formatReviewDate(value: string, lang: "en" | "zh") {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(date);
 }
 
 export default function HomePage() {
-  const { lang, t } = useLanguage();
-  const [claimedCoupons, setClaimedCoupons] = useState<string[]>([]);
+  const { lang, setLang, t } = useLanguage();
   const [reviewIndex, setReviewIndex] = useState(0);
   const [reviewsOpen, setReviewsOpen] = useState(false);
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  const [activeGallery, setActiveGallery] = useState(0);
   const [reviewTouchStart, setReviewTouchStart] = useState<number | null>(null);
-  const [galleryTouchStart, setGalleryTouchStart] = useState<number | null>(null);
-  const [capacityMap, setCapacityMap] = useState<Record<string, number>>({});
   const [offDays, setOffDays] = useState<string[]>([]);
-  const [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
+  const [availabilityStatus, setAvailabilityStatus] = useState<AvailabilityStatus>("loading");
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
+  const [today, setToday] = useState<Date | null>(null);
   const [publicReviews, setPublicReviews] = useState<PublicReview[]>([]);
-  const [referralCode, setReferralCode] = useState("PETVILLA-PV123");
-  const [couponMessage, setCouponMessage] = useState("");
-  const [referralCopied, setReferralCopied] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [homeUserName, setHomeUserName] = useState("");
+  const [homeUserAvatar, setHomeUserAvatar] = useState(avatarToImageSrc());
+  const [homeOrders, setHomeOrders] = useState<VillaOrder[]>([]);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [pricingStatus, setPricingStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
-    setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
-    setReferralCode(getReferralCode());
-    void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
-    void loadReferralCode().then((code) => setReferralCode(code));
-    setGuestPhotos(readHomeGuestPhotos(6));
-    void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
+    setToday(startOfLocalDay(new Date()));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setAvailabilityStatus((current) => current === "ready" || current === "stale" ? "refreshing" : "loading");
+    void loadHostOffDays()
+      .then((days) => {
+        if (!active) return;
+        setOffDays(days);
+        setAvailabilityStatus("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setAvailabilityStatus((current) => current === "refreshing" ? "stale" : "error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [availabilityRefreshKey]);
+
+  useEffect(() => {
+    let active = true;
     setPublicReviews(readPublicReviews());
-    void loadPublicReviews().then((nextReviews) => setPublicReviews(nextReviews));
-    setCapacityMap(buildCapacityMap());
-    setOffDays(readHostOffDays());
-    void loadHostOffDays().then((days) => setOffDays(days));
+    void loadPublicReviews()
+      .then((nextReviews) => setPublicReviews(nextReviews))
+      .catch(() => undefined)
+      .finally(() => setReviewsLoading(false));
+    const syncBusinessSettings = () => {
+      setPricingStatus("loading");
+      void loadBusinessSettings()
+        .then((settings) => {
+          if (!active) return;
+          setBusinessSettings(settings);
+          setPricingStatus("ready");
+        })
+        .catch(() => {
+          if (!active) return;
+          setPricingStatus("error");
+        });
+    };
+    const syncHomeUser = () => {
+      const user = getCurrentUser();
+      setHomeUserName(user?.name || "");
+      setHomeUserAvatar(user?.id ? avatarToImageSrc(readProfileAvatar(user.id, user.profileAvatar)) : avatarToImageSrc());
+    };
+    const syncHomeOrders = () => {
+      setHomeOrders(readOrders());
+      if (!getCurrentUser()?.id) return;
+      void loadOrders().then((orders) => setHomeOrders(orders)).catch(() => undefined);
+    };
+    syncHomeUser();
+    syncHomeOrders();
     const sync = () => {
-      setCapacityMap(buildCapacityMap());
-      setOffDays(readHostOffDays());
-      void loadHostOffDays().then((days) => setOffDays(days));
+      syncHomeOrders();
     };
-    const syncVouchers = () => {
-      setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
-      void loadVouchers().then((vouchers) => setClaimedCoupons(vouchers.map((voucher) => voucher.code)));
-    };
-    const syncGallery = () => {
-      setGuestPhotos(readHomeGuestPhotos(6));
-      void loadHomeGuestPhotos(6).then((photos) => setGuestPhotos(photos));
-    };
+    const syncAvailability = () => setAvailabilityRefreshKey((current) => current + 1);
     const syncReviews = () => {
       setPublicReviews(readPublicReviews());
-      void loadPublicReviews().then((nextReviews) => setPublicReviews(nextReviews));
+      setReviewsLoading(true);
+      void loadPublicReviews()
+        .then((nextReviews) => setPublicReviews(nextReviews))
+        .catch(() => undefined)
+        .finally(() => setReviewsLoading(false));
     };
+    syncBusinessSettings();
     window.addEventListener("pet-villa-orders", sync);
-    window.addEventListener("pet-villa-vouchers", syncVouchers);
-    window.addEventListener("pet-villa-gallery", syncGallery);
     window.addEventListener("pet-villa-reviews", syncReviews);
-    window.addEventListener("pet-villa-availability", sync);
+    window.addEventListener("pet-villa-availability", syncAvailability);
+    window.addEventListener("pet-villa-auth", syncHomeUser);
+    window.addEventListener("pet-villa-pets", syncHomeUser);
+    window.addEventListener("pet-villa-host-settings", syncBusinessSettings);
     return () => {
+      active = false;
       window.removeEventListener("pet-villa-orders", sync);
-      window.removeEventListener("pet-villa-vouchers", syncVouchers);
-      window.removeEventListener("pet-villa-gallery", syncGallery);
       window.removeEventListener("pet-villa-reviews", syncReviews);
-      window.removeEventListener("pet-villa-availability", sync);
+      window.removeEventListener("pet-villa-availability", syncAvailability);
+      window.removeEventListener("pet-villa-auth", syncHomeUser);
+      window.removeEventListener("pet-villa-pets", syncHomeUser);
+      window.removeEventListener("pet-villa-host-settings", syncBusinessSettings);
     };
   }, []);
 
-  const today = startOfLocalDay(new Date());
-  const availabilityDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today.getTime()]);
-  const todaySlots = isHostOffDay(localDateKey(today), offDays) ? 0 : availableSlotsForDate(today, capacityMap);
-  const displayReviews = publicReviews.length ? [...publicReviews, ...reviews] : reviews;
-  const activeReview = displayReviews[reviewIndex % displayReviews.length];
-
-  async function claimCoupon(code: string) {
-    const result = await claimVoucherOnline(code);
-    if (result.ok) {
-      setClaimedCoupons(readVouchers().map((voucher) => voucher.code));
-      setCouponMessage(t({ en: "Voucher added to My Vouchers.", zh: "优惠券已加入优惠券钱包。" }));
-      return;
+  const availabilityDays = useMemo(
+    () => today ? Array.from({ length: 7 }, (_, index) => addDays(today, index)) : [],
+    [today]
+  );
+  const availabilityKnown = availabilityStatus === "ready" || availabilityStatus === "refreshing" || availabilityStatus === "stale";
+  const todayFull = Boolean(today && availabilityKnown && isHostOffDay(localDateKey(today), offDays));
+  const todayAvailabilityTone = !availabilityKnown ? "text-villa-text-secondary" : todayFull ? "text-red-500" : "text-villa-accent-green";
+  const displayReviews = publicReviews;
+  const activeReview = displayReviews.length ? displayReviews[reviewIndex % displayReviews.length] : null;
+  const dashboardName = homeUserName ? homeUserName.split(" ")[0] : "Pet Villa";
+  const isHomeLoggedIn = Boolean(homeUserName);
+  const pricingReady = pricingStatus === "ready" && businessSettings !== null;
+  const servicePrice = (serviceId: string) => {
+    if (!pricingReady || !businessSettings) {
+      return pricingStatus === "error"
+        ? t({ en: "Price unavailable", zh: "价格暂时无法读取" })
+        : t({ en: "Loading price...", zh: "正在读取价格..." });
     }
-    if (result.reason === "login") {
-      setCouponMessage(t({ en: "Please login or register before claiming vouchers.", zh: "请先登录或注册后再领取优惠券。" }));
-      return;
-    }
-    setCouponMessage(t({ en: "You have already claimed this voucher.", zh: "你已经领取过这张优惠券。" }));
-  }
-
-  async function copyReferralCode() {
-    try {
-      await navigator.clipboard.writeText(referralCode);
-      setReferralCopied(true);
-      setCouponMessage(t({
-        en: "Referral code copied. You and your friend will each receive RM10 after your friend completes their first registration.",
-        zh: "推荐码已复制。好友完成首次注册后，你和好友都会获得 RM10。"
-      }));
-      window.setTimeout(() => setReferralCopied(false), 1500);
-    } catch {
-      setCouponMessage(referralCode);
-    }
-  }
+    return serviceId === "overnight"
+      ? t({ en: `RM${businessSettings.boardingRate} / night`, zh: `RM${businessSettings.boardingRate} / 晚` })
+      : t({ en: `RM${businessSettings.daycareRate} / hour`, zh: `RM${businessSettings.daycareRate} / 小时` });
+  };
 
   function moveReview(direction: 1 | -1) {
+    if (displayReviews.length < 2) return;
     setReviewIndex((index) => (index + direction + displayReviews.length) % displayReviews.length);
-  }
-
-  function moveGallery(direction: 1 | -1) {
-    setActiveGallery((index) => {
-      const total = Math.max(1, guestPhotos.length);
-      return (index + direction + total) % total;
-    });
   }
 
   function handleSwipe(startX: number, endX: number, callback: (direction: 1 | -1) => void) {
@@ -500,39 +454,328 @@ export default function HomePage() {
   }
 
   function slotLabel(date: Date) {
-    if (isHostOffDay(localDateKey(date), offDays)) return t({ en: "Unavailable", zh: "不可预约" });
-    const slots = availableSlotsForDate(date, capacityMap);
-    if (slots <= 0) return t({ en: "Full", zh: "满位" });
-    if (slots === 1) return t({ en: "1 slot left", zh: "剩 1 位" });
+    if (!availabilityKnown) {
+      return availabilityStatus === "error"
+        ? t({ en: "Unavailable", zh: "暂时无法读取" })
+        : t({ en: "Checking...", zh: "查询中..." });
+    }
+    if (isHostOffDay(localDateKey(date), offDays)) return t({ en: "Full", zh: "已满" });
     return t({ en: "Available", zh: "可预约" });
   }
 
-  return (
-    <div className="villa-shell paw-bg">
-      <AppNav />
+  function todayAvailabilityLabel() {
+    if (!availabilityKnown) {
+      return availabilityStatus === "error"
+        ? t({ en: "Unavailable", zh: "暂时无法读取" })
+        : t({ en: "Checking...", zh: "查询中..." });
+    }
+    return todayFull ? t({ en: "Full", zh: "已满" }) : t({ en: "Available", zh: "可预约" });
+  }
 
-      <main className="pb-24 lg:pb-0">
-        <section className="px-4 pb-5 pt-5 sm:px-6 lg:px-10">
-          <div className="villa-container overflow-hidden rounded-[26px] border border-villa-primary-light bg-white/75 shadow-[0_14px_44px_rgba(61,31,13,0.08)]">
-            <div className="relative grid grid-cols-[minmax(0,0.58fr)_minmax(0,0.42fr)] gap-0 lg:min-h-[610px] lg:grid-cols-[1fr_0.95fr]">
-              <div className="relative z-10 px-3 pb-4 pt-5 sm:px-7 lg:px-8 lg:py-14">
-                <div className="inline-flex rounded-pill bg-villa-primary-light/80 px-4 py-2 text-[11px] font-black uppercase text-villa-text-primary">
+  return (
+    <div className="villa-shell pet-dream-bg">
+      <div className="hidden lg:block">
+        <AppNav />
+      </div>
+
+      <main className="pet-mobile-app">
+        <section className="grid gap-4 lg:hidden">
+          <header className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <a href="/" className="pet-logo-badge" aria-label="The Pet Villa home">
+                <img src="/petvilla-app-badge.webp" alt="The Pet Villa" className="h-full w-full object-cover" />
+              </a>
+              <div>
+                <p className="text-[12px] font-black text-[#8d65da]">{t({ en: "Hello", zh: "欢迎" })}, {dashboardName}</p>
+                <h1 className="m-0 font-title text-[28px] font-black leading-none text-villa-text-primary">The Pet Villa</h1>
+                <div className="pet-language-pill" aria-label="Language">
+                  <button type="button" data-active={lang === "en"} onClick={() => setLang("en")}>EN</button>
+                  <button type="button" data-active={lang === "zh"} onClick={() => setLang("zh")}>中文</button>
+                </div>
+              </div>
+            </div>
+            {isHomeLoggedIn ? (
+              <div className="flex items-center gap-2">
+                <a href="/diary" className="pet-round-action pet-clickable text-[11px] font-black text-[#8d65da]" aria-label="Pet Diary">
+                  <Icon name="camera" className="h-6 w-6" />
+                </a>
+                <a href="/orders" className="pet-round-action pet-clickable text-[11px] font-black text-[#8d65da]" aria-label="Orders">
+                  <Icon name="orders" className="h-6 w-6" />
+                </a>
+                <a href="/account" className="pet-round-action pet-clickable overflow-hidden" aria-label="Account">
+                  <img src={homeUserAvatar} alt="" className="h-full w-full object-cover" />
+                </a>
+              </div>
+            ) : (
+              <div className="home-auth-actions" aria-label="Account actions">
+                <a href="/auth?mode=login">{t({ en: "Login", zh: "登入" })}</a>
+                <a href="/auth?mode=register" data-primary="true">{t({ en: "Register", zh: "注册" })}</a>
+              </div>
+            )}
+          </header>
+
+          <a href="/booking" className="pet-clickable flex min-h-[52px] items-center gap-3 rounded-[24px] border border-white/90 bg-white/90 px-4">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f2e7ff]">
+              <Icon name="calendar" className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1 text-[13px] font-black text-villa-text-muted">{t({ en: "Search dates, daycare, boarding...", zh: "搜索日期、日托、寄宿..." })}</span>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#ffb84d] shadow-[0_8px_16px_rgba(255,184,77,0.26)]">
+              <Icon name="paw" className="h-5 w-5" />
+            </span>
+          </a>
+
+          <nav className="grid grid-cols-4 gap-3">
+            {[
+              { href: "/booking?service=overnight", icon: "moon" as HomeIconName, label: t({ en: "Boarding", zh: "寄宿" }), color: "#ffe1bd" },
+              { href: "/booking?service=daycare", icon: "sun" as HomeIconName, label: t({ en: "Daycare", zh: "日托" }), color: "#fff0d5" },
+              { href: "/pets", icon: "dog" as HomeIconName, label: t({ en: "My Pets", zh: "宠物" }), color: "#ead8ff" },
+              { href: "/chat", icon: "chat" as HomeIconName, label: t({ en: "Chat", zh: "聊天" }), color: "#dff2e1" }
+            ].map((item) => (
+              <a key={item.href} href={item.href} className="pet-dashboard-tile pet-clickable grid min-h-[88px] place-items-center text-center" style={{ background: item.color }}>
+                <span className="pet-icon-bubble h-12 w-12">
+                  <Icon name={item.icon} className="h-7 w-7" />
+                </span>
+                <span className="text-[11px] font-black leading-tight text-villa-text-primary">{item.label}</span>
+              </a>
+            ))}
+          </nav>
+
+          <section className="pet-dashboard-card overflow-hidden">
+            <div className="pet-banner-live min-h-[210px]">
+              <img src="/petvilla-dashboard-banner.webp" alt="The Pet Villa cozy small dog care" className="absolute inset-0 h-full w-full object-cover object-[34%_52%]" />
+              <div className="absolute inset-y-0 right-0 z-10 flex w-[43%] flex-col justify-center p-4">
+                <p className="text-[11px] font-black uppercase leading-tight text-[#6c4aba]">{t({ en: "Good Morning", zh: "早安" })}</p>
+                <h2 className="mt-1 font-title text-[24px] font-black leading-[1.02] text-villa-text-primary">{t({ en: "Ready for a cozy stay?", zh: "准备好温馨入住了吗？" })}</h2>
+                <a href="/booking" className="home-hero-cta pet-primary-cta mt-4 inline-flex min-h-[44px] items-center justify-center px-4 text-[12px] font-black">{t({ en: "Book Now", zh: "立即预约" })}</a>
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-title text-[24px] font-black text-villa-text-primary">{t({ en: "Services", zh: "服务" })}</h2>
+              <a href="/services" className="pet-mini-link pet-clickable">{t({ en: "See all", zh: "查看全部" })}</a>
+            </div>
+            <div className="grid gap-3">
+              {services.map((service, index) => (
+                <a key={service.id} href={service.href} className="pet-service-row pet-clickable grid grid-cols-[58px_1fr_auto] items-center gap-3">
+                  <span className="pet-icon-bubble h-14 w-14" style={{ background: index === 0 ? "#fff0d5" : "#f2e7ff" }}>
+                    <Icon name={service.icon} className="h-9 w-9" />
+                  </span>
+                  <span>
+                    <strong className="block text-[15px] font-black leading-tight text-villa-text-primary">{t(service.title)}</strong>
+                    <span className="mt-1 block text-[12px] font-bold text-villa-text-secondary">{index === 0 ? t({ en: "No cages, same-room sleeping", zh: "不关笼，同房陪睡" }) : t({ en: "Daytime care, 9am - 8pm", zh: "日间照顾，9am - 8pm" })}</span>
+                  </span>
+                  <span className="text-right">
+                    <strong className="block text-[18px] font-black leading-none text-[#d97867]">{servicePrice(service.id)}</strong>
+                    <span className="mt-2 inline-flex rounded-full bg-[#f2e7ff] px-2 py-1 text-[10px] font-black text-[#8d65da] shadow-[inset_0_-3px_6px_rgba(183,142,255,0.18)]">{t({ en: "Book", zh: "预约" })}</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-title text-[24px] font-black text-villa-text-primary">{t({ en: "This Week", zh: "本周" })}</h2>
+              {availabilityStatus === "error" ? (
+                <button type="button" className="pet-mini-link pet-clickable" onClick={() => setAvailabilityRefreshKey((current) => current + 1)}>
+                  {t({ en: "Retry", zh: "重试" })}
+                </button>
+              ) : (
+                <a href="/booking" className="pet-mini-link pet-clickable">{t({ en: "Calendar", zh: "日历" })}</a>
+              )}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {today ? availabilityDays.map((date) => {
+                const off = isHostOffDay(localDateKey(date), offDays);
+                return (
+                  <a
+                    key={date.toISOString()}
+                    href={availabilityKnown ? (off ? "/booking" : `/booking?date=${localDateKey(date)}`) : undefined}
+                    aria-disabled={!availabilityKnown}
+                    className={`pet-dashboard-tile min-w-[82px] bg-white/90 text-center ${availabilityKnown ? "pet-clickable" : "pointer-events-none opacity-70"}`}
+                  >
+                    <span className="text-[10px] font-black text-villa-text-muted">{formatDay(date, lang)}</span>
+                    <strong className={`mt-2 block text-[12px] font-black ${!availabilityKnown ? "text-villa-text-secondary" : off ? "text-red-500" : "text-villa-accent-green"}`}>{slotLabel(date)}</strong>
+                  </a>
+                );
+              }) : Array.from({ length: 7 }, (_, index) => (
+                <div key={`availability-placeholder-${index}`} className="pet-dashboard-tile min-w-[82px] animate-pulse bg-white/90" aria-hidden="true" />
+              ))}
+            </div>
+            {availabilityStatus === "stale" ? <p className="m-0 text-[11px] font-bold text-villa-text-secondary">{t({ en: "Unable to refresh — showing last known availability.", zh: "暂时无法刷新，正在显示上次同步的预约状态。" })}</p> : null}
+            {availabilityStatus === "error" ? <p className="m-0 text-[11px] font-bold text-red-600" role="alert">{t({ en: "Availability is temporarily unavailable. Please retry before booking.", zh: "预约状态暂时无法读取，请重试后再预约。" })}</p> : null}
+          </section>
+
+          <section className="pet-dashboard-card overflow-hidden bg-[#fffaf4] p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-title text-[24px] font-black text-villa-text-primary">{t({ en: "Pet Owner Reviews", zh: "宠主评价" })}</h2>
+              <button type="button" className="pet-mini-link pet-clickable disabled:cursor-not-allowed disabled:opacity-45" disabled={!displayReviews.length} onClick={() => setReviewsOpen(true)}>{t({ en: "View", zh: "查看" })}</button>
+            </div>
+            <div
+              className="mt-3 rounded-[26px] bg-[#f2e7ff] p-4 shadow-[inset_0_-8px_14px_rgba(255,255,255,0.28)]"
+              onTouchStart={(event) => setReviewTouchStart(event.touches[0]?.clientX ?? null)}
+              onTouchEnd={(event) => {
+                if (reviewTouchStart === null) return;
+                handleSwipe(reviewTouchStart, event.changedTouches[0]?.clientX ?? reviewTouchStart, moveReview);
+                setReviewTouchStart(null);
+              }}
+            >
+              {activeReview ? (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <Stars rating={activeReview.rating} />
+                    {displayReviews.length > 1 ? (
+                      <div className="flex gap-2">
+                        <button type="button" className="pet-review-arrow" onClick={() => moveReview(-1)} aria-label="Previous review">‹</button>
+                        <button type="button" className="pet-review-arrow" onClick={() => moveReview(1)} aria-label="Next review">›</button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-[13px] font-black leading-relaxed text-villa-text-primary">“{t(activeReview.quote)}”</p>
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="h-12 w-12 overflow-hidden rounded-[17px] bg-white shadow-[0_9px_18px_rgba(61,31,13,0.10)]">
+                      {activeReview.photo ? <img src={activeReview.photo} alt={activeReview.dogName || activeReview.pet} className="h-full w-full object-cover" /> : <DogPortrait breed={activeReview.breed || activeReview.pet} color="#f0b46e" />}
+                    </div>
+                    <div className="min-w-0">
+                      <strong className="block truncate text-[12px] font-black text-[#8d65da]">{activeReview.name} · {activeReview.dogName || activeReview.pet}</strong>
+                      <span className="block truncate text-[10px] font-bold text-villa-text-secondary">{activeReview.breed || activeReview.pet} · {formatReviewDate(activeReview.date, lang)}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-6 text-center">
+                  <strong className="block text-[13px] font-black text-villa-text-primary">{reviewsLoading ? t({ en: "Loading guest reviews...", zh: "正在载入宠主评价..." }) : t({ en: "No published reviews yet", zh: "暂时没有已发布评价" })}</strong>
+                  <span className="mt-1 block text-[11px] font-bold text-villa-text-secondary">{t({ en: "Verified guest reviews will appear here.", zh: "真实顾客评价会显示在这里。" })}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
+
+        <div className="hidden lg:block">
+        <section className="px-4 pb-6 pt-6 sm:px-6 lg:px-10">
+          <div className="pet-clay-panel villa-container grid gap-5 overflow-hidden rounded-[42px] p-6 pet-rise">
+            <header className="flex items-center justify-between gap-5">
+              <div className="flex min-w-0 items-center gap-4">
+                <a href="/" className="pet-logo-badge h-24 w-24" aria-label="The Pet Villa home">
+                  <img src="/petvilla-app-badge.webp" alt="The Pet Villa" className="h-full w-full object-cover" />
+                </a>
+                <div>
+                  <p className="text-[15px] font-black text-[#8d65da]">{t({ en: "Hello", zh: "欢迎" })}, {dashboardName}</p>
+                  <h1 className="m-0 font-title text-[48px] font-black leading-none text-villa-text-primary">The Pet Villa</h1>
+                  <div className="pet-language-pill mt-3 w-fit" aria-label="Language">
+                    <button type="button" data-active={lang === "en"} onClick={() => setLang("en")}>EN</button>
+                    <button type="button" data-active={lang === "zh"} onClick={() => setLang("zh")}>中文</button>
+                  </div>
+                </div>
+              </div>
+              {isHomeLoggedIn ? (
+                <div className="flex items-center gap-3">
+                  <a href="/diary" className="pet-round-action h-16 w-16 pet-clickable text-[#8d65da]" aria-label="Pet Diary">
+                    <Icon name="camera" className="h-8 w-8" />
+                  </a>
+                  <a href="/orders" className="pet-round-action h-16 w-16 pet-clickable text-[#8d65da]" aria-label="Orders">
+                    <Icon name="orders" className="h-8 w-8" />
+                  </a>
+                  <a href="/account" className="pet-round-action h-16 w-16 pet-clickable overflow-hidden" aria-label="Account">
+                    <img src={homeUserAvatar} alt="" className="h-full w-full object-cover" />
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <a href="/booking" className="pet-primary-cta inline-flex min-h-[54px] items-center justify-center px-7 text-sm font-black">{t({ en: "Book Now", zh: "立即预约" })}</a>
+                  <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-[54px] items-center justify-center rounded-full border-2 border-[#b58cff] bg-white/90 px-7 text-sm font-black text-[#8d65da] shadow-[0_10px_22px_rgba(61,31,13,0.08)] transition active:translate-y-0.5 active:scale-[0.99]">WhatsApp</a>
+                </div>
+              )}
+            </header>
+
+            <a href="/booking" className="pet-clickable flex min-h-[66px] items-center gap-4 rounded-[30px] border border-white/90 bg-white/90 px-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_10px_0_rgba(183,142,255,0.08),0_24px_38px_rgba(61,31,13,0.10)]">
+              <span className="grid h-12 w-12 place-items-center rounded-full bg-[#f2e7ff]">
+                <Icon name="calendar" className="h-7 w-7" />
+              </span>
+              <span className="min-w-0 flex-1 text-[18px] font-black text-villa-text-muted">{t({ en: "Search dates, daycare, boarding...", zh: "搜索日期、日托、寄宿..." })}</span>
+              <span className="grid h-12 w-12 place-items-center rounded-full bg-[#ffb84d] shadow-[0_10px_18px_rgba(255,184,77,0.28)]">
+                <Icon name="paw" className="h-7 w-7" />
+              </span>
+            </a>
+
+            <nav className="grid grid-cols-4 gap-4">
+              {[
+                { href: "/booking?service=overnight", icon: "moon" as HomeIconName, label: t({ en: "Boarding", zh: "寄宿" }), color: "#ffe1bd" },
+                { href: "/booking?service=daycare", icon: "sun" as HomeIconName, label: t({ en: "Daycare", zh: "日托" }), color: "#fff0d5" },
+                { href: "/pets", icon: "dog" as HomeIconName, label: t({ en: "My Pets", zh: "宠物" }), color: "#ead8ff" },
+                { href: "/chat", icon: "chat" as HomeIconName, label: t({ en: "Chat", zh: "聊天" }), color: "#dff2e1" }
+              ].map((item) => (
+                <a key={item.href} href={item.href} className="pet-dashboard-tile pet-clickable grid min-h-[132px] place-items-center text-center" style={{ background: item.color }}>
+                  <span className="pet-icon-bubble h-16 w-16">
+                    <Icon name={item.icon} className="h-10 w-10" />
+                  </span>
+                  <span className="text-[17px] font-black leading-tight text-villa-text-primary">{item.label}</span>
+                </a>
+              ))}
+            </nav>
+
+            <div className="grid grid-cols-[1.45fr_0.55fr] gap-5">
+              <section className="pet-dashboard-card h-full overflow-hidden">
+                <div className="pet-banner-live h-full min-h-[500px]">
+                  <img src="/petvilla-dashboard-banner.webp" alt="The Pet Villa cozy small dog care" className="absolute inset-0 h-full w-full object-cover object-[36%_52%]" />
+                  <div className="absolute inset-y-0 right-0 z-10 flex w-[43%] flex-col justify-center p-8">
+                    <p className="text-[15px] font-black uppercase leading-tight text-[#6c4aba]">{t({ en: "Good Morning", zh: "早安" })}</p>
+                    <h2 className="mt-2 font-title text-[44px] font-black leading-[1.02] text-villa-text-primary">{t({ en: "Ready for a cozy stay?", zh: "准备好温馨入住了吗？" })}</h2>
+                    <a href="/booking" className="home-hero-cta pet-primary-cta mt-7 inline-flex min-h-[58px] w-[240px] items-center justify-center px-7 text-base font-black">{t({ en: "Book Now", zh: "立即预约" })}</a>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section className="grid gap-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-title text-[34px] font-black text-villa-text-primary">{t({ en: "Services", zh: "服务" })}</h2>
+                <a href="/services" className="pet-mini-link pet-clickable">{t({ en: "See all", zh: "查看全部" })}</a>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {services.map((service, index) => (
+                  <a key={service.id} href={service.href} className="pet-service-row pet-clickable grid grid-cols-[72px_1fr_auto] items-center gap-4">
+                    <span className="pet-icon-bubble h-16 w-16" style={{ background: index === 0 ? "#fff0d5" : "#f2e7ff" }}>
+                      <Icon name={service.icon} className="h-11 w-11" />
+                    </span>
+                    <span>
+                      <strong className="block text-[20px] font-black leading-tight text-villa-text-primary">{t(service.title)}</strong>
+                      <span className="mt-1 block text-[13px] font-bold text-villa-text-secondary">{index === 0 ? t({ en: "No cages, same-room sleeping", zh: "不关笼，同房陪睡" }) : t({ en: "Daytime care, 9am - 8pm", zh: "日间照顾，9am - 8pm" })}</span>
+                    </span>
+                    <span className="text-right">
+                      <strong className="block text-[24px] font-black leading-none text-[#d97867]">{servicePrice(service.id)}</strong>
+                      <span className="mt-3 inline-flex rounded-full bg-[#f2e7ff] px-3 py-1.5 text-[11px] font-black text-[#8d65da] shadow-[inset_0_-3px_6px_rgba(183,142,255,0.18)]">{t({ en: "Book", zh: "预约" })}</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          </div>
+        </section>
+        <section className="hidden px-4 pb-5 pt-4 sm:px-6 lg:px-10">
+          <div className="pet-clay-panel villa-container overflow-hidden rounded-[36px] pet-rise">
+            <div className="relative grid grid-cols-1 gap-0 lg:min-h-[610px] lg:grid-cols-[1fr_0.95fr]">
+              <div className="relative z-10 order-2 px-5 pb-6 pt-5 sm:px-7 lg:order-1 lg:px-8 lg:py-14">
+                <div className="inline-flex rounded-pill bg-[#ffe1bd] px-4 py-2 text-[10px] font-black uppercase text-villa-text-primary shadow-[inset_0_-4px_8px_rgba(255,184,77,0.22),0_8px_18px_rgba(61,31,13,0.08)]">
                   The Pet Villa · Ipoh · Pet Boarding
                 </div>
-                <h1 className="mt-4 max-w-[250px] font-title text-[25px] font-black leading-[1.05] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
+                <h1 className="mt-4 max-w-[320px] font-title text-[34px] font-black leading-[1.02] text-villa-text-primary sm:text-[44px] lg:max-w-[560px] lg:text-[64px]">
                   {t({ en: "Cage Free · 24h Care", zh: "不关笼 · 24小时陪伴" })}
                   <span className="ml-1 inline-block align-middle text-[0.72em] font-normal leading-none text-villa-primary">♡</span>
                 </h1>
-                <p className="mt-3 text-[15px] font-black text-villa-text-primary sm:text-lg">
-                  {t({ en: "Premium small dog boarding in Ipoh", zh: "怡保精品小型犬寄宿" })}
+                <p className="mt-3 max-w-[300px] text-[15px] font-black leading-snug text-villa-text-primary sm:text-lg">
+                  {t({ en: "Premium small pet boarding in Ipoh", zh: "怡保精品小型宠物寄宿" })}
                 </p>
                 <ul className="mt-4 grid gap-2 text-[13px] font-bold leading-relaxed text-villa-text-primary sm:text-sm">
                   {[
-                    { en: "Only 3 dogs per day", zh: "一天只接待 3 只狗狗" },
+                    { en: "Only 3 pets per day", zh: "一天只接待 3 只宠物" },
                     { en: "3-5 photo/video updates daily", zh: "每日 3-5 次照片视频更新" },
-                    { en: "Only small dogs from 1-12kg", zh: "仅接待 1-12kg 小型犬" }
+                    { en: "Only small pets from 1-12kg", zh: "仅接待 1-12kg 小型宠物" }
                   ].map((item) => (
-                    <li key={item.en} className="flex items-center gap-2">
+                    <li key={item.en} className="flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 shadow-[0_5px_14px_rgba(61,31,13,0.05)]">
                       <Icon name="paw" className="h-4 w-4 shrink-0" />
                       {t(item)}
                     </li>
@@ -544,13 +787,13 @@ export default function HomePage() {
                     <a
                       key={service.id}
                       href={service.href}
-                      className="rounded-[18px] border border-villa-primary-light bg-white/88 p-2.5 shadow-[0_10px_30px_rgba(61,31,13,0.08)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4"
+                      className="rounded-[18px] border border-villa-primary-light bg-white/90 p-2.5 shadow-[0_10px_30px_rgba(61,31,13,0.08)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4"
                     >
                       <div className="flex items-start gap-3">
                         <Icon name={service.icon} className="h-11 w-11 shrink-0" />
                         <div className="min-w-0">
                           <h2 className="text-[11px] font-black text-villa-text-primary sm:text-sm">{t(service.title)}</h2>
-                          <p className="mt-1 text-[18px] font-black leading-none text-villa-primary sm:text-[26px]">{t(service.price)}</p>
+                          <p className="mt-1 text-[18px] font-black leading-none text-villa-primary sm:text-[26px]">{servicePrice(service.id)}</p>
                         </div>
                       </div>
                       <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-bold text-villa-text-primary">
@@ -566,33 +809,46 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2 lg:max-w-[560px]">
-                  <a className="villa-button min-h-[40px] text-xs sm:min-h-[46px] sm:text-sm" href="/booking?service=overnight">
+                <div className="mt-5 hidden grid-cols-2 gap-3 lg:grid lg:max-w-[560px]">
+                  <a className="pet-gradient-button inline-flex min-h-[54px] items-center justify-center rounded-pill px-5 text-sm font-black text-white transition active:translate-y-0.5 active:scale-[0.99]" href="/booking?service=overnight">
                     {t({ en: "Book Now", zh: "立即预约" })}
                   </a>
-                  <a className="villa-button-outline min-h-[40px] bg-white/65 text-xs sm:min-h-[46px] sm:text-sm" href={whatsappUrl} target="_blank" rel="noreferrer">
+                  <a className="inline-flex min-h-[54px] items-center justify-center rounded-pill border-2 border-[#b58cff] bg-white/90 px-5 text-sm font-black text-[#8d65da] shadow-[0_10px_22px_rgba(61,31,13,0.08)] transition active:translate-y-0.5 active:scale-[0.99]" href={whatsappUrl} target="_blank" rel="noreferrer">
                     WhatsApp
                   </a>
                 </div>
               </div>
 
-              <div className="relative min-h-[300px] sm:min-h-[360px] lg:min-h-full">
-                <img src="/hero-dogs.png" alt="Poodle and French Bulldog at The Pet Villa" className="absolute inset-0 h-full w-full object-cover object-[50%_68%]" />
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,248,245,0.08)_0%,rgba(255,248,245,0.0)_45%,#fff8f5_100%)] lg:bg-[linear-gradient(90deg,#fff8f5_0%,rgba(255,248,245,0.2)_28%,rgba(255,248,245,0)_100%)]" />
+              <div className="relative order-1 mx-3 mt-3 min-h-[360px] overflow-hidden rounded-[34px] bg-[#ead8ff] shadow-[inset_0_-18px_34px_rgba(255,255,255,0.30),0_16px_34px_rgba(61,31,13,0.13)] sm:min-h-[430px] lg:order-2 lg:m-4 lg:min-h-full">
+                <img src="/petvilla-3d-hero.webp" alt="3D small dogs at The Pet Villa" className="pet-float absolute inset-0 h-full w-full object-cover object-[50%_66%]" />
+                <div className="absolute left-4 top-4 z-10 rounded-[22px] bg-white/90 px-3 py-2 text-[11px] font-black text-villa-text-primary shadow-[0_10px_24px_rgba(61,31,13,0.12)] backdrop-blur">
+                  1-12kg only
+                </div>
+                <div className="absolute bottom-4 left-4 z-10 rounded-[24px] bg-white/90 px-4 py-3 shadow-[0_12px_28px_rgba(61,31,13,0.14)] backdrop-blur">
+                  <span className="block text-[10px] font-black uppercase text-villa-primary">Today</span>
+                  <strong className={`block text-xl font-black leading-tight ${todayAvailabilityTone}`}>{todayAvailabilityLabel()}</strong>
+                  <span className="block text-[10px] font-bold text-villa-text-secondary">booking status</span>
+                </div>
+                <div className="absolute right-4 top-4 z-10 rounded-full bg-[#ffe1bd] px-3 py-2 text-[11px] font-black text-villa-text-primary shadow-[0_10px_24px_rgba(61,31,13,0.12)]">
+                  3-5 updates
+                </div>
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,248,245,0)_0%,rgba(255,248,245,0)_60%,rgba(255,250,244,0.40)_100%)]" />
               </div>
             </div>
-            <div className="grid gap-3 border-t border-villa-primary-light/70 bg-white/68 p-4 sm:grid-cols-2 lg:p-5">
+            <div className="grid gap-3 border-t border-white/80 bg-white/60 p-4 sm:grid-cols-2 lg:p-5">
               {services.map((service) => (
                 <a
                   key={service.id}
                   href={service.href}
-                  className="rounded-[18px] border border-villa-primary-light bg-white/90 p-4 shadow-[0_10px_30px_rgba(61,31,13,0.07)] transition hover:-translate-y-0.5 hover:shadow-lg"
+                  className="pet-pressable rounded-[28px] border border-white/90 bg-white/90 p-4 shadow-[0_14px_0_rgba(183,142,255,0.12),0_22px_34px_rgba(61,31,13,0.10)]"
                 >
                   <div className="flex items-center gap-3">
-                    <Icon name={service.icon} className="h-10 w-10 shrink-0" />
+                    <span className="pet-icon-bubble h-14 w-14">
+                      <Icon name={service.icon} className="h-10 w-10" />
+                    </span>
                     <div className="min-w-0">
                       <h2 className="text-sm font-black text-villa-text-primary">{t(service.title)}</h2>
-                      <p className="mt-1 text-[24px] font-black leading-none text-villa-primary">{t(service.price)}</p>
+                      <p className="mt-1 text-[25px] font-black leading-none text-[#d97867]">{servicePrice(service.id)}</p>
                     </div>
                   </div>
                   <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-bold text-villa-text-primary">
@@ -610,97 +866,70 @@ export default function HomePage() {
         </section>
 
         <section className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
-            <div className="grid gap-4 lg:grid-cols-[180px_1fr_96px] lg:items-center">
-              <div className="flex items-center gap-3">
-                <div className="grid h-14 w-14 place-items-center rounded-[18px] bg-villa-primary-bg">
+          <div className="pet-section-shell villa-container">
+            <div className="grid gap-4 lg:grid-cols-[220px_1fr_128px] lg:items-center">
+              <div className="flex items-center gap-3 rounded-[26px] bg-[#ead8ff]/70 p-3 shadow-[inset_0_-8px_16px_rgba(255,255,255,0.35)]">
+                <div className="pet-icon-bubble h-16 w-16">
                   <Icon name="dog" className="h-10 w-10" />
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-villa-text-primary">{t({ en: "Today Availability", zh: "今日名额" })}</h2>
-                  <p className="mt-1 text-xl font-black text-villa-text-primary">
-                    {Math.max(0, todaySlots)} / {MAX_DOGS_PER_DAY} {t({ en: "dogs left", zh: "只狗狗" })}
+                  <h2 className="pet-section-heading text-[20px]">{t({ en: "Today Availability", zh: "今日名额" })}</h2>
+                  <p className={`mt-1 text-[24px] font-black ${todayAvailabilityTone}`}>
+                    {todayAvailabilityLabel()}
                   </p>
-                  <div className="mt-2 h-2 w-24 overflow-hidden rounded-full bg-villa-primary-light/45">
-                    <span className="block h-full rounded-full bg-villa-primary" style={{ width: `${Math.max(0, todaySlots / MAX_DOGS_PER_DAY) * 100}%` }} />
-                  </div>
                 </div>
               </div>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {availabilityDays.map((date) => {
+                {today ? availabilityDays.map((date) => {
                   const off = isHostOffDay(localDateKey(date), offDays);
-                  const slots = off ? 0 : availableSlotsForDate(date, capacityMap);
-                  const isFull = slots <= 0;
                   return (
-                    <a key={date.toISOString()} href={`/booking?date=${localDateKey(date)}`} className="min-w-[84px] rounded-[14px] border border-villa-primary-light bg-white/75 px-2 py-3 text-center transition hover:-translate-y-px hover:shadow-md">
+                    <a
+                      key={date.toISOString()}
+                      href={availabilityKnown ? (off ? "/booking" : `/booking?date=${localDateKey(date)}`) : undefined}
+                      aria-disabled={!availabilityKnown}
+                      className={`min-w-[92px] rounded-[24px] border border-white/90 bg-white/90 px-2 py-3 text-center shadow-[0_10px_0_rgba(232,146,124,0.09),0_18px_26px_rgba(61,31,13,0.08)] ${availabilityKnown ? "pet-pressable" : "pointer-events-none opacity-70"}`}
+                    >
                       <span className="block text-[10px] font-black text-villa-text-primary">{formatDay(date, lang)}</span>
-                      <strong className={`mt-2 block text-[12px] font-black ${isFull ? "text-red-500" : slots === 1 ? "text-orange-500" : "text-villa-accent-green"}`}>
+                      <strong className={`mt-2 block text-[12px] font-black ${!availabilityKnown ? "text-villa-text-secondary" : off ? "text-red-500" : "text-villa-accent-green"}`}>
                         {slotLabel(date)}
                       </strong>
                     </a>
                   );
-                })}
+                }) : Array.from({ length: 7 }, (_, index) => (
+                  <div key={`desktop-availability-placeholder-${index}`} className="min-h-[62px] min-w-[92px] animate-pulse rounded-[24px] border border-white/90 bg-white/90" aria-hidden="true" />
+                ))}
               </div>
-              <a className="villa-button-outline min-h-[42px] w-full bg-white text-xs" href="/booking">
-                <Icon name="calendar" className="h-4 w-4" />
-                {t({ en: "View Calendar", zh: "查看日历" })}
-              </a>
-            </div>
-          </div>
-        </section>
-
-        <section id="promotions" className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Promotions", zh: "精选优惠" })}</h2>
-              <a href="/vouchers" className="text-xs font-black text-villa-primary">{t({ en: "My Vouchers", zh: "我的优惠券" })}</a>
-            </div>
-            {couponMessage ? <p className="mb-3 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{couponMessage}</p> : null}
-            <div className="grid grid-cols-3 gap-2 sm:gap-4">
-              {promotions.filter((promo) => promo.code !== "REFER10").map((promo) => {
-                const claimed = claimedCoupons.includes(promo.code);
-                return (
-                  <article key={promo.code} className="flex min-h-[164px] flex-col rounded-[18px] border border-villa-primary-light bg-villa-primary-bg/70 p-3 shadow-sm">
-                    <span className="inline-flex rounded-pill bg-white px-2 py-1 text-[9px] font-black text-villa-primary">{t(promo.label)}</span>
-                    <Icon name={promo.icon} className="mt-2 h-10 w-10" />
-                    <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t(promo.title)}</h3>
-                    <p className="mt-1 min-h-[30px] text-[10px] font-bold leading-tight text-villa-text-secondary">{t(promo.body)}</p>
-                    <button type="button" className={`mt-auto min-h-[34px] w-full rounded-pill text-[11px] font-black ${claimed ? "bg-villa-accent-green text-white" : "bg-villa-primary text-white"}`} onClick={() => claimCoupon(promo.code)}>
-                      {claimed ? t({ en: "CLAIMED", zh: "已领取" }) : "CLAIM"}
-                    </button>
-                  </article>
-                );
-              })}
-              <article className="flex min-h-[164px] flex-col items-center rounded-[18px] border border-villa-primary-light bg-white p-3 text-center shadow-sm">
-                <span className="inline-flex rounded-pill bg-villa-primary-bg px-2 py-1 text-[9px] font-black text-villa-primary">
-                  {t({ en: "Referral Program", zh: "推荐奖励" })}
-                </span>
-                <Icon name="friend" className="mt-2 h-10 w-10" />
-                <h3 className="mt-2 text-[15px] font-black leading-tight text-villa-text-primary">{t({ en: "Invite a friend", zh: "邀请好友" })}</h3>
-                <p className="mt-1 w-full rounded-[12px] bg-villa-primary-bg px-1 py-1 text-[9px] font-black leading-tight tracking-[-0.03em] text-villa-text-primary sm:text-[10px]">{referralCode}</p>
-                <p className="mt-1 text-center text-[10px] font-bold leading-tight text-villa-text-secondary">
-                  {t({ en: "Get RM10 each", zh: "双方各得 RM10" })}
-                </p>
-                <button type="button" className="mt-auto min-h-[34px] w-full rounded-pill border border-villa-primary text-[11px] font-black text-villa-primary" onClick={copyReferralCode}>
-                  {referralCopied ? t({ en: "Copied ✓", zh: "已复制 ✓" }) : t({ en: "Copy Code", zh: "复制推荐码" })}
+              {availabilityStatus === "error" ? (
+                <button type="button" className="pet-lavender-button inline-flex min-h-[50px] items-center justify-center gap-2 rounded-pill px-4 text-xs font-black text-white" onClick={() => setAvailabilityRefreshKey((current) => current + 1)}>
+                  <Icon name="calendar" className="h-4 w-4" />
+                  {t({ en: "Retry", zh: "重试" })}
                 </button>
-              </article>
+              ) : (
+                <a className="pet-lavender-button inline-flex min-h-[50px] items-center justify-center gap-2 rounded-pill px-4 text-xs font-black text-white" href="/booking">
+                  <Icon name="calendar" className="h-4 w-4" />
+                  {t({ en: "Calendar", zh: "日历" })}
+                </a>
+              )}
             </div>
           </div>
         </section>
 
         <section className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
-            <h2 className="mb-4 font-title text-xl font-black text-villa-text-primary">
+          <div className="pet-section-shell villa-container">
+            <h2 className="pet-section-heading mb-4">
               {t({ en: "Why Choose Pet Villa", zh: "为什么选择 Pet Villa" })}
             </h2>
-            <div className="grid grid-cols-3 overflow-hidden rounded-[20px] border border-villa-primary-light sm:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {whyItems.map((item, index) => (
-                <article key={item.title.en} className={`min-h-[128px] border-b border-r border-villa-primary-light/70 bg-white/50 p-3 text-center ${index > 2 ? "border-b-0" : ""} sm:border-b-0`}>
-                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-villa-primary-bg shadow-sm">
+                <article
+                  key={item.title.en}
+                  className="pet-pressable min-h-[132px] rounded-[26px] border border-white/90 p-3 text-center shadow-[0_12px_0_rgba(183,142,255,0.08),0_20px_30px_rgba(61,31,13,0.08)]"
+                  style={{ background: index % 3 === 0 ? "#fff0d5" : index % 3 === 1 ? "#ead8ff" : "#fffaf4" }}
+                >
+                  <div className="pet-icon-bubble mx-auto h-14 w-14">
                     <Icon name={item.icon} className="h-8 w-8" />
                   </div>
-                  <h3 className="mt-2 text-[12px] font-black leading-tight text-villa-text-primary">{t(item.title)}</h3>
+                  <h3 className="mt-3 text-[13px] font-black leading-tight text-villa-text-primary">{t(item.title)}</h3>
                   <p className="mt-1 text-[10px] font-bold leading-tight text-villa-text-secondary">{t(item.body)}</p>
                 </article>
               ))}
@@ -709,15 +938,15 @@ export default function HomePage() {
         </section>
 
         <section className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
+          <div className="pet-section-shell villa-container">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Pet Owner Reviews", zh: "宠主评价" })}</h2>
-              <button type="button" className="text-xs font-black text-villa-primary" onClick={() => setReviewsOpen(true)}>
+              <h2 className="pet-section-heading">{t({ en: "Pet Owner Reviews", zh: "宠主评价" })}</h2>
+              <button type="button" className="pet-mini-link disabled:cursor-not-allowed disabled:opacity-45" disabled={!displayReviews.length} onClick={() => setReviewsOpen(true)}>
                 {t({ en: "View All", zh: "查看全部" })} →
               </button>
             </div>
             <div
-              className="rounded-[20px] bg-villa-primary-bg/70 p-4"
+              className="rounded-[28px] border border-white/90 bg-[#ead8ff]/65 p-4 shadow-[inset_0_-10px_18px_rgba(255,255,255,0.25),0_16px_32px_rgba(61,31,13,0.08)]"
               onTouchStart={(event) => setReviewTouchStart(event.touches[0]?.clientX ?? null)}
               onTouchEnd={(event) => {
                 if (reviewTouchStart === null) return;
@@ -725,102 +954,95 @@ export default function HomePage() {
                 setReviewTouchStart(null);
               }}
             >
-              <Stars rating={activeReview.rating} />
-              <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-primary">“{t(activeReview.quote)}”</p>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 overflow-hidden rounded-full">
-                    {activeReview.photo ? <img src={activeReview.photo} alt={activeReview.dogName || activeReview.pet} className="h-full w-full object-cover" /> : <DogPortrait breed={activeReview.pet} color="#f0b46e" />}
+              {activeReview ? (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="inline-flex rounded-full bg-white/90 px-3 py-1 shadow-sm"><Stars rating={activeReview.rating} /></div>
+                    {displayReviews.length > 1 ? (
+                      <div className="flex gap-2">
+                        <button type="button" className="pet-review-arrow" onClick={() => moveReview(-1)} aria-label="Previous review">‹</button>
+                        <button type="button" className="pet-review-arrow" onClick={() => moveReview(1)} aria-label="Next review">›</button>
+                      </div>
+                    ) : null}
                   </div>
-                  <div>
-                    <strong className="block text-sm font-black">{activeReview.name}</strong>
-                    <span className="text-xs font-bold text-villa-text-secondary">{activeReview.dogName || activeReview.pet}{activeReview.breed ? ` · ${activeReview.breed}` : ""}</span>
+                  <p className="mt-4 text-[15px] font-black leading-relaxed text-villa-text-primary">“{t(activeReview.quote)}”</p>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[18px] bg-white shadow-[0_10px_20px_rgba(61,31,13,0.10)]">
+                        {activeReview.photo ? <img src={activeReview.photo} alt={activeReview.dogName || activeReview.pet} className="h-full w-full object-cover" /> : <DogPortrait breed={activeReview.breed || activeReview.pet} color="#f0b46e" />}
+                      </div>
+                      <div className="min-w-0">
+                        <strong className="block truncate text-sm font-black">{activeReview.name} · {activeReview.dogName || activeReview.pet}</strong>
+                        <span className="block truncate text-xs font-bold text-villa-text-secondary">{activeReview.breed || activeReview.pet} · {formatReviewDate(activeReview.date, lang)}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {displayReviews.map((review, index) => (
+                        <button key={review.id} type="button" className={`h-2.5 rounded-full transition-all ${index === reviewIndex ? "w-6 bg-[#8d65da]" : "w-2.5 bg-white/80"}`} onClick={() => setReviewIndex(index)} aria-label={`Show review ${index + 1}`} />
+                      ))}
+                    </div>
                   </div>
+                  {displayReviews.length > 1 ? <p className="mt-3 text-center text-[11px] font-bold text-villa-text-secondary/80">{t({ en: "Swipe or use the arrows to view more", zh: "左右滑动或按箭头查看更多" })}</p> : null}
+                </>
+              ) : (
+                <div className="py-10 text-center">
+                  <strong className="block text-[15px] font-black text-villa-text-primary">{reviewsLoading ? t({ en: "Loading guest reviews...", zh: "正在载入宠主评价..." }) : t({ en: "No published reviews yet", zh: "暂时没有已发布评价" })}</strong>
+                  <span className="mt-2 block text-[12px] font-bold text-villa-text-secondary">{t({ en: "Verified guest reviews will appear here.", zh: "真实顾客评价会显示在这里。" })}</span>
                 </div>
-                <div className="flex gap-2">
-                  {displayReviews.map((review, index) => (
-                    <button
-                      key={review.name}
-                      type="button"
-                      className={`h-2.5 w-2.5 rounded-full ${index === reviewIndex ? "bg-villa-primary" : "bg-villa-primary-light"}`}
-                      onClick={() => setReviewIndex(index)}
-                      aria-label={`Show review ${index + 1}`}
-                    />
-                  ))}
-                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        </div>
+
+        <section className="px-4 pb-2 pt-4 sm:px-6 lg:px-10" aria-labelledby="pet-villa-public-purpose">
+          <aside className="villa-container relative overflow-hidden rounded-[30px] border border-white/85 bg-[linear-gradient(115deg,rgba(255,239,213,0.92),rgba(245,235,255,0.88)_52%,rgba(224,244,231,0.82))] px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_12px_26px_rgba(61,31,13,0.07)] sm:px-6 sm:py-5">
+            <span className="absolute inset-y-0 left-0 w-1.5 bg-[linear-gradient(180deg,#ffbd67_0%,#b58cff_52%,#8fc9a1_100%)]" aria-hidden="true" />
+            <div className="flex items-start gap-3 pl-1">
+              <span className="pet-icon-bubble grid h-10 w-10 shrink-0 place-items-center bg-white/82 shadow-[0_8px_16px_rgba(61,31,13,0.08)]">
+                <Icon name="paw" className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-black text-[#6c4aba]">The Pet Villa</p>
+                <h2 id="pet-villa-public-purpose" className="mt-0.5 font-title text-[21px] font-black leading-tight text-villa-text-primary sm:text-[24px]">
+                  {t({ en: "Small-dog care in Ipoh", zh: "怡保小型犬照护" })}
+                </h2>
               </div>
-              <p className="mt-3 text-center text-[11px] font-bold text-villa-text-secondary/80">
-                {t({ en: "Swipe to view more reviews →", zh: "左右滑动查看更多评价 →" })}
-              </p>
             </div>
-          </div>
-        </section>
-
-        <section className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="font-title text-xl font-black text-villa-text-primary">{t({ en: "Happy Guests", zh: "快乐小客人" })}</h2>
-              <a className="text-xs font-black text-villa-primary" href="/gallery">
-                {t({ en: "View All", zh: "查看全部" })} →
-              </a>
-            </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-              {guestPhotos.map((dog, index) => (
-                <button
-                  key={dog.id}
-                  type="button"
-                  className="h-24 overflow-hidden rounded-[16px] border border-villa-primary-light bg-white shadow-sm transition hover:-translate-y-px hover:shadow-md sm:h-28"
-                  onClick={() => {
-                    setActiveGallery(index);
-                    setGalleryOpen(true);
-                  }}
-                  aria-label={`Open ${dog.petName} gallery photo`}
-                >
-                  <img src={dog.imageUrl || "/hero-dogs.png"} alt={dog.petName} className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="px-4 pb-5 sm:px-6 lg:px-10">
-          <div className="villa-container rounded-[24px] border border-villa-primary-light bg-white/86 p-4 shadow-[0_10px_34px_rgba(61,31,13,0.08)]">
-            <h2 className="mb-4 font-title text-xl font-black text-villa-text-primary">{t({ en: "Boarding Requirements", zh: "入住前须知" })}</h2>
-            <div className="grid grid-cols-3 overflow-hidden rounded-[20px] border border-villa-primary-light">
-              {requirements.map((item, index) => (
-                <div key={item.title.en} className={`grid min-h-[92px] place-items-center border-b border-r border-villa-primary-light/70 bg-white/50 p-2 text-center ${index >= 3 ? "border-b-0" : ""}`}>
-                  <Icon name={item.icon} className="h-9 w-9" />
-                  <strong className="text-[10px] font-black leading-tight text-villa-text-primary">{t(item.title)}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
+            <p className="mt-3 max-w-5xl pl-1 text-[12px] font-bold leading-relaxed text-villa-text-secondary sm:mt-3.5 sm:text-[13px]">
+              {t({
+                en: "Small-dog boarding and daycare in Ipoh. Our Customer Portal lets customers manage pets and bookings, view orders, communicate with Pet Villa, and receive private pet-care updates. Customers can access their account securely with Email + Password and, when available, optional Google Sign-In.",
+                zh: "怡保小型犬寄宿与日托服务。客户可通过 Customer Portal 管理宠物与预订、查看订单、联系 Pet Villa，并接收私人宠物照护更新。客户可使用 Email + Password 安全登录，并可在提供后选择 Google Sign-In。"
+              })}
+            </p>
+          </aside>
         </section>
       </main>
 
-      <footer className="bg-villa-host-dark px-4 pb-28 pt-6 text-villa-primary-light sm:px-6 lg:pb-6 lg:px-10">
+      <footer className="hidden bg-[linear-gradient(180deg,#ead8ff_0%,#6c4aba_100%)] px-4 pb-28 pt-6 text-white sm:px-6 lg:block lg:pb-6 lg:px-10">
         <div className="villa-container grid gap-5 text-xs font-semibold sm:grid-cols-4">
-          <div>
+          <div className="rounded-[26px] bg-white/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
             <h2 className="font-title text-lg font-black text-white">The Pet Villa</h2>
-            <p className="mt-1 text-villa-primary-light/80">{t({ en: "Premium small dog boarding in Ipoh", zh: "怡保精品小型犬寄宿" })}</p>
+            <p className="mt-1 text-white/80">{t({ en: "Premium small pet boarding in Ipoh", zh: "怡保精品小型宠物寄宿" })}</p>
           </div>
-          <div>
+          <div className="rounded-[26px] bg-white/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
             <h3 className="text-sm font-black text-white">{t({ en: "Contact Us", zh: "联系我们" })}</h3>
             <a className="mt-1 block hover:text-white" href={`tel:${phone}`}>{phone}</a>
             <a className="block hover:text-white" href={whatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>
             <a className="block hover:text-white" href="mailto:PetVillaIpoh@gmail.com">PetVillaIpoh@gmail.com</a>
             <p className="m-0">Ipoh, Perak</p>
           </div>
-          <div>
+          <div className="rounded-[26px] bg-white/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
             <h3 className="text-sm font-black text-white">{t({ en: "Hours", zh: "营业时间" })}</h3>
             <p className="mt-1">Check-in: 9:00am - 8:00pm</p>
             <p className="m-0">Check-out: before 12:00pm</p>
           </div>
-          <div>
+          <div className="rounded-[26px] bg-white/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
             <h3 className="text-sm font-black text-white">{t({ en: "Follow Us", zh: "关注我们" })}</h3>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {Object.entries(socialLinks).map(([key, href]) => (
-                <a key={key} href={href} target="_blank" rel="noreferrer" className="flex min-h-[42px] items-center gap-2 rounded-[14px] bg-white/10 px-3 transition hover:-translate-y-px hover:bg-white/20" aria-label={key}>
+                <a key={key} href={href} target="_blank" rel="noreferrer" className="pet-pressable flex min-h-[42px] items-center gap-2 rounded-[18px] bg-white/18 px-3 shadow-[0_8px_18px_rgba(61,31,13,0.12)]" aria-label={key}>
                   <Icon name={key as HomeIconName} className="h-6 w-6" />
                   <span className="text-[11px] font-black capitalize text-white">{key === "xhs" ? "Xiaohongshu" : key}</span>
                 </a>
@@ -828,16 +1050,36 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+        <div className="villa-container mt-5 flex items-center justify-center gap-3 border-t border-white/20 pt-4 text-xs font-bold text-white/85">
+          <a href="/privacy" className="hover:text-white">{t({ en: "Privacy Policy", zh: "隐私政策" })}</a>
+          <span aria-hidden="true">•</span>
+          <a href="/terms" className="hover:text-white">{t({ en: "Terms of Service", zh: "服务条款" })}</a>
+        </div>
       </footer>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-villa-primary-light bg-villa-background/95 p-3 shadow-[0_-10px_28px_rgba(61,31,13,0.10)] backdrop-blur lg:hidden">
-        <a href={whatsappUrl} target="_blank" rel="noreferrer" className="villa-button-outline min-h-[44px] bg-white text-xs">
-          WhatsApp
-        </a>
-        <a href="/booking?service=overnight" className="villa-button min-h-[44px] text-xs">
-          {t({ en: "Book Now", zh: "立即预约" })}
-        </a>
+      <div className="px-4 pb-24 pt-1 text-center text-[11px] font-bold text-villa-text-secondary lg:hidden">
+        <a href="/privacy" className="text-[#6c4aba]">{t({ en: "Privacy Policy", zh: "隐私政策" })}</a>
+        <span className="mx-2 text-villa-text-secondary/60" aria-hidden="true">•</span>
+        <a href="/terms" className="text-[#6c4aba]">{t({ en: "Terms of Service", zh: "服务条款" })}</a>
       </div>
+
+      <nav className="pet-tabbar">
+        {[
+          { href: "/", icon: "paw" as HomeIconName, label: t({ en: "Home", zh: "首页" }), active: true },
+          { href: "/pets", icon: "dog" as HomeIconName, label: t({ en: "Pets", zh: "宠物" }), active: false },
+          { href: "/booking", icon: "calendar" as HomeIconName, label: t({ en: "Book", zh: "预约" }), active: false },
+          { href: "/orders", icon: "orders" as HomeIconName, label: t({ en: "Orders", zh: "订单" }), active: false },
+          { href: "/diary", icon: "camera" as HomeIconName, label: t({ en: "Diary", zh: "日记" }), active: false },
+          { href: "/account", icon: "heart" as HomeIconName, label: t({ en: "Me", zh: "我的" }), active: false }
+        ].map((item) => (
+          <a key={item.href} href={item.href} className="pet-tab-item" data-active={item.active} aria-current={item.active ? "page" : undefined}>
+            <span className="pet-tab-icon">
+              <Icon name={item.icon} className="h-5 w-5" />
+            </span>
+            <span>{item.label}</span>
+          </a>
+        ))}
+      </nav>
 
       {reviewsOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
@@ -848,12 +1090,14 @@ export default function HomePage() {
             </div>
             <div className="grid gap-3">
               {displayReviews.map((review) => (
-                <article key={review.name} className="rounded-[18px] bg-villa-primary-bg p-4">
+                <article key={review.id} className="rounded-[18px] bg-villa-primary-bg p-4">
                   <Stars rating={review.rating} />
                   <p className="mt-2 text-sm font-bold leading-relaxed">“{t(review.quote)}”</p>
                   <div className="mt-3 flex items-center gap-3">
-                    {review.photo ? <img src={review.photo} alt={review.dogName || review.pet} className="h-10 w-10 rounded-full object-cover" /> : null}
-                    <p className="text-xs font-black">{review.name} · {review.dogName || review.pet}{review.breed ? ` · ${review.breed}` : ""} · {review.date}</p>
+                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-[15px] bg-white shadow-sm">
+                      {review.photo ? <img src={review.photo} alt={review.dogName || review.pet} className="h-full w-full object-cover" /> : <DogPortrait breed={review.breed || review.pet} color="#f0b46e" />}
+                    </div>
+                    <p className="text-xs font-black">{review.name} · {review.dogName || review.pet}<span className="mt-1 block font-bold text-villa-text-secondary">{review.breed || review.pet} · {formatReviewDate(review.date, lang)}</span></p>
                   </div>
                 </article>
               ))}
@@ -862,36 +1106,6 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {galleryOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-villa-text-primary/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="w-full max-w-2xl rounded-[24px] border border-villa-primary-light bg-white p-5 shadow-lg">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-title text-xl font-black">{guestPhotos[activeGallery]?.petName || t({ en: "Gallery", zh: "相册" })}</h2>
-              <button type="button" className="grid h-10 w-10 place-items-center rounded-full border border-villa-primary-light font-black" onClick={() => setGalleryOpen(false)}>×</button>
-            </div>
-            <div
-              className="relative h-[330px] overflow-hidden rounded-[22px] bg-villa-primary-bg"
-              onTouchStart={(event) => setGalleryTouchStart(event.touches[0]?.clientX ?? null)}
-              onTouchEnd={(event) => {
-                if (galleryTouchStart === null) return;
-                handleSwipe(galleryTouchStart, event.changedTouches[0]?.clientX ?? galleryTouchStart, moveGallery);
-                setGalleryTouchStart(null);
-              }}
-            >
-              <img src={guestPhotos[activeGallery]?.imageUrl || "/hero-dogs.png"} alt={guestPhotos[activeGallery]?.petName || "Happy guest"} className="h-full w-full object-cover" />
-              <button type="button" className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/85 font-black text-villa-primary shadow-md" onClick={() => moveGallery(-1)} aria-label="Previous photo">‹</button>
-              <button type="button" className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/85 font-black text-villa-primary shadow-md" onClick={() => moveGallery(1)} aria-label="Next photo">›</button>
-            </div>
-            <div className="mt-4 grid grid-cols-6 gap-2">
-              {guestPhotos.map((dog, index) => (
-                <button key={dog.id} type="button" className={`h-14 overflow-hidden rounded-[12px] border ${index === activeGallery ? "border-villa-primary" : "border-villa-primary-light"}`} onClick={() => setActiveGallery(index)}>
-                  <img src={dog.imageUrl || "/hero-dogs.png"} alt={dog.petName} className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

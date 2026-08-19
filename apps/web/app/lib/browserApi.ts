@@ -1,4 +1,4 @@
-export const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+export const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "/api/v1";
 
 export type WebSession = {
   user: {
@@ -21,11 +21,22 @@ const bookingKey = "pet-villa-booking-id";
 export function getSession(): WebSession | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(sessionKey);
-  return raw ? JSON.parse(raw) as WebSession : null;
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as WebSession;
+  } catch {
+    window.localStorage.removeItem(sessionKey);
+    return null;
+  }
 }
 
 export function saveSession(session: WebSession) {
-  window.localStorage.setItem(sessionKey, JSON.stringify(session));
+  const safeSession: WebSession = {
+    user: session.user,
+    host: session.host ?? null
+  };
+  window.localStorage.setItem(sessionKey, JSON.stringify(safeSession));
   if (session.host?.id) window.localStorage.setItem(hostKey, session.host.id);
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { apiRequest, getRecent, getSession } from "../lib/browserApi";
+import { apiBaseUrl, apiRequest, getRecent, getSession } from "../lib/browserApi";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Notice";
 
@@ -27,8 +27,7 @@ export function ChatPanel() {
   useEffect(() => {
     load().catch((err) => setError(err instanceof Error ? err.message : "Could not load messages."));
     const bookingId = getRecent("booking");
-    const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
-    const socketBase = api.replace(/\/api\/v1\/?$/, "");
+    const socketBase = apiBaseUrl.replace(/\/api\/v1\/?$/, "");
     let socket: Socket | null = null;
     if (bookingId) {
       socket = io(socketBase, { transports: ["websocket", "polling"] });

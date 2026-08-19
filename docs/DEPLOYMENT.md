@@ -80,12 +80,21 @@ Migration files:
 - `database/migrations/202606060006_create_supabase_gallery.sql`
 - `database/migrations/202606070001_create_supabase_reviews.sql`
 - `database/migrations/202606070002_create_supabase_host_panel.sql`
+- `database/migrations/202608060001_create_supabase_pet_diary.sql`
+- `database/migrations/202608060002_create_supabase_host_operations.sql`
+- `database/migrations/202608060003_create_supabase_voucher_campaigns.sql`
 
 Run migrations from Supabase SQL Editor or `psql` after setting `DATABASE_URL`.
 
 The Gallery migration creates the public Supabase Storage bucket:
 
 - `gallery-photos`
+
+The Private Diary migration creates the private Supabase Storage bucket:
+
+- `pet-diary-media`
+
+Apply the three `20260806` migrations in numeric order. They have not been remotely executed or verified by this repository change.
 
 ## Stripe Web Payments
 

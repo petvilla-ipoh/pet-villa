@@ -30,13 +30,14 @@ The current web application uses localStorage for many customer and host flows. 
 | `pet-villa-chat-threads` | Customer/host chat threads fallback mirror during Supabase Host Panel migration. |
 | `pet-villa-chat-supabase-migrated` | Marks host-side local chat threads as checked/migrated into Supabase. |
 | `pet-villa-host-off-days` | Host blocked/off dates fallback mirror during Supabase Host Panel migration. |
+| `pet-villa-diary-updates` | Same-device Private Pet Diary fallback when Supabase or the Diary migration is unavailable; not cross-device storage. |
 | `pet-villa-happy-guests` | Host-published Happy Guests gallery fallback mirror during Supabase Gallery migration. |
 | `pet-villa-gallery-supabase-migrated` | Marks gallery fallback data as checked/migrated into Supabase Storage/table. |
 | `pet-villa-pet-id` | Browser API helper: latest pet ID. |
 | `pet-villa-host-id` | Browser API helper: latest host ID. |
 | `pet-villa-booking-id` | Browser API helper: latest booking ID. |
 
-Total documented localStorage key families: 29.
+Total documented localStorage key families: 30.
 
 ## Browser Event Names
 
@@ -53,6 +54,7 @@ The app also uses browser events for same-tab/cross-component sync:
 - `pet-villa-messages`
 - `pet-villa-availability`
 - `pet-villa-booking-draft`
+- `pet-villa-diary`
 
 ## Cookie-Based Auth Storage
 

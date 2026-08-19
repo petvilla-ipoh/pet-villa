@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabaseBrowserClient } from "./supabase";
+import { fetchAuthenticatedCustomerJson, getAuthenticatedSupabaseContext, retrySupabaseRead } from "./dataReliability";
 
 export type VillaMessage = {
   id: string;
@@ -33,6 +33,8 @@ type ChatMessageRow = {
 const threadsKey = "pet-villa-chat-threads";
 const chatMigrationKey = "pet-villa-chat-supabase-migrated";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const allowChatDevelopmentFallback = process.env.NODE_ENV !== "production"
+  && process.env.NEXT_PUBLIC_ENABLE_CUSTOMER_LOCAL_FALLBACK === "true";
 
 function currentUser() {
   if (typeof window === "undefined") return { id: "guest", name: "Pet Owner", phone: "", role: "owner" };
@@ -55,11 +57,7 @@ function isHostSession() {
 }
 
 async function getSupabaseContext() {
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
-  return { supabase, userId: data.user.id };
+  return getAuthenticatedSupabaseContext();
 }
 
 function seedThread(): ChatThread {
@@ -102,7 +100,7 @@ export function readChatThreads(): ChatThread[] {
 export function readMessages(threadId = getCurrentThreadId()): VillaMessage[] {
   const thread = readChatThreads().find((item) => item.id === threadId);
   if (thread) return thread.messages;
-  return threadId === getCurrentThreadId() ? seedThread().messages : [];
+  return allowChatDevelopmentFallback && threadId === getCurrentThreadId() ? seedThread().messages : [];
 }
 
 function threadFromRows(rows: ChatMessageRow[]) {
@@ -132,17 +130,26 @@ function threadFromRows(rows: ChatMessageRow[]) {
 async function listSupabaseThreads() {
   const context = await getSupabaseContext();
   if (!context) return null;
-  const { data, error } = await context.supabase
-    .from("chat_messages")
-    .select("id, thread_id, owner_id, owner_name, owner_phone, sender_role, body, created_at")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return threadFromRows((data || []) as ChatMessageRow[]);
+  return retrySupabaseRead(async () => {
+    const { data, error } = await context.supabase
+      .from("chat_messages")
+      .select("id, thread_id, owner_id, owner_name, owner_phone, sender_role, body, created_at")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return threadFromRows((data || []) as ChatMessageRow[]);
+  });
+}
+
+async function listCustomerThreads() {
+  return retrySupabaseRead(async () => {
+    const { messages } = await fetchAuthenticatedCustomerJson<{ messages: ChatMessageRow[] }>("/api/customer/messages");
+    return threadFromRows(messages || []);
+  });
 }
 
 async function migrateLocalChatToSupabase() {
   const context = await getSupabaseContext();
-  if (!context || !isHostSession() || typeof window === "undefined") return;
+  if (!allowChatDevelopmentFallback || !context || !isHostSession() || typeof window === "undefined") return;
   if (window.localStorage.getItem(chatMigrationKey) === "true") return;
   const localThreads = readChatThreads();
   if (localThreads.length === 0) {
@@ -174,11 +181,15 @@ export async function loadChatThreads() {
   try {
     if (isHostSession()) await migrateLocalChatToSupabase();
     const threads = await listSupabaseThreads();
-    if (!threads) return fallback;
-    if (threads.length > 0 || isHostSession()) writeChatThreads(threads, false);
-    return threads.length > 0 ? threads : fallback;
+    if (!threads) {
+      if (!allowChatDevelopmentFallback) throw new Error("Authenticated chat access is unavailable.");
+      return fallback;
+    }
+    writeChatThreads(threads, false);
+    return threads.length > 0 || !allowChatDevelopmentFallback ? threads : fallback;
   } catch (error) {
-    console.warn("Supabase chat load failed; using localStorage fallback.", error);
+    if (!allowChatDevelopmentFallback) throw error;
+    console.warn("Supabase chat load failed; using the explicit development fallback.", error);
     return fallback;
   }
 }
@@ -187,7 +198,13 @@ export async function loadMessages(threadId = getCurrentThreadId()) {
   const threads = await loadChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (thread) return thread.messages;
-  return readMessages(threadId);
+  return allowChatDevelopmentFallback ? readMessages(threadId) : [];
+}
+
+export async function loadCustomerMessages(threadId = getCurrentThreadId()) {
+  const threads = await listCustomerThreads();
+  writeChatThreads(threads, false);
+  return threads.find((thread) => thread.id === threadId)?.messages || [];
 }
 
 function upsertLocalMessage(from: VillaMessage["from"], text: string, threadId: string) {
@@ -217,18 +234,30 @@ function upsertLocalMessage(from: VillaMessage["from"], text: string, threadId: 
   writeChatThreads([nextThread, ...threads.filter((thread) => thread.id !== threadId)]);
 }
 
-export function sendMessage(from: VillaMessage["from"], text: string, threadId = getCurrentThreadId()) {
+export async function sendMessage(from: VillaMessage["from"], text: string, threadId = getCurrentThreadId()) {
   const clean = text.trim();
   if (!clean) return;
-  upsertLocalMessage(from, clean, threadId);
-  void sendMessageToSupabase(from, clean, threadId).catch((error) => console.warn("Supabase chat send failed; using localStorage fallback.", error));
+  try {
+    const messages = await sendMessageToSupabase(from, clean, threadId);
+    const threads = from === "owner" ? await listCustomerThreads() : await loadChatThreads();
+    writeChatThreads(threads, false);
+    return messages;
+  } catch (error) {
+    if (!allowChatDevelopmentFallback) throw new Error("Your message could not be sent. Please try again.");
+    console.warn("Supabase chat send failed; using the explicit development fallback.", error);
+    upsertLocalMessage(from, clean, threadId);
+    return readMessages(threadId);
+  }
 }
 
 export async function sendMessageToSupabase(from: VillaMessage["from"], text: string, threadId = getCurrentThreadId()) {
   const clean = text.trim();
   if (!clean) return readMessages(threadId);
   const context = await getSupabaseContext();
-  if (!context) return readMessages(threadId);
+  if (!context) {
+    if (!allowChatDevelopmentFallback) throw new Error("Please sign in again before sending a message.");
+    return readMessages(threadId);
+  }
   const user = currentUser();
   const existing = readChatThreads().find((thread) => thread.id === threadId);
   const ownerId = from === "owner"
@@ -245,7 +274,7 @@ export async function sendMessageToSupabase(from: VillaMessage["from"], text: st
     body: clean
   });
   if (error) throw error;
-  const threads = await loadChatThreads();
+  const threads = from === "owner" ? await listCustomerThreads() : await loadChatThreads();
   if (typeof window !== "undefined") window.dispatchEvent(new Event("pet-villa-messages"));
   return threads.find((thread) => thread.id === threadId)?.messages || readMessages(threadId);
 }

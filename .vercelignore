@@ -1,0 +1,7 @@
+*.log
+test-results/
+.playwright-cli/
+.codex/
+.agents/
+.next/
+node_modules/

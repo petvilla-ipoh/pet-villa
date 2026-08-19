@@ -2,29 +2,28 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useLanguage } from "../components/LanguageProvider";
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
-import { upsertSupabaseProfile, writeLocalSessionUser } from "../lib/authSession";
+import { getSupabaseBrowserClient, getSupabaseGoogleOAuthClient } from "../lib/supabase";
+import { clearObsoleteCustomerPasswordStorage, syncSupabaseSessionToLocalStorage } from "../lib/authSession";
+import { getAuthRedirectUrl } from "../lib/siteUrl";
 import { savePendingReferralCode } from "../lib/vouchers";
 
 type AuthMode = "login" | "register";
 type FieldIconType = "mail" | "lock" | "user" | "phone" | "eye";
-type AuthStage = "form" | "otp" | "forgot-phone" | "forgot-otp";
-type ResetMethod = "phone" | "email";
-type PendingUser = {
-  fullName: string;
-  phone: string;
-  email: string;
-  password: string;
-  referralCode?: string;
-  otp: string;
-  expiresAt: number;
-};
+type AuthStage = "form" | "signup-sent" | "forgot";
 
-// TODO: real OTP - replace this demo OTP with Supabase phone OTP or a verified SMS/email provider.
-const DEMO_OTP = "123456";
+function authErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/invalid login credentials/i.test(message)) return "Email or password is incorrect.";
+  if (/email not confirmed/i.test(message)) return "Please confirm your email before logging in.";
+  if (/already registered|user already exists/i.test(message)) return "An account already exists for this email. Please login or reset your password.";
+  if (/rate limit|too many/i.test(message)) return "Too many attempts. Please wait before trying again.";
+  if (/network|fetch|failed to connect/i.test(message)) return "Unable to connect. Please check your connection and try again.";
+  return "Authentication could not be completed. Please try again.";
+}
 
-function makeUserId(emailOrPhone: string) {
-  return `owner-${emailOrPhone.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || Date.now()}`;
+function safeCustomerRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/host")) return "/";
+  return value;
 }
 
 function BackIcon() {
@@ -39,6 +38,17 @@ function HeartMark() {
   return (
     <svg viewBox="0 0 42 42" className="inline-block h-8 w-8 align-middle" aria-hidden="true">
       <path d="M21 34S7 25 7 15.5C7 9.8 14.2 8 21 17c6.8-9 14-7.2 14-1.5C35 25 21 34 21 34Z" fill="none" stroke="#e8927c" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.5-.2-2.2H12v4.2h5.4a4.6 4.6 0 0 1-2 3v2.7h3.3c1.9-1.8 2.9-4.4 2.9-7.7Z" />
+      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.7-2.4l-3.3-2.7c-.9.6-2.1 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3v2.8A10 10 0 0 0 12 22Z" />
+      <path fill="#FBBC05" d="M6.4 13.8a6 6 0 0 1 0-3.6V7.4H3a10 10 0 0 0 0 9.2l3.4-2.8Z" />
+      <path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.9 1.5l2.9-2.9A9.8 9.8 0 0 0 3 7.4l3.4 2.8C7.2 7.8 9.4 6.1 12 6.1Z" />
     </svg>
   );
 }
@@ -90,25 +100,6 @@ function FieldIcon({ type }: { type: FieldIconType }) {
   );
 }
 
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M22 12.2c0-.8-.1-1.5-.2-2.2H12v4.1h5.6a4.8 4.8 0 0 1-2.1 3.2v2.7h3.4c2-1.8 3.1-4.5 3.1-7.8Z" fill="#4285F4" />
-      <path d="M12 22c2.8 0 5.2-.9 6.9-2.5l-3.4-2.7c-.9.6-2.1 1-3.5 1-2.7 0-5-1.8-5.8-4.3H2.7v2.8A10 10 0 0 0 12 22Z" fill="#34A853" />
-      <path d="M6.2 13.5a6 6 0 0 1 0-3.1V7.6H2.7a10 10 0 0 0 0 8.8l3.5-2.9Z" fill="#FBBC05" />
-      <path d="M12 6.1c1.5 0 2.9.5 4 1.6l3-3A10 10 0 0 0 2.7 7.6l3.5 2.8C7 7.9 9.3 6.1 12 6.1Z" fill="#EA4335" />
-    </svg>
-  );
-}
-
-function AppleMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <path d="M16.2 12.5c0-2.1 1.7-3.1 1.8-3.2-1-1.5-2.6-1.7-3.1-1.7-1.3-.1-2.6.8-3.3.8-.7 0-1.8-.8-2.9-.8-1.5 0-2.9.9-3.7 2.2-1.6 2.8-.4 6.9 1.1 9.1.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.7 0 0-2.9-1.1-2.9-3.7ZM14.1 6.2c.6-.8 1.1-1.8 1-2.9-1 .1-2 .7-2.7 1.5-.6.7-1.1 1.8-1 2.8 1 .1 2-.5 2.7-1.4Z" fill="currentColor" />
-    </svg>
-  );
-}
-
 function DogCardArt({ duo = false }: { duo?: boolean }) {
   return (
     <svg viewBox="0 0 160 110" className="h-full w-full" aria-hidden="true">
@@ -142,7 +133,8 @@ function AuthInput({
   label,
   placeholder,
   type = "text",
-  trailingIcon
+  trailingIcon,
+  autoComplete
 }: {
   icon: FieldIconType;
   name: string;
@@ -150,6 +142,7 @@ function AuthInput({
   placeholder: string;
   type?: string;
   trailingIcon?: FieldIconType;
+  autoComplete?: string;
 }) {
   const [visible, setVisible] = useState(false);
   const inputType = trailingIcon === "eye" && type === "password" ? (visible ? "text" : "password") : type;
@@ -157,9 +150,11 @@ function AuthInput({
   return (
     <label className="grid gap-2">
       <span className="text-sm font-black text-villa-text-primary">{label}</span>
-      <span className="flex h-14 items-center gap-3 rounded-[14px] border border-villa-primary-light bg-white/80 px-4 shadow-[0_8px_24px_rgba(61,31,13,0.04)] transition focus-within:border-villa-primary focus-within:shadow-[0_0_0_3px_rgba(232,146,124,0.15)]">
-        <FieldIcon type={icon} />
-        <input name={name} className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-villa-text-primary outline-none placeholder:text-villa-text-muted" type={inputType} placeholder={placeholder} />
+      <span className="flex h-14 items-center gap-3 rounded-[24px] border border-white/90 bg-white/90 px-3 shadow-[inset_0_-5px_10px_rgba(183,142,255,0.08),0_10px_22px_rgba(61,31,13,0.08)] transition focus-within:border-[#c6a7ff] focus-within:shadow-[0_0_0_4px_rgba(198,167,255,0.20),0_12px_24px_rgba(61,31,13,0.08)]">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[15px] border border-white bg-[linear-gradient(145deg,#fffaf4_0%,#f1e5ff_100%)] text-[#d97867] shadow-[inset_0_-4px_8px_rgba(183,142,255,0.12),0_6px_0_rgba(232,146,124,0.10),0_10px_16px_rgba(61,31,13,0.09)]">
+          <FieldIcon type={icon} />
+        </span>
+        <input name={name} autoComplete={autoComplete} className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-villa-text-primary outline-none placeholder:text-villa-text-muted" type={inputType} placeholder={placeholder} />
         {trailingIcon ? (
           <button type="button" onClick={() => setVisible((value) => !value)} aria-label={visible ? "Hide password" : "Show password"}>
             <FieldIcon type={trailingIcon} />
@@ -175,13 +170,10 @@ export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [stage, setStage] = useState<AuthStage>("form");
   const [redirect, setRedirect] = useState("/");
-  const [pendingUser, setPendingUser] = useState<PendingUser | null>(null);
-  const [otpValue, setOtpValue] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [forgotPhone, setForgotPhone] = useState("");
-  const [forgotMethod, setForgotMethod] = useState<ResetMethod>("phone");
+  const [forgotEmail, setForgotEmail] = useState("");
   const [legalModal, setLegalModal] = useState<"terms" | "privacy" | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -192,10 +184,14 @@ export default function AuthPage() {
       const nextRedirect = params.get("redirect");
       setMode(requestedMode === "register" ? "register" : "login");
       setStage("form");
-      if (nextRedirect) setRedirect(nextRedirect);
+      setRedirect(safeCustomerRedirect(nextRedirect));
+      if (params.get("reset") === "success") {
+        setStatusMessage(t({ en: "Password updated. You can login with your new password.", zh: "密码已更新，现在可以使用新密码登录。" }));
+      }
     }
 
     syncFromUrl();
+    clearObsoleteCustomerPasswordStorage();
     window.addEventListener("popstate", syncFromUrl);
     window.addEventListener("pet-villa-route", syncFromUrl);
     return () => {
@@ -204,28 +200,24 @@ export default function AuthPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [cooldown]);
-
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
     setStage("form");
     setErrorMessage("");
     setStatusMessage("");
     const params = new URLSearchParams(window.location.search);
+    params.delete("mode");
     params.set("tab", nextMode);
     if (redirect && redirect !== "/") params.set("redirect", redirect);
     window.history.replaceState(null, "", `/auth?${params.toString()}`);
     window.dispatchEvent(new Event("pet-villa-route"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     const fullName = String(form.get("fullName") || "").trim();
-    const emailOrPhone = String(form.get("emailOrPhone") || form.get("email") || "").trim();
+    const loginEmail = String(form.get("loginEmail") || "").trim();
     const phone = String(form.get("phone") || "").trim();
     const email = String(form.get("email") || "").trim();
     const password = String(form.get("password") || "").trim();
@@ -233,6 +225,12 @@ export default function AuthPage() {
     const referralCode = String(form.get("referralCode") || "").trim();
     setErrorMessage("");
     setStatusMessage("");
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setErrorMessage(t({ en: "Customer authentication is temporarily unavailable.", zh: "顾客登录服务暂时无法使用。" }));
+      return;
+    }
 
     if (mode === "register") {
       if (!fullName || !phone || !email || !password || !confirmPassword) {
@@ -243,221 +241,105 @@ export default function AuthPage() {
         setErrorMessage(t({ en: "Passwords do not match.", zh: "两次输入的密码不一致。" }));
         return;
       }
-      const nextUser: PendingUser = {
-        fullName,
-        phone,
-        email,
-        password,
-        referralCode,
-        otp: DEMO_OTP,
-        expiresAt: Date.now() + 5 * 60 * 1000
-      };
-      setPendingUser(nextUser);
-      setOtpValue("");
-      setCooldown(60);
-      setStage("otp");
-      setStatusMessage(t({ en: "Demo OTP sent. Use 123456 to verify.", zh: "测试 OTP 已发送，请输入 123456 验证。" }));
-      return;
-    }
-
-    if (!emailOrPhone || !password) {
-      setErrorMessage(t({ en: "Please enter email or phone number and password.", zh: "请输入邮箱或电话号码和密码。" }));
-      return;
-    }
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
-      const credentials = emailOrPhone.includes("@")
-        ? { email: emailOrPhone, password }
-        : { phone: emailOrPhone, password };
-      const { data, error } = await supabase.auth.signInWithPassword(credentials);
-      if (!error && data.user) {
-        const localUser = {
-          id: data.user.id,
-          role: "owner" as const,
-          name: String(data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email || "Pet Owner"),
-          email: String(data.user.email || ""),
-          phone: String(data.user.user_metadata?.phone || data.user.phone || ""),
-          phoneVerified: Boolean(data.user.user_metadata?.phone_verified),
-          emailVerified: Boolean(data.user.email_confirmed_at || data.user.user_metadata?.email_verified)
-        };
-        writeLocalSessionUser(localUser);
-        void upsertSupabaseProfile(data.user, localUser);
-        window.location.href = redirect || "/";
+      if (password.length < 6) {
+        setErrorMessage(t({ en: "Password must be at least 6 characters.", zh: "密码至少需要 6 个字符。" }));
         return;
       }
-    }
-
-    const registered = readRegisteredUser();
-    const matched = registered && (registered.email === emailOrPhone || registered.phone === emailOrPhone);
-    if (!registered || !matched) {
-      setErrorMessage(t({ en: "No account found. Please register first.", zh: "找不到账号，请先注册。" }));
-      return;
-    }
-    if (registered.password !== password) {
-      setErrorMessage(t({ en: "Incorrect password. Please try again.", zh: "密码不正确，请重试。" }));
-      return;
-    }
-    writeLocalSessionUser({
-      id: registered.id || makeUserId(registered.email || registered.phone),
-      role: "owner",
-      name: registered.fullName,
-      email: registered.email,
-      phone: registered.phone,
-      phoneVerified: Boolean(registered.phoneVerified),
-      emailVerified: Boolean(registered.emailVerified)
-    });
-    window.location.href = redirect || "/";
-  }
-
-  function readRegisteredUser(): { id?: string; fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean } | null {
-    try {
-      return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
-    } catch {
-      return null;
-    }
-  }
-
-  function upsertRegisteredUserList(user: { id?: string; fullName: string; phone: string; email: string; password: string; phoneVerified: boolean; emailVerified?: boolean }) {
-    try {
-      const raw = window.localStorage.getItem("pet-villa-registered-users");
-      const list = raw ? JSON.parse(raw) as Array<typeof user & { registeredAt?: string }> : [];
-      const userId = user.id || user.email || user.phone;
-      const existing = list.find((item) => (item.id || item.email || item.phone) === userId);
-      const nextUser = { ...existing, ...user, registeredAt: existing?.registeredAt || new Date().toISOString() };
-      const next = [nextUser, ...list.filter((item) => (item.id || item.email || item.phone) !== userId)];
-      window.localStorage.setItem("pet-villa-registered-users", JSON.stringify(next));
-      window.dispatchEvent(new Event("pet-villa-customers"));
-    } catch {
-      window.dispatchEvent(new Event("pet-villa-customers"));
-    }
-  }
-
-  async function completeOtpVerification() {
-    if (!pendingUser) return;
-    setErrorMessage("");
-    if (Date.now() > pendingUser.expiresAt) {
-      setErrorMessage(t({ en: "OTP expired. Please resend a new code.", zh: "OTP 已过期，请重新发送验证码。" }));
-      return;
-    }
-    if (otpValue !== pendingUser.otp) {
-      setErrorMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
-      return;
-    }
-    const fallbackId = makeUserId(pendingUser.email || pendingUser.phone);
-    let authUserId = fallbackId;
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
+      setSubmitting(true);
       const { data, error } = await supabase.auth.signUp({
-        email: pendingUser.email,
-        password: pendingUser.password,
+        email,
+        password,
         options: {
+          emailRedirectTo: getAuthRedirectUrl("/auth/callback?flow=signup"),
           data: {
-            full_name: pendingUser.fullName,
-            phone: pendingUser.phone,
-            role: "owner",
-            phone_verified: true,
-            email_verified: false,
-            referral_code: pendingUser.referralCode || null
+            full_name: fullName,
+            phone,
+            referral_code: referralCode || null
           }
         }
       });
-      if (error) {
-        setErrorMessage(error.message);
+      setSubmitting(false);
+      if (error || !data.user) {
+        setErrorMessage(t({ en: authErrorMessage(error), zh: "无法建立账号，请检查资料后重试。" }));
         return;
       }
-      if (data.user) {
-        authUserId = data.user.id;
-        void upsertSupabaseProfile(data.user, {
-          id: data.user.id,
-          role: "owner",
-          name: pendingUser.fullName,
-          email: pendingUser.email,
-          phone: pendingUser.phone,
-          phoneVerified: true,
-          emailVerified: Boolean(data.user.email_confirmed_at)
-        });
+      if (referralCode) savePendingReferralCode(referralCode, data.user.id);
+      clearObsoleteCustomerPasswordStorage();
+      if (data.session) {
+        await syncSupabaseSessionToLocalStorage();
+        window.location.href = redirect || "/";
+        return;
       }
+      setStage("signup-sent");
+      setStatusMessage(t({ en: "Account created. Check your email and follow the confirmation link before logging in.", zh: "账号已建立。请检查邮箱并点击确认链接，然后再登录。" }));
+      return;
     }
-    const registeredUser = {
-      id: authUserId,
-      fullName: pendingUser.fullName,
-      phone: pendingUser.phone,
-      email: pendingUser.email,
-      password: pendingUser.password,
-      phoneVerified: true,
-      emailVerified: false
-    };
-    window.localStorage.setItem("pet-villa-last-full-name", pendingUser.fullName);
-    window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(registeredUser));
-    upsertRegisteredUserList(registeredUser);
-    if (pendingUser.referralCode) {
-      savePendingReferralCode(pendingUser.referralCode, registeredUser.id);
+
+    if (!loginEmail || !password) {
+      setErrorMessage(t({ en: "Please enter your email and password.", zh: "请输入邮箱和密码。" }));
+      return;
     }
-    writeLocalSessionUser({
-      id: registeredUser.id,
-      role: "owner",
-      name: pendingUser.fullName,
-      email: pendingUser.email,
-      phone: pendingUser.phone,
-      phoneVerified: true,
-      emailVerified: false
-    });
-    setStatusMessage(t({ en: isSupabaseConfigured() ? "Phone verified. Supabase account created." : "Phone verified. Welcome to Pet Villa!", zh: isSupabaseConfigured() ? "电话已验证，Supabase 账号已创建。" : "电话号码已验证，欢迎来到 Pet Villa！" }));
-    window.setTimeout(() => {
-      window.location.href = redirect || "/";
-    }, 600);
+    setSubmitting(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
+    setSubmitting(false);
+    if (error || !data.user) {
+      setErrorMessage(t({ en: authErrorMessage(error), zh: "邮箱或密码不正确。" }));
+      return;
+    }
+    await syncSupabaseSessionToLocalStorage();
+    window.location.href = redirect || "/";
   }
 
-  function resendOtp() {
-    if (!pendingUser || cooldown > 0) return;
-    setPendingUser({ ...pendingUser, otp: DEMO_OTP, expiresAt: Date.now() + 5 * 60 * 1000 });
-    setCooldown(60);
-    setStatusMessage(t({ en: "A new demo OTP was sent. Use 123456.", zh: "新的测试 OTP 已发送，请输入 123456。" }));
+  async function continueWithGoogle() {
     setErrorMessage("");
+    setStatusMessage("");
+    const supabase = getSupabaseGoogleOAuthClient();
+    if (!supabase) {
+      setErrorMessage(t({ en: "Customer authentication is temporarily unavailable.", zh: "顾客登录服务暂时无法使用。" }));
+      return;
+    }
+
+    window.sessionStorage.setItem("pet-villa-google-redirect", safeCustomerRedirect(redirect));
+    setGoogleSubmitting(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: getAuthRedirectUrl("/auth/callback?flow=google")
+      }
+    });
+    if (error) {
+      setGoogleSubmitting(false);
+      setErrorMessage(t({ en: authErrorMessage(error), zh: "无法使用 Google 继续，请稍后重试。" }));
+    }
   }
 
   function startForgotPassword() {
-    setStage("forgot-phone");
+    setStage("forgot");
     setMode("login");
-    setOtpValue("");
-    setNewPassword("");
     setErrorMessage("");
     setStatusMessage("");
   }
 
-  function sendForgotOtp() {
-    if (!forgotPhone.trim()) {
-      setErrorMessage(t({ en: `Please enter your ${forgotMethod === "phone" ? "phone number" : "email address"}.`, zh: forgotMethod === "phone" ? "请输入电话号码。" : "请输入邮箱。" }));
+  async function sendRecoveryEmail() {
+    if (!forgotEmail.trim()) {
+      setErrorMessage(t({ en: "Please enter your email address.", zh: "请输入邮箱。" }));
       return;
     }
-    setStage("forgot-otp");
-    setCooldown(60);
-    setStatusMessage(t({ en: "Demo reset OTP sent. Use 123456.", zh: "测试重设 OTP 已发送，请输入 123456。" }));
-    setErrorMessage("");
-  }
-
-  function resetPassword() {
-    if (otpValue !== DEMO_OTP) {
-      setErrorMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setErrorMessage(t({ en: "Password recovery is temporarily unavailable.", zh: "密码重设服务暂时无法使用。" }));
       return;
     }
-    if (!newPassword.trim()) {
-      setErrorMessage(t({ en: "Please enter a new password.", zh: "请输入新密码。" }));
+    setSubmitting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: getAuthRedirectUrl("/reset-password")
+    });
+    setSubmitting(false);
+    if (error) {
+      setErrorMessage(t({ en: authErrorMessage(error), zh: "无法发送重设密码邮件，请稍后重试。" }));
       return;
     }
-    if (newPassword.trim().length < 6) {
-      setErrorMessage(t({ en: "Password must be at least 6 characters.", zh: "密码至少需要 6 个字符。" }));
-      return;
-    }
-    const registered = readRegisteredUser();
-    const matched = registered && (forgotMethod === "phone" ? registered.phone === forgotPhone.trim() : registered.email === forgotPhone.trim());
-    if (matched) {
-      window.localStorage.setItem("pet-villa-registered-user", JSON.stringify({ ...registered, password: newPassword.trim() }));
-    }
-    setStage("form");
-    setOtpValue("");
-    setNewPassword("");
-    setStatusMessage(t({ en: "Password reset saved for this demo. Please login again.", zh: "测试版密码已重设，请重新登录。" }));
+    setStatusMessage(t({ en: "Recovery email sent. Check your inbox and follow the secure link.", zh: "重设密码邮件已发送，请检查邮箱并点击安全链接。" }));
     setErrorMessage("");
   }
 
@@ -471,93 +353,41 @@ export default function AuthPage() {
 
   const isLogin = mode === "login";
 
-  if (stage === "otp" && pendingUser) {
+  if (stage === "signup-sent") {
     return (
-      <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary">
-        <main className="mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[30px] bg-white/70 px-7 py-7 shadow-[0_24px_70px_rgba(61,31,13,0.12)]">
+      <div className="pet-dream-bg min-h-screen px-4 py-4 text-villa-text-primary sm:py-8">
+        <main className="pet-clay-panel mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[38px] px-7 py-7">
           <header className="flex items-start justify-between">
-            <a href="/" aria-label="The Pet Villa home"><img src="/logo.png" alt="The Pet Villa" className="h-[118px] w-[150px] object-contain" /></a>
-            <button type="button" onClick={goBack} className="grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Go back"><BackIcon /></button>
+            <a href="/" className="pet-auth-logo" aria-label="The Pet Villa home"><img src="/petvilla-app-badge.webp" alt="The Pet Villa" /></a>
+            <button type="button" onClick={() => switchMode("login")} className="pet-pressable grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Back to login"><BackIcon /></button>
           </header>
-          <section className="mt-10">
-            <h1 className="font-title text-[30px] font-black leading-tight">{t({ en: "Verify Your Phone", zh: "验证电话号码" })} <HeartMark /></h1>
-            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">
-              {t({ en: `We sent a 6-digit code to ${pendingUser.phone}.`, zh: `我们已发送 6 位数验证码到 ${pendingUser.phone}。` })}
-            </p>
-            <label className="mt-8 grid gap-2">
-              <span className="text-sm font-black">{t({ en: "OTP Code", zh: "验证码" })}</span>
-              <input
-                className="villa-input text-center text-2xl tracking-[0.45em]"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpValue}
-                onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="_ _ _ _ _ _"
-              />
-            </label>
-            {statusMessage ? <p className="mt-4 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
-            {errorMessage ? <p className="mt-4 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
-            <button type="button" onClick={completeOtpVerification} className="villa-button mt-5 w-full">{t({ en: "Verify OTP", zh: "验证 OTP" })}</button>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <button type="button" onClick={resendOtp} disabled={cooldown > 0} className="villa-button-outline w-full disabled:opacity-50">
-                {cooldown > 0 ? t({ en: `Resend in ${cooldown}s`, zh: `${cooldown} 秒后重发` }) : t({ en: "Resend OTP", zh: "重新发送 OTP" })}
-              </button>
-              <button type="button" onClick={() => setStage("form")} className="villa-button-outline w-full">{t({ en: "Change Phone Number", zh: "更改电话号码" })}</button>
-            </div>
+          <section className="mt-12 rounded-[30px] border border-white/90 bg-white/88 p-6 shadow-[0_16px_36px_rgba(61,31,13,0.10)]">
+            <h1 className="font-title text-[30px] font-black leading-tight text-[#6c4aba]">{t({ en: "Check Your Email", zh: "请检查邮箱" })} <HeartMark /></h1>
+            <p className="mt-4 text-sm font-bold leading-relaxed text-villa-text-secondary">{statusMessage}</p>
+            <p className="mt-3 text-sm font-semibold leading-relaxed text-villa-text-secondary">{t({ en: "Your account becomes active only after the secure confirmation link is completed.", zh: "完成安全邮箱确认后，账号才会正式启用。" })}</p>
+            <button type="button" onClick={() => switchMode("login")} className="pet-gradient-button mt-6 h-14 w-full rounded-pill font-black text-white">{t({ en: "Back to Login", zh: "返回登录" })}</button>
           </section>
         </main>
       </div>
     );
   }
 
-  if (stage === "forgot-phone" || stage === "forgot-otp") {
+  if (stage === "forgot") {
     return (
-      <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary">
-        <main className="mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[30px] bg-white/70 px-7 py-7 shadow-[0_24px_70px_rgba(61,31,13,0.12)]">
+      <div className="pet-dream-bg min-h-screen px-4 py-4 text-villa-text-primary sm:py-8">
+        <main className="pet-clay-panel mx-auto min-h-[calc(100vh-32px)] max-w-[540px] rounded-[38px] px-7 py-7">
           <header className="flex items-start justify-between">
-            <a href="/" aria-label="The Pet Villa home"><img src="/logo.png" alt="The Pet Villa" className="h-[118px] w-[150px] object-contain" /></a>
-            <button type="button" onClick={() => setStage("form")} className="grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Go back"><BackIcon /></button>
+            <a href="/" className="pet-auth-logo" aria-label="The Pet Villa home"><img src="/petvilla-app-badge.webp" alt="The Pet Villa" /></a>
+            <button type="button" onClick={() => setStage("form")} className="pet-pressable grid h-12 w-12 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(61,31,13,0.12)]" aria-label="Go back"><BackIcon /></button>
           </header>
-          <section className="mt-10">
-            <h1 className="font-title text-[30px] font-black leading-tight">{t({ en: "Reset Password", zh: "重设密码" })} <HeartMark /></h1>
-            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Use phone or email OTP to reset your password.", zh: "你可以使用手机或邮箱 OTP 重设密码。" })}</p>
-            {stage === "forgot-phone" ? (
-              <div className="mt-8 grid gap-4">
-                <div className="grid grid-cols-2 rounded-pill bg-villa-primary-bg p-1 text-sm font-black">
-                  {(["phone", "email"] as const).map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => {
-                        setForgotMethod(method);
-                        setForgotPhone("");
-                        setErrorMessage("");
-                      }}
-                      className={`rounded-pill px-4 py-3 transition ${forgotMethod === method ? "bg-villa-primary text-white shadow-sm" : "text-villa-text-secondary"}`}
-                    >
-                      {method === "phone" ? t({ en: "Phone", zh: "手机" }) : t({ en: "Email", zh: "邮箱" })}
-                    </button>
-                  ))}
-                </div>
-                <label className="grid gap-2">
-                  <span className="text-sm font-black">{forgotMethod === "phone" ? t({ en: "Phone Number", zh: "电话号码" }) : t({ en: "Email Address", zh: "邮箱" })}</span>
-                  <input className="villa-input" value={forgotPhone} onChange={(event) => setForgotPhone(event.target.value)} placeholder={forgotMethod === "phone" ? "+60..." : "you@example.com"} type={forgotMethod === "phone" ? "tel" : "email"} />
-                </label>
-                <button type="button" onClick={sendForgotOtp} className="villa-button w-full">{t({ en: "Send OTP", zh: "发送 OTP" })}</button>
-              </div>
-            ) : (
-              <div className="mt-8 grid gap-4">
-                <label className="grid gap-2">
-                  <span className="text-sm font-black">{t({ en: "OTP Code", zh: "验证码" })}</span>
-                  <input className="villa-input text-center text-2xl tracking-[0.45em]" inputMode="numeric" maxLength={6} value={otpValue} onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="_ _ _ _ _ _" />
-                </label>
-                <label className="grid gap-2">
-                  <span className="text-sm font-black">{t({ en: "New Password", zh: "新密码" })}</span>
-                  <input className="villa-input" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={t({ en: "Enter new password", zh: "输入新密码" })} />
-                </label>
-                <button type="button" onClick={resetPassword} className="villa-button w-full">{t({ en: "Save New Password", zh: "保存新密码" })}</button>
-              </div>
-            )}
+          <section className="mt-12 rounded-[30px] border border-white/90 bg-white/88 p-6 shadow-[0_16px_36px_rgba(61,31,13,0.10)]">
+            <h1 className="font-title text-[30px] font-black leading-tight text-[#6c4aba]">{t({ en: "Reset Password", zh: "重设密码" })} <HeartMark /></h1>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-villa-text-secondary">{t({ en: "Enter your login email and we will send a secure recovery link.", zh: "输入登录邮箱，我们会发送安全的密码重设链接。" })}</p>
+            <label className="mt-8 grid gap-2">
+              <span className="text-sm font-black">{t({ en: "Email Address", zh: "邮箱" })}</span>
+              <input className="villa-input" value={forgotEmail} onChange={(event) => { setForgotEmail(event.target.value); setErrorMessage(""); }} placeholder="you@example.com" type="email" autoComplete="email" />
+            </label>
+            <button type="button" disabled={submitting} onClick={sendRecoveryEmail} className="pet-gradient-button mt-5 h-14 w-full rounded-pill font-black text-white disabled:opacity-60">{submitting ? t({ en: "Sending...", zh: "发送中..." }) : t({ en: "Send Recovery Email", zh: "发送重设密码邮件" })}</button>
             {statusMessage ? <p className="mt-4 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
             {errorMessage ? <p className="mt-4 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
           </section>
@@ -567,22 +397,21 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-villa-background bg-[image:var(--paw-pattern)] bg-[length:120px_120px] bg-repeat px-5 py-4 text-villa-text-primary sm:py-8">
-      <main className="mx-auto min-h-[calc(100vh-32px)] max-w-[540px] overflow-hidden rounded-[30px] bg-white/55 shadow-[0_24px_70px_rgba(61,31,13,0.12)] backdrop-blur xl:max-w-[1120px]">
-        <div className="relative mx-auto min-h-[calc(100vh-32px)] max-w-[520px] px-7 py-7 sm:px-10 xl:max-w-none xl:px-14">
-          <div className="pointer-events-none absolute left-[10%] top-28 h-16 w-16 rounded-full bg-villa-primary-light/10" />
-          <div className="pointer-events-none absolute right-[10%] top-36 h-20 w-20 rounded-full bg-villa-primary-light/10" />
-          <div className="pointer-events-none absolute right-[-22px] top-64 h-24 w-24 rounded-full bg-villa-primary-light/10" />
+    <div className="pet-dream-bg min-h-screen px-4 py-4 text-villa-text-primary sm:py-8">
+      <main className="pet-clay-panel mx-auto min-h-[calc(100vh-32px)] max-w-[540px] overflow-hidden rounded-[38px] xl:max-w-[1120px]">
+        <div className="relative mx-auto min-h-[calc(100vh-32px)] max-w-[520px] px-6 py-6 sm:px-10 xl:max-w-none xl:px-14">
+          <div className="pointer-events-none absolute left-[-18px] top-28 h-24 w-24 rounded-[36px] bg-[#c6a7ff]/28 blur-sm" />
+          <div className="pointer-events-none absolute right-[-28px] top-56 h-28 w-28 rounded-full bg-[#ffe1bd]/70 blur-sm" />
 
           <header className="relative z-10 flex items-start justify-between">
-            <a href="/" aria-label="The Pet Villa home">
-              <img src="/logo.png" alt="The Pet Villa" className="h-[118px] w-[150px] object-contain" />
+            <a href="/" className="pet-auth-logo" aria-label="The Pet Villa home">
+              <img src="/petvilla-app-badge.webp" alt="The Pet Villa" />
             </a>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={toggleLang}
-                className="grid h-11 min-w-11 place-items-center rounded-full border border-villa-primary-light bg-white/85 px-3 text-xs font-black text-villa-primary shadow-md"
+                className="pet-pressable grid h-11 min-w-11 place-items-center rounded-full border border-white/80 bg-white/90 px-3 text-xs font-black text-[#8d65da] shadow-md"
                 aria-label="Switch language"
               >
                 {lang === "en" ? "中文" : "EN"}
@@ -590,7 +419,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={goBack}
-                className="grid h-12 w-12 place-items-center rounded-full bg-white text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.12)]"
+                className="pet-pressable grid h-12 w-12 place-items-center rounded-full bg-white text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.12)]"
                 aria-label="Go back"
               >
                 <BackIcon />
@@ -598,49 +427,55 @@ export default function AuthPage() {
             </div>
           </header>
 
-          <section className="relative z-10 mt-12 xl:grid xl:grid-cols-[1fr_0.92fr] xl:gap-12">
+          <section className="relative z-10 mt-5 xl:grid xl:grid-cols-[1fr_0.92fr] xl:gap-12">
             <div>
-              <h1 className="font-title text-[30px] font-black leading-tight text-villa-text-primary sm:text-[34px]">
+              <div className="pet-auth-hero-art xl:hidden">
+                <img src="/petvilla-auth-sunroom-banner.webp" alt="Pet Villa sunlit playroom with happy small dogs" />
+              </div>
+              <h1 className="text-center font-title text-[34px] font-black leading-tight text-[#6c4aba] sm:text-[38px] xl:text-left">
                 {isLogin ? t({ en: "Welcome Back", zh: "欢迎回来" }) : t({ en: "Create Account", zh: "创建账号" })}{" "}
                 <HeartMark />
               </h1>
-              <p className="mt-3 max-w-[390px] text-[17px] font-semibold leading-relaxed text-villa-text-secondary">
+              <p className="mx-auto mt-2 max-w-[390px] text-center text-[15px] font-semibold leading-relaxed text-villa-text-secondary xl:mx-0 xl:text-left">
                 {isLogin
                   ? t({ en: "Login to manage your bookings and your furry friend's stay", zh: "登录管理你的预约和狗狗入住记录" })
                   : t({ en: "Join Pet Villa and give your dog a home away from home", zh: "加入 Pet Villa，给狗狗一个家一样的寄宿体验" })}
               </p>
 
-              <form className="mt-10 grid gap-5" onSubmit={(event) => { event.preventDefault(); submit(event); }}>
+              <form className="mt-7 grid gap-4" onSubmit={(event) => { event.preventDefault(); submit(event); }}>
                 {isLogin ? (
                   <>
                     <AuthInput
                       icon="mail"
-                      name="emailOrPhone"
-                      label={t({ en: "Email or Phone Number", zh: "邮箱或电话号码" })}
-                      placeholder={t({ en: "Enter your email address or phone number", zh: "输入邮箱或电话号码" })}
+                      name="loginEmail"
+                      autoComplete="username"
+                      label={t({ en: "Email Address", zh: "邮箱" })}
+                      placeholder={t({ en: "Enter your email", zh: "输入邮箱" })}
+                      type="email"
                     />
                     <AuthInput
                       icon="lock"
                       name="password"
+                      autoComplete="current-password"
                       label={t({ en: "Password", zh: "密码" })}
-                      placeholder={t({ en: "Enter your password", zh: "输入密码" })}
+                      placeholder={t({ en: "Password", zh: "密码" })}
                       type="password"
                       trailingIcon="eye"
                     />
-                    <button type="button" className="justify-self-end text-sm font-bold text-villa-primary" onClick={startForgotPassword}>
+                    <button type="button" className="justify-self-end text-sm font-bold text-[#8d65da]" onClick={startForgotPassword}>
                       {t({ en: "Forgot password?", zh: "忘记密码？" })}
                     </button>
                   </>
                 ) : (
                   <>
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <AuthInput icon="user" name="fullName" label={t({ en: "Full Name", zh: "姓名" })} placeholder={t({ en: "Enter your name", zh: "输入姓名" })} />
-                      <AuthInput icon="phone" name="phone" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
+                      <AuthInput icon="user" name="fullName" autoComplete="name" label={t({ en: "Full Name", zh: "姓名" })} placeholder={t({ en: "Enter your name", zh: "输入姓名" })} />
+                      <AuthInput icon="phone" name="phone" autoComplete="tel" label={t({ en: "Phone Number", zh: "电话号码" })} placeholder={t({ en: "Enter your phone", zh: "输入电话" })} type="tel" />
                     </div>
-                    <AuthInput icon="mail" name="email" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
+                    <AuthInput icon="mail" name="email" autoComplete="email" label={t({ en: "Email Address", zh: "邮箱" })} placeholder={t({ en: "Enter your email", zh: "输入邮箱" })} type="email" />
                     <AuthInput icon="user" name="referralCode" label={t({ en: "Referral Code (Optional)", zh: "推荐码（可选）" })} placeholder="PETVILLA-PVI0000" />
-                    <AuthInput icon="lock" name="password" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
-                    <AuthInput icon="lock" name="confirmPassword" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
+                    <AuthInput icon="lock" name="password" autoComplete="new-password" label={t({ en: "Password", zh: "密码" })} placeholder={t({ en: "Create a password", zh: "创建密码" })} type="password" trailingIcon="eye" />
+                    <AuthInput icon="lock" name="confirmPassword" autoComplete="new-password" label={t({ en: "Confirm Password", zh: "确认密码" })} placeholder={t({ en: "Confirm your password", zh: "确认密码" })} type="password" trailingIcon="eye" />
                     <label className="flex items-center gap-3 text-sm font-semibold text-villa-text-secondary">
                       <input type="checkbox" defaultChecked className="h-5 w-5 accent-villa-primary" />
                       <span>
@@ -656,38 +491,34 @@ export default function AuthPage() {
                 {statusMessage ? <p className="rounded-[14px] bg-villa-primary-bg p-3 text-xs font-black text-villa-primary">{statusMessage}</p> : null}
                 {errorMessage ? <p className="rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{errorMessage}</p> : null}
 
-                <button type="submit" className="mt-2 h-16 rounded-pill bg-villa-primary text-lg font-black text-white shadow-[0_12px_28px_rgba(232,146,124,0.28)] transition hover:-translate-y-px">
-                  {isLogin ? t({ en: "Login", zh: "登录" }) : t({ en: "Create Account", zh: "创建账号" })}
+                <button type="submit" disabled={submitting} className="customer-button-primary mt-2 h-16 rounded-pill text-lg font-black disabled:opacity-60">
+                  {submitting ? t({ en: "Please wait...", zh: "请稍候..." }) : isLogin ? t({ en: "Login", zh: "登录" }) : t({ en: "Create Account", zh: "创建账号" })}
+                </button>
+
+                <div className="pet-auth-divider" aria-hidden="true">
+                  <span>{t({ en: "or", zh: "或" })}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={submitting || googleSubmitting}
+                  onClick={continueWithGoogle}
+                  className="pet-google-auth-button"
+                >
+                  <span className="pet-google-auth-mark"><GoogleMark /></span>
+                  <span>{googleSubmitting ? t({ en: "Connecting...", zh: "连接中..." }) : t({ en: "Continue with Google", zh: "使用 Google 继续" })}</span>
                 </button>
               </form>
 
-              {isLogin ? (
-                <>
-                  <div className="my-9 flex items-center gap-5">
-                    <span className="h-px flex-1 bg-villa-primary-light/70" />
-                    <span className="text-sm font-semibold text-villa-text-secondary">{t({ en: "or continue with", zh: "或继续使用" })}</span>
-                    <span className="h-px flex-1 bg-villa-primary-light/70" />
-                  </div>
-
-                  <div className="grid gap-3">
-                    <button type="button" onClick={() => alert(t({ en: "Google login is coming soon.", zh: "Google 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
-                      <GoogleMark />
-                      {t({ en: "Google Login Coming Soon", zh: "Google 登录即将开放" })}
-                    </button>
-                    <button type="button" onClick={() => alert(t({ en: "Apple login is coming soon.", zh: "Apple 登录即将开放。" }))} className="flex h-14 items-center justify-center gap-4 rounded-pill border border-villa-primary-light bg-white text-sm font-black text-villa-text-primary shadow-[0_8px_24px_rgba(61,31,13,0.08)] transition hover:-translate-y-px">
-                      <AppleMark />
-                      {t({ en: "Apple Login Coming Soon", zh: "Apple 登录即将开放" })}
-                    </button>
-                  </div>
-                </>
-              ) : null}
+               {isLogin ? <p className="mt-7 text-center text-xs font-bold text-villa-text-muted">{t({ en: "Secure customer access uses your confirmed email and password.", zh: "顾客账号使用已确认的邮箱和密码安全登录。" })}</p> : null}
             </div>
 
-            <aside className="relative z-10 mt-9 rounded-[22px] border border-villa-primary-light bg-white/82 p-5 shadow-[0_12px_34px_rgba(61,31,13,0.09)] xl:mt-0 xl:self-end">
-              <div className="grid grid-cols-[116px_1fr] items-center gap-4">
-                <DogCardArt duo={!isLogin} />
+            <aside className="relative z-10 mt-9 overflow-hidden rounded-[32px] border border-white/90 bg-white/90 p-5 shadow-[0_16px_0_rgba(183,142,255,0.12),0_28px_46px_rgba(61,31,13,0.13)] xl:mt-0 xl:self-end">
+              <div className="grid grid-cols-[116px_1fr] items-center gap-4 xl:block">
+                <div className="pet-auth-aside-art">
+                  <img src="/petvilla-auth-sunroom-banner.webp" alt="Pet Villa sunlit playroom with happy small dogs" />
+                </div>
                 <div>
-                  <h2 className="font-title text-[20px] font-black leading-tight text-villa-text-primary">
+                  <h2 className="font-title text-[20px] font-black leading-tight text-[#6c4aba]">
                     {isLogin ? t({ en: "New to Pet Villa?", zh: "第一次来 Pet Villa？" }) : t({ en: "Already have an account?", zh: "已经有账号？" })}
                   </h2>
                   <p className="mt-1 text-sm font-semibold text-villa-text-secondary">
@@ -696,7 +527,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={() => switchMode(isLogin ? "register" : "login")}
-                    className="mt-4 rounded-pill border-2 border-villa-primary px-6 py-3 text-sm font-black text-villa-primary transition hover:-translate-y-px hover:bg-villa-primary-bg"
+                    className="customer-button-primary mt-4 min-h-[48px] rounded-pill px-6 py-3 text-sm font-black"
                   >
                     {isLogin ? t({ en: "Register Now", zh: "立即注册" }) : t({ en: "Login Now", zh: "立即登录" })}
                   </button>
@@ -719,14 +550,16 @@ export default function AuthPage() {
               {legalModal === "terms" ? (
                 <>
                   <p>{t({ en: "Pet Villa accepts small dogs from 1-12kg only. Aggressive dogs, dogs with fleas, or dogs without basic health information may be refused for safety.", zh: "Pet Villa 仅接待 1-12kg 小型犬。为了安全，我们可能拒绝攻击性犬只、有跳蚤或缺少基本健康资料的狗狗。" })}</p>
-                  <p>{t({ en: "A booking is confirmed only after the required deposit is paid. Check-in is from 9:00am to 8:00pm and check-out is before 12:00pm.", zh: "预约需支付订金后才算确认。入住时间为 9:00am 至 8:00pm，退房需在 12:00pm 前完成。" })}</p>
+                  <p>{t({ en: "A booking is confirmed only after the required deposit or payment has been received and verified by Pet Villa. Submitting a payment or payment proof does not by itself mean that the payment has been verified or that the booking is confirmed. Check-in is from 9:00am to 8:00pm and check-out is before 12:00pm.", zh: "只有在 Pet Villa 已收到并核实所需订金或付款后，预约才会被确认。提交付款或付款凭证本身并不代表付款已核实或预约已确认。入住时间为上午 9:00 至晚上 8:00，退房时间为中午 12:00 前。" })}</p>
                   <p>{t({ en: "Owners must provide food, care instructions, emergency contacts, and disclose allergies, medication, or special needs before boarding.", zh: "宠主需自备狗粮，并在寄宿前提供照顾说明、紧急联系人、过敏、药物或特殊需求资料。" })}</p>
+                  <a href="/terms" className="font-black text-villa-primary hover:text-[#3d1f0d]">{t({ en: "Read the full Terms of Service", zh: "阅读完整服务条款" })}</a>
                 </>
               ) : (
                 <>
                   <p>{t({ en: "We collect your name, phone number, email, pet profile, booking details, and messages so we can manage your stay and contact you when needed.", zh: "我们会收集姓名、电话、邮箱、宠物资料、预约资料和聊天记录，用于安排寄宿服务和必要联系。" })}</p>
                   <p>{t({ en: "Your information is used for Pet Villa service only. We do not sell your personal information.", zh: "你的资料仅用于 Pet Villa 服务，我们不会出售你的个人资料。" })}</p>
-                  <p>{t({ en: "You may request profile updates or removal of stored demo data by contacting Pet Villa.", zh: "如需更新资料或移除测试资料，可联系 Pet Villa 处理。" })}</p>
+                  <p>{t({ en: "You may contact Pet Villa regarding profile updates or other privacy requests. Some information may need to be retained for legitimate booking, business, accounting, operational, or legal requirements.", zh: "你可联系 Pet Villa 提出资料更新或其他隐私请求。部分资料可能因正当预约、营业、会计、营运或法律要求而需要继续保留。" })}</p>
+                  <a href="/privacy" className="font-black text-villa-primary hover:text-[#3d1f0d]">{t({ en: "Read the full Privacy Policy", zh: "阅读完整隐私政策" })}</a>
                 </>
               )}
             </div>

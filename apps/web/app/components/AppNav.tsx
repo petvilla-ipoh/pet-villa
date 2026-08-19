@@ -52,41 +52,39 @@ const privateNav = [
   { href: "/orders", en: "Orders", zh: "订单" },
   { href: "/payment", en: "Payment", zh: "付款" },
   { href: "/diary", en: "Pet Diary", zh: "宠物日记" },
-  { href: "/chat", en: "Chat", zh: "聊天" },
-  { href: "/vouchers", en: "My Vouchers", zh: "优惠券" }
+  { href: "/chat", en: "Chat", zh: "聊天" }
 ];
 
 const privateMenu = [
   { href: "/", icon: "home", en: "Home", zh: "首页", descEn: "Back to Pet Villa", descZh: "返回首页" },
-  { href: "/pets", icon: "pets", en: "My Pets", zh: "我的宠物", descEn: "Manage your dogs", descZh: "管理狗狗资料" },
+  { href: "/pets", icon: "pets", en: "My Pets", zh: "我的宠物", descEn: "Manage your pets", descZh: "管理宠物资料" },
   { href: "/booking", icon: "booking", en: "Bookings", zh: "预约", descEn: "Upcoming stays", descZh: "查看即将入住" },
   { href: "/orders", icon: "orders", en: "Orders", zh: "订单", descEn: "Payment history", descZh: "付款与订单记录" },
   { href: "/payment", icon: "payment", en: "Payment", zh: "付款", descEn: "Continue payment", descZh: "继续付款" },
   { href: "/diary", icon: "diary", en: "Pet Diary", zh: "宠物日记", descEn: "Daily updates & photos", descZh: "照片和每日更新" },
   { href: "/chat", icon: "chat", en: "Chat", zh: "聊天", descEn: "Message Pet Villa", descZh: "联系 Pet Villa" },
-  { href: "/vouchers", icon: "vouchers", en: "My Vouchers", zh: "优惠券", descEn: "Available rewards", descZh: "查看可用优惠" },
   { href: "/account", icon: "account", en: "My Account", zh: "我的账号", descEn: "Profile & settings", descZh: "个人资料设置" }
 ];
 
 const loginButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white hover:-translate-y-px";
+  "customer-button-secondary min-h-[44px] px-5 py-2 text-sm";
 
 const registerButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black transition hover:opacity-90 hover:-translate-y-px";
+  "customer-button-primary min-h-[44px] px-5 py-2 text-sm";
 
 const inactiveAuthButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full border-2 border-villa-primary bg-transparent text-villa-primary text-sm font-black transition hover:bg-villa-primary hover:text-white hover:-translate-y-px";
+  "customer-button-secondary min-h-[44px] px-5 py-2 text-sm";
 
 const activeAuthButtonClass =
-  "min-h-[44px] px-5 py-2 rounded-full bg-villa-primary text-white text-sm font-black shadow-md transition hover:-translate-y-px";
+  "customer-button-primary min-h-[44px] px-5 py-2 text-sm";
 
 function NavLogo() {
   return (
     <a href="/" className="inline-flex min-w-0 items-center">
       <img
-        src="/logo.png"
+        src="/petvilla-app-badge.webp"
         alt="The Pet Villa"
-        className="h-14 w-[84px] rounded-[10px] object-contain sm:w-[112px]"
+        className="h-14 w-14 rounded-[18px] border border-white/90 object-cover shadow-[inset_0_-6px_12px_rgba(183,142,255,0.10),0_10px_18px_rgba(61,31,13,0.10)]"
         onError={(e: any) => {
           e.currentTarget.style.display = "none";
         }}
@@ -269,13 +267,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
     ? isRegisterActive ? activeAuthButtonClass : inactiveAuthButtonClass
     : registerButtonClass;
   const mobileLoginClass = isLoginActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
-    : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm";
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#e8927c_0%,#b58cff_100%)] px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(61,31,13,0.12)]"
+    : "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-[#b58cff] bg-white/90 px-3 text-xs font-black text-[#8d65da] shadow-[0_8px_18px_rgba(61,31,13,0.08)]";
   const mobileRegisterClass = isRegisterActive
-    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-md"
+    ? "inline-flex min-h-[38px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#e8927c_0%,#b58cff_100%)] px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(61,31,13,0.12)]"
     : isAuthPage
-      ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-villa-primary px-3 text-xs font-black text-villa-primary shadow-sm"
-      : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-villa-primary px-3 text-xs font-black text-white shadow-[0_8px_20px_rgba(232,146,124,0.18)]";
+      ? "inline-flex min-h-[38px] items-center justify-center rounded-full border-2 border-[#b58cff] bg-white/90 px-3 text-xs font-black text-[#8d65da] shadow-[0_8px_18px_rgba(61,31,13,0.08)]"
+      : "inline-flex min-h-[38px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#e8927c_0%,#b58cff_100%)] px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(61,31,13,0.12)]";
 
   function selectAuthTab(event: ReactMouseEvent<HTMLAnchorElement>, tab: "login" | "register") {
     if (!isAuthPage) return;
@@ -303,7 +301,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 rounded-b-[22px] border-b border-villa-primary-light bg-villa-background/96 px-4 py-3 shadow-[0_8px_26px_rgba(61,31,13,0.06)] backdrop-blur-xl lg:rounded-none lg:px-4 lg:py-3">
+    <header className="sticky top-0 z-40 rounded-b-[28px] border-b border-white/80 bg-white/75 px-4 py-3 shadow-[0_12px_30px_rgba(61,31,13,0.10)] backdrop-blur-2xl lg:rounded-none lg:border-villa-primary-light lg:bg-villa-background/95 lg:px-4 lg:py-3">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <NavLogo />
         <div className="flex items-center gap-2 lg:hidden">
@@ -336,7 +334,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
           ) : null}
           <button
             type="button"
-            className="grid h-11 w-11 place-items-center rounded-full border border-villa-primary-light bg-white text-sm font-black shadow-[0_8px_22px_rgba(61,31,13,0.10)] transition hover:-translate-y-px"
+            className="pet-pressable grid h-12 w-12 place-items-center rounded-full border border-white/90 bg-white text-sm font-black shadow-[inset_0_-5px_10px_rgba(232,146,124,0.08),0_10px_24px_rgba(61,31,13,0.13)]"
             onClick={() => setOpen((value) => !value)}
             aria-label="Menu"
             aria-expanded={open}
@@ -358,7 +356,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
             <div className="relative" ref={accountRef}>
               <button
                 type="button"
-                className="grid h-10 w-10 place-items-center rounded-full bg-villa-primary text-sm font-black text-white shadow-sm transition hover:-translate-y-px"
+                className="grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-white/90 bg-white text-sm font-black text-white shadow-[inset_0_-5px_10px_rgba(183,142,255,0.10),0_10px_22px_rgba(61,31,13,0.12)] transition hover:-translate-y-px"
                 onClick={(event) => {
                   event.stopPropagation();
                   setAccountOpen((value) => !value);
@@ -366,7 +364,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
                 aria-label="Account menu"
                 aria-expanded={accountOpen}
               >
-                PV
+                <img src={userAvatar} alt="" className="h-full w-full object-cover" />
               </button>
               {accountOpen ? (
                 <div className="absolute right-0 top-12 w-44 rounded-[16px] border border-villa-primary-light bg-white p-2 shadow-lg">
@@ -398,7 +396,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
       {open ? (
         loggedIn ? (
-          <nav className="mx-auto mt-3 max-h-[calc(100svh-112px)] max-w-[390px] overflow-y-auto overscroll-contain rounded-[22px] border border-villa-primary-light bg-white/96 p-3 pb-24 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+          <nav className="pet-rise mx-auto mt-3 max-h-[calc(100svh-112px)] max-w-[390px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/80 bg-white/90 p-3 pb-24 shadow-[0_18px_0_rgba(232,146,124,0.12),0_28px_58px_rgba(61,31,13,0.16)] backdrop-blur-xl [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
             <div className="mb-2 flex items-center gap-3 px-1">
               <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-villa-primary-bg shadow-[0_8px_22px_rgba(61,31,13,0.10)]">
                 <img src={userAvatar} alt="" className="h-full w-full object-cover" />
@@ -411,8 +409,8 @@ export function AppNav({ host = false }: { host?: boolean }) {
 
             <div className="grid gap-1.5">
               {privateMenu.map((item) => (
-                <a key={item.href} className="flex items-center gap-2.5 rounded-[15px] border border-villa-primary-light/70 bg-villa-primary-bg/45 px-2.5 py-2 shadow-[0_6px_18px_rgba(61,31,13,0.04)]" href={item.href}>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[12px] bg-white">
+                <a key={item.href} className="pet-pressable flex items-center gap-2.5 rounded-[18px] border border-white/80 bg-villa-primary-bg/55 px-2.5 py-2.5 shadow-[0_8px_18px_rgba(61,31,13,0.06)]" href={item.href}>
+                  <span className="pet-icon-bubble h-9 w-9 rounded-[14px]">
                     <MenuItemIcon name={item.icon} />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -424,7 +422,7 @@ export function AppNav({ host = false }: { host?: boolean }) {
               ))}
             </div>
 
-            <div className="mt-1.5 rounded-[15px] border border-villa-primary-light/70 bg-villa-primary-bg/45 p-2">
+            <div className="mt-2 rounded-[20px] border border-white/80 bg-villa-primary-bg/55 p-2.5 shadow-[0_8px_18px_rgba(61,31,13,0.05)]">
               <div className="mb-2 flex items-center gap-3 px-1">
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-villa-text-primary">
                   <svg viewBox="0 0 32 32" className="h-4 w-4" aria-hidden="true">
@@ -440,13 +438,13 @@ export function AppNav({ host = false }: { host?: boolean }) {
               </div>
             </div>
 
-            <button type="button" className="mt-1.5 flex min-h-[38px] w-full items-center gap-2.5 rounded-[15px] border border-villa-primary-light bg-white px-3 text-left text-[13px] font-black text-villa-primary shadow-[0_6px_18px_rgba(61,31,13,0.05)]" onClick={logout}>
+            <button type="button" className="pet-pressable mt-2 flex min-h-[42px] w-full items-center gap-2.5 rounded-[18px] border border-white/80 bg-white px-3 text-left text-[13px] font-black text-villa-primary shadow-[0_8px_18px_rgba(61,31,13,0.07)]" onClick={logout}>
               <LogoutIcon />
               {t({ en: "Logout", zh: "退出登录" })}
             </button>
           </nav>
         ) : (
-          <nav className="mx-auto mt-3 max-w-[390px] rounded-[22px] border border-villa-primary-light bg-white/96 p-4 shadow-[0_14px_34px_rgba(61,31,13,0.12)] backdrop-blur lg:hidden">
+          <nav className="pet-rise mx-auto mt-3 max-w-[390px] rounded-[30px] border border-white/80 bg-white/90 p-4 shadow-[0_18px_0_rgba(232,146,124,0.12),0_28px_58px_rgba(61,31,13,0.16)] backdrop-blur-xl lg:hidden">
             <a className="villa-button min-h-[52px] w-full justify-between px-5 text-base" href="/booking">
               <span className="inline-flex items-center gap-3">
                 <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">

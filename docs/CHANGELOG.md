@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.9 - Private Pet Diary Operations
+
+- Added the Host Customer → Pet → Booking workflow for private Diary publishing.
+- Added photo/video updates with meal, water, activity, toilet, mood, health, medication, care, and reminder fields.
+- Added Host Diary history filters by order, pet, and published date, plus edit and delete actions.
+- Added CRM shortcuts to open a customer's Private Diary or start a Diary update.
+- Added customer-side pet switching for multi-pet bookings without redesigning the customer Diary UI.
+- Added database-level eligible-order validation, owner/order foreign keys, owner-scoped RLS, and private Storage policies.
+- Changed Host Diary success messages to distinguish Supabase persistence from same-device local fallback.
+- Added `npm run test:diary` regression checks.
+
 ## v1.8 - Supabase Host Panel Round 8
 
 - Added a Supabase Host Panel migration for host off days and chat messages.

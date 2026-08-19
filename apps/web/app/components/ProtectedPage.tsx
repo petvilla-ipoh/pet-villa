@@ -28,9 +28,19 @@ export function ProtectedPage({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <main className="villa-shell grid min-h-screen place-items-center p-4">
-        <div className="villa-card text-center">
-          <h1 className="section-title">{t({ en: "Checking login...", zh: "正在检查登录状态..." })}</h1>
+      <main className="pet-loading-page">
+        <div className="pet-loading-card" role="status" aria-live="polite">
+          <div className="pet-loading-orbit">
+            <img src="/petvilla-app-badge.webp" alt="" />
+            <span />
+            <span />
+          </div>
+          <p>{t({ en: "Preparing your Pet Villa space", zh: "正在准备您的 Pet Villa 空间" })}</p>
+          <div className="pet-loading-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
       </main>
     );

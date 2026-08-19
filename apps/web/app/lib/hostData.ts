@@ -12,6 +12,8 @@ export type HostProfileRecord = {
   registeredAt?: string;
   phoneVerified?: boolean;
   emailVerified?: boolean;
+  isTemporary?: boolean;
+  customerSource?: "auth" | "host";
 };
 
 export type HostDogRecord = PetProfile & {
@@ -19,16 +21,19 @@ export type HostDogRecord = PetProfile & {
   ownerName: string;
   ownerPhone: string;
   ownerEmail: string;
+  customerSource?: "auth" | "host";
 };
 
 type ProfileRow = {
   id: string;
+  role: string | null;
   full_name: string | null;
   phone: string | null;
   email: string | null;
   phone_verified: boolean | null;
   email_verified: boolean | null;
   created_at: string | null;
+  customer_source?: "auth" | "host";
 };
 
 type PetRow = {
@@ -51,14 +56,17 @@ type PetRow = {
   special_notes: string | null;
   photo_url: string | null;
   photo_path: string | null;
+  customer_source?: "auth" | "host";
 };
 
-async function getSupabaseClient() {
+const allowDevelopmentFallback = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_ENABLE_HOST_LOCAL_FALLBACK === "true";
+
+async function getSupabaseSession() {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
-  return supabase;
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) return null;
+  return data.session;
 }
 
 function profileFromRow(row: ProfileRow): HostProfileRecord {
@@ -70,7 +78,8 @@ function profileFromRow(row: ProfileRow): HostProfileRecord {
     email: row.email || "",
     registeredAt: row.created_at || undefined,
     phoneVerified: Boolean(row.phone_verified),
-    emailVerified: Boolean(row.email_verified)
+    emailVerified: Boolean(row.email_verified),
+    customerSource: row.customer_source || "auth"
   };
 }
 
@@ -86,6 +95,7 @@ function petFromRow(row: PetRow, owner?: HostProfileRecord): HostDogRecord {
     ownerName: owner?.fullName || owner?.name || "Pet Owner",
     ownerPhone: owner?.phone || "",
     ownerEmail: owner?.email || "",
+    customerSource: row.customer_source || owner?.customerSource || "auth",
     name: row.name || "",
     breed: row.breed || "",
     weight: weightLabel(row.weight_kg),
@@ -106,37 +116,36 @@ function petFromRow(row: PetRow, owner?: HostProfileRecord): HostDogRecord {
   };
 }
 
-export async function loadHostProfiles(fallback: HostProfileRecord[] = []) {
-  const supabase = await getSupabaseClient();
-  if (!supabase) return fallback;
-
+export async function loadHostCrmData(
+  fallbackProfiles: HostProfileRecord[] = [],
+  fallbackPets: HostDogRecord[] = []
+) {
   try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, email, phone_verified, email_verified, created_at")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return ((data || []) as ProfileRow[]).map(profileFromRow);
-  } catch (error) {
-    console.warn("Supabase host profiles load failed; using localStorage fallback.", error);
-    return fallback;
-  }
-}
+    const session = await getSupabaseSession();
+    if (!session) throw new Error("Your Host session expired. Please sign in again.");
+    const response = await fetch("/api/host/customers", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store"
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Customer records could not be loaded.");
 
-export async function loadHostPets(owners: HostProfileRecord[] = [], fallback: HostDogRecord[] = []) {
-  const supabase = await getSupabaseClient();
-  if (!supabase) return fallback;
-
-  try {
-    const { data, error } = await supabase
-      .from("pets")
-      .select("id, owner_id, name, breed, weight_kg, age_text, gender, coat_color, vaccinated, neutered, friendly, calm, food_brand, meals_per_day, allergies, medication, special_notes, photo_url, photo_path")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
+    const profiles = ((body.customers || []) as ProfileRow[]).map(profileFromRow);
+    const profileIds = new Set(profiles.map((profile) => profile.id));
+    const temporary = allowDevelopmentFallback
+      ? fallbackProfiles.filter((profile) => profile.isTemporary && profile.id && !profileIds.has(profile.id))
+      : [];
+    const owners = [...profiles, ...temporary];
     const ownerMap = new Map(owners.map((owner) => [owner.id || "", owner]));
-    return ((data || []) as PetRow[]).map((row) => petFromRow(row, ownerMap.get(row.owner_id)));
+    const pets = ((body.pets || []) as PetRow[]).map((row) => petFromRow(row, ownerMap.get(row.owner_id)));
+    const persistedPetIds = new Set(pets.map((pet) => pet.id));
+    const developmentPets = allowDevelopmentFallback
+      ? fallbackPets.filter((pet) => pet.id && !persistedPetIds.has(pet.id))
+      : [];
+
+    return { profiles: owners, pets: [...pets, ...developmentPets] };
   } catch (error) {
-    console.warn("Supabase host pets load failed; using localStorage fallback.", error);
-    return fallback;
+    if (allowDevelopmentFallback) return { profiles: fallbackProfiles, pets: fallbackPets };
+    throw error;
   }
 }

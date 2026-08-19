@@ -1,47 +1,116 @@
 "use client";
 
-import { AppNav } from "../components/AppNav";
 import { useLanguage } from "../components/LanguageProvider";
+import { OwnerSidebar } from "../components/OwnerSidebar";
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
+      <path d="M32 36c-11 0-20-9-20-20 0-2.5.5-4.8 1.3-7A17 17 0 1 0 39 34.7c-2.2.8-4.5 1.3-7 1.3Z" fill="#fff4df" stroke="#db982d" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M33 10v8M29 14h8" stroke="#db982d" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
+      <circle cx="24" cy="24" r="10" fill="#fff4df" stroke="#db982d" strokeWidth="3" />
+      <path d="M24 5v7M24 36v7M5 24h7M36 24h7M10 10l5 5M33 33l5 5M38 10l-5 5M15 33l-5 5" stroke="#db982d" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function ServicesPage() {
   const { t } = useLanguage();
 
+  const services = [
+    {
+      key: "boarding",
+      icon: <MoonIcon />,
+      title: t({ en: "Overnight Boarding", zh: "过夜寄宿" }),
+      price: "RM35/night",
+      desc: t({ en: "Cage-free small dog boarding with 24h companionship.", zh: "无笼小型犬寄宿，24小时陪伴照顾。" }),
+      tone: "boarding",
+      points: [
+        t({ en: "No cages", zh: "不关笼" }),
+        t({ en: "Same-room sleeping", zh: "同房休息" }),
+        t({ en: "3-5 photo/video updates", zh: "3-5次照片/影片更新" })
+      ]
+    },
+    {
+      key: "daycare",
+      icon: <SunIcon />,
+      title: t({ en: "Daycare", zh: "日托" }),
+      price: "RM5/hour",
+      desc: t({ en: "Flexible daytime care for short errands or busy days.", zh: "适合短时间外出或忙碌日子的日间照顾。" }),
+      tone: "daycare",
+      points: [
+        t({ en: "9:00am - 8:00pm", zh: "9:00am - 8:00pm" }),
+        t({ en: "Safe indoor play", zh: "安全室内活动" }),
+        t({ en: "No deposit needed", zh: "无需订金" })
+      ]
+    }
+  ];
+
   return (
-    <div className="villa-shell">
-      <AppNav />
-      <main className="villa-section">
-        <div className="villa-container">
-          <span className="rounded-pill bg-villa-peach px-4 py-2 text-xs font-black uppercase">{t({ en: "Services", zh: "服务" })}</span>
-          <h1 className="section-title mt-4 max-w-4xl">{t({ en: "Small-dog boarding with clear rules and warm care", zh: "小型犬专属寄宿，规则清晰，照护温暖" })}</h1>
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+    <OwnerSidebar>
+      <section className="services-page min-h-screen">
+      <main className="services-main">
+        <section className="services-hero">
+          <div className="services-hero-copy">
+            <span>{t({ en: "Pet Villa Care Menu", zh: "Pet Villa 服务" })}</span>
+            <h1>{t({ en: "Choose the right cozy stay", zh: "选择最适合的温馨照顾" })}</h1>
+            <p>{t({ en: "Clear prices, small-dog rules, and a simple booking flow for boarding or daycare.", zh: "价格清楚、小型犬规则明确，寄宿或日托都可以轻松预约。" })}</p>
+          </div>
+          <a href="/booking" className="services-hero-cta pet-primary-cta">{t({ en: "Book Now", zh: "立即预约" })}</a>
+        </section>
+
+        <section className="services-grid">
+          {services.map((service) => (
+            <article key={service.key} className="service-premium-card" data-tone={service.tone}>
+              <div className="service-card-top">
+                <span>{service.icon}</span>
+                <b>{service.price}</b>
+              </div>
+              <h2>{service.title}</h2>
+              <p>{service.desc}</p>
+              <div className="service-point-list">
+                {service.points.map((point) => (
+                  <span key={point}>
+                    <CheckIcon />
+                    {point}
+                  </span>
+                ))}
+              </div>
+              <a href={`/booking?service=${service.key}`} className="service-card-button pet-primary-cta">{t({ en: "Select Service", zh: "选择服务" })}</a>
+            </article>
+          ))}
+        </section>
+
+        <section className="services-notice">
+          <span>{t({ en: "Boarding Rules", zh: "寄宿须知" })}</span>
+          <div>
             {[
-              ["🌙", "Overnight Boarding", "过夜寄宿", "RM35/night", "No cages, same-room sleeping, 24h companionship.", "不关笼，同房休息，24小时陪伴。"],
-              ["☀️", "Daycare", "日托", "RM5/hour", "Flexible daytime care from 9:00am to 8:00pm.", "9:00am 至 8:00pm 灵活日间照护。"]
-            ].map(([icon, en, zh, price, bodyEn, bodyZh]) => (
-              <article key={en} className="villa-card p-7">
-                <div className="text-2xl">{icon}</div>
-                <h2 className="card-title mt-3">{t({ en, zh })}</h2>
-                <div className="price-number mt-3">{price}</div>
-                <p className="mt-4 font-bold text-villa-text/65">{t({ en: bodyEn, zh: bodyZh })}</p>
-                <a href="/booking" className="villa-button mt-6">{t({ en: "Book Now", zh: "立即预约" })}</a>
-              </article>
+              t({ en: "Small dogs from 1-12kg only", zh: "只接 1-12kg 小型犬" }),
+              t({ en: "Maximum 3 dogs per day", zh: "每天最多 3 只狗狗" }),
+              t({ en: "No aggressive dogs or fleas", zh: "不接攻击性狗狗或有跳蚤情况" }),
+              t({ en: "Please bring food, snacks, and health proof", zh: "请自备狗粮、零食与健康证明" })
+            ].map((item) => (
+              <p key={item}><CheckIcon />{item}</p>
             ))}
           </div>
-          <section className="mt-10 villa-card border-l-8 border-villa-coral p-7">
-            <h2 className="section-title">{t({ en: "Boarding Notice", zh: "寄宿须知" })}</h2>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {[
-                ["1-12kg small dogs only", "只接 1–12kg 小型犬"],
-                ["Maximum 3 dogs per day", "每天最多 3 只狗狗"],
-                ["No aggressive dogs or fleas", "不接攻击性犬或有跳蚤犬"],
-                ["Bring food, snacks, and health proof", "请自备狗粮零食与健康证明"]
-              ].map(([en, zh]) => (
-                <div key={en} className="rounded-[18px] bg-villa-bg p-4 font-black">✓ {t({ en, zh })}</div>
-              ))}
-            </div>
-          </section>
-        </div>
+        </section>
       </main>
-    </div>
+      </section>
+    </OwnerSidebar>
   );
 }

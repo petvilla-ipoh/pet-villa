@@ -111,10 +111,13 @@ This file lists the v1.0 features discovered in the current project.
 ## Diary
 
 - Pet Diary page.
-- Booking-related diary layout.
-- Morning/Afternoon/Evening activity cards.
-- Date selector.
-- Today Summary.
+- Private Diary data is separate from the public Home marketing Gallery.
+- Host selects Customer → Pet → eligible Booking before publishing a private update.
+- Host can upload private photos/videos and record meal, water, activity, toilet, mood, health, medication, care notes, and reminders.
+- Host can filter Diary history by order, pet, and date, then edit or delete an update.
+- CRM provides direct Open Diary and Add Diary Update actions.
+- Customers can switch pets inside a multi-pet booking.
+- Supabase RLS limits customer reads to their own account and eligible orders.
 - WhatsApp/message host fallback pattern.
 - Empty state support.
 

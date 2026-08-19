@@ -1,8 +1,11 @@
 node_modules/
 .next/
+.next-*/
 dist/
 build/
 coverage/
+output/
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -16,3 +19,4 @@ pet-villa-latest-*.zip
 pet-villa-latest-*/
 
 .vercel
+.env*

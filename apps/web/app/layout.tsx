@@ -7,8 +7,9 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-title"
 const nunito = Nunito({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
-  title: "The Pet Villa Ipoh",
-  description: "Premium small dog boarding in Ipoh with no cages, 24h companionship, and daily photo updates."
+  title: "The Pet Villa",
+  description: "Premium small pet boarding in Ipoh with no cages, 24h companionship, and daily photo updates.",
+  icons: { icon: "/petvilla-app-badge.webp" }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

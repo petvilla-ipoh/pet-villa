@@ -1,22 +1,23 @@
 "use client";
 
-import { getSupabaseBrowserClient } from "./supabase";
+import { getAuthenticatedSupabaseContext } from "./dataReliability";
 
 const hostOffDayKey = "pet-villa-host-off-days";
+const allowDevelopmentFallback = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_ENABLE_HOST_LOCAL_FALLBACK === "true";
 
-type HostOffDayRow = {
-  day: string;
+const BUSINESS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+type PublicAvailabilityResponse = {
+  fullDates?: unknown;
+  error?: unknown;
 };
 
 async function getSupabaseContext() {
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  return { supabase, userId: error ? null : data.user?.id || null };
+  return getAuthenticatedSupabaseContext();
 }
 
 export function readHostOffDays(): string[] {
-  if (typeof window === "undefined") return [];
+  if (!allowDevelopmentFallback || typeof window === "undefined") return [];
   try {
     return JSON.parse(window.localStorage.getItem(hostOffDayKey) || "[]") as string[];
   } catch {
@@ -24,55 +25,55 @@ export function readHostOffDays(): string[] {
   }
 }
 
-export function writeHostOffDays(days: string[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(hostOffDayKey, JSON.stringify(days));
+export async function setHostOffDay(day: string, full: boolean) {
+  if (typeof window === "undefined") throw new Error("Calendar is only available in the Host browser session.");
+  const context = await getSupabaseContext();
+  if (!context) throw new Error("A verified Host session is required to update Calendar availability.");
+  const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error("Your Host session expired. Please sign in again.");
+
+  const response = await fetch("/api/host/calendar", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ day, full })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "Calendar availability could not be updated.");
+
   window.dispatchEvent(new Event("pet-villa-availability"));
-  void saveHostOffDaysToSupabase(days).catch((error) => console.warn("Supabase host off days save failed; using localStorage fallback.", error));
+  return loadHostOffDays();
 }
 
 export async function loadHostOffDays() {
-  const fallback = readHostOffDays();
+  const fallback = allowDevelopmentFallback ? readHostOffDays() : [];
   try {
-    const context = await getSupabaseContext();
-    if (!context) return fallback;
-    const { data, error } = await context.supabase.from("host_off_days").select("day").order("day", { ascending: true });
-    if (error) throw error;
-    const days = ((data || []) as HostOffDayRow[]).map((row) => row.day).filter(Boolean);
-    if (typeof window !== "undefined") window.localStorage.setItem(hostOffDayKey, JSON.stringify(days));
+    const response = await fetch("/api/public/availability", { cache: "no-store" });
+    const body = await response.json().catch(() => ({})) as PublicAvailabilityResponse;
+    if (!response.ok) {
+      throw Object.assign(new Error(
+        typeof body.error === "string" ? body.error : "Booking availability could not be loaded."
+      ), { status: response.status });
+    }
+    if (!Array.isArray(body.fullDates) || body.fullDates.some((day) => typeof day !== "string" || !BUSINESS_DATE_PATTERN.test(day))) {
+      throw new Error("Booking availability returned an invalid response.");
+    }
+    const days = Array.from(new Set(body.fullDates as string[])).sort();
+    if (allowDevelopmentFallback && typeof window !== "undefined") {
+      window.localStorage.setItem(hostOffDayKey, JSON.stringify(days));
+    }
     return days;
   } catch (error) {
-    console.warn("Supabase host off days load failed; using localStorage fallback.", error);
-    return fallback;
+    if (allowDevelopmentFallback) {
+      console.warn("Supabase host off days load failed; using the explicit development fallback.", error);
+      return fallback;
+    }
+    console.error("Public availability load failed.", error);
+    throw new Error("Booking availability could not be refreshed.");
   }
-}
-
-async function saveHostOffDaysToSupabase(days: string[]) {
-  const context = await getSupabaseContext();
-  if (!context) return;
-  const uniqueDays = Array.from(new Set(days)).sort();
-  const { data, error } = await context.supabase.from("host_off_days").select("day");
-  if (error) throw error;
-  const currentDays = ((data || []) as HostOffDayRow[]).map((row) => row.day);
-  const currentSet = new Set(currentDays);
-  const nextSet = new Set(uniqueDays);
-  const additions = uniqueDays.filter((day) => !currentSet.has(day));
-  const removals = currentDays.filter((day) => !nextSet.has(day));
-
-  if (additions.length > 0) {
-    const { error: insertError } = await context.supabase.from("host_off_days").upsert(
-      additions.map((day) => ({ day, created_by: context.userId })),
-      { onConflict: "day" }
-    );
-    if (insertError) throw insertError;
-  }
-
-  await Promise.all(
-    removals.map(async (day) => {
-      const { error: deleteError } = await context.supabase.from("host_off_days").delete().eq("day", day);
-      if (deleteError) throw deleteError;
-    })
-  );
 }
 
 export function isHostOffDay(dateKey: string, offDays = readHostOffDays()) {

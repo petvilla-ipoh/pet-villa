@@ -5,7 +5,10 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
 import { signOutAuth } from "../lib/authSession";
+import { fetchAuthenticatedCustomerJson } from "../lib/dataReliability";
+import { dogAvatarSrc, loadPetProfiles, readPetProfiles, type PetProfile } from "../lib/petProfiles";
 import { avatarOptions, avatarToImageSrc, readProfileAvatar, saveProfileAvatar } from "../lib/profileAvatar";
+import { getSupabaseBrowserClient } from "../lib/supabase";
 
 type SessionUser = {
   id: string;
@@ -18,34 +21,33 @@ type SessionUser = {
   profileAvatar?: string;
 };
 
-type VerifyTarget = "phone" | "email" | null;
-
-const DEMO_OTP = "123456";
-
-function readUser(): SessionUser {
-  try {
-    const session = JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}");
-    return session.user || { id: "demo-owner", role: "owner" };
-  } catch {
-    return { id: "demo-owner", role: "owner" };
+type CustomerProfileResponse = {
+  profile: {
+    id: string;
+    fullName: string;
+    phone: string;
+    email: string;
+    emailVerified: boolean;
+    createdAt: string;
+  };
+};
+const contactLinks = [
+  {
+    brand: "xhs",
+    label: "Xiaohongshu",
+    href: "https://xhslink.cn/m/72j2fF2R1x1"
+  },
+  { brand: "instagram", label: "Instagram", href: "https://www.instagram.com/thepetvilla_boarding?igsh=MWtjMjd4MmdjMmQ0NA%3D%3D&utm_source=qr" },
+  {
+    brand: "whatsapp",
+    label: "WhatsApp",
+    href: "https://wa.me/601163830339"
   }
-}
+];
 
-function saveUser(user: SessionUser) {
+function writeSessionCache(user: SessionUser) {
   window.localStorage.setItem("pet-villa-session", JSON.stringify({ user }));
   window.dispatchEvent(new Event("pet-villa-auth"));
-}
-
-function readRegisteredUser(): { fullName: string; phone: string; email: string; password?: string; phoneVerified?: boolean; emailVerified?: boolean } | null {
-  try {
-    return JSON.parse(window.localStorage.getItem("pet-villa-registered-user") || "null");
-  } catch {
-    return null;
-  }
-}
-
-function saveRegisteredUser(user: { fullName: string; phone: string; email: string; password?: string; phoneVerified?: boolean; emailVerified?: boolean }) {
-  window.localStorage.setItem("pet-villa-registered-user", JSON.stringify(user));
 }
 
 function Chevron() {
@@ -66,15 +68,17 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 
 export default function AccountPage() {
   const { t, lang, setLang } = useLanguage();
-  const [user, setUser] = useState<SessionUser>({ id: "demo-owner", role: "owner" });
-  const [avatarValue, setAvatarValue] = useState("system:poodle");
+  const [user, setUser] = useState<SessionUser>({ id: "", role: "owner" });
+  const [avatarValue, setAvatarValue] = useState("system:human-01");
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [quickMenu, setQuickMenu] = useState<"pets" | "contact" | null>(null);
+  const [pets, setPets] = useState<PetProfile[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [verifyTarget, setVerifyTarget] = useState<VerifyTarget>(null);
-  const [otpValue, setOtpValue] = useState("");
   const [message, setMessage] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
   const [passwordError, setPasswordError] = useState("");
   const [notifications, setNotifications] = useState({
@@ -85,43 +89,88 @@ export default function AccountPage() {
   });
 
   useEffect(() => {
-    const nextUser = readUser();
-    setUser(nextUser);
-    setAvatarValue(readProfileAvatar(nextUser.id, nextUser.profileAvatar));
-    try {
-      const raw = window.localStorage.getItem(`pet-villa-notifications:${nextUser.id}`);
-      if (raw) setNotifications(JSON.parse(raw));
-    } catch {
-      // Keep defaults.
+    document.body.dataset.petVillaSurface = "account";
+    let active = true;
+    let customerId = "";
+    async function hydrateProfile() {
+      try {
+        const { profile } = await fetchAuthenticatedCustomerJson<CustomerProfileResponse>("/api/customer/profile");
+        if (!active) return;
+        customerId = profile.id;
+        const nextUser: SessionUser = {
+          id: profile.id,
+          role: "owner",
+          name: profile.fullName,
+          phone: profile.phone,
+          email: profile.email,
+          phoneVerified: false,
+          emailVerified: profile.emailVerified
+        };
+        setUser(nextUser);
+        writeSessionCache(nextUser);
+        setAvatarValue(readProfileAvatar(nextUser.id, nextUser.profileAvatar));
+        setPets(readPetProfiles(nextUser.id));
+        const items = await loadPetProfiles();
+        if (active) setPets(items);
+        try {
+          const raw = window.localStorage.getItem(`pet-villa-notifications:${nextUser.id}`);
+          if (raw) setNotifications(JSON.parse(raw));
+        } catch {
+          // Keep defaults.
+        }
+      } catch (error) {
+        if (active) setProfileError(error instanceof Error ? error.message : t({ en: "Your profile could not be loaded.", zh: "无法读取个人资料。" }));
+      }
     }
+    const syncPets = () => {
+      if (customerId) setPets(readPetProfiles(customerId));
+      void loadPetProfiles().then((items) => { if (active) setPets(items); }).catch(() => undefined);
+    };
+    void hydrateProfile();
+    window.addEventListener("pet-villa-pets", syncPets);
+    return () => {
+      active = false;
+      window.removeEventListener("pet-villa-pets", syncPets);
+      delete document.body.dataset.petVillaSurface;
+    };
   }, []);
 
   function update(field: keyof SessionUser, value: string | boolean) {
     setUser((current) => ({ ...current, [field]: value }));
   }
 
-  function saveProfile(nextUser = user) {
-    saveUser(nextUser);
-    const registered = readRegisteredUser();
-    if (registered) {
-      saveRegisteredUser({
-        ...registered,
-        fullName: nextUser.name || registered.fullName,
-        phone: nextUser.phone || registered.phone,
-        email: nextUser.email || registered.email,
-        phoneVerified: Boolean(nextUser.phoneVerified),
-        emailVerified: Boolean(nextUser.emailVerified)
-      });
+  async function saveProfile() {
+    setMessage("");
+    setProfileError("");
+    if (!user.name?.trim() || !user.phone?.trim()) {
+      setProfileError(t({ en: "Name and phone number are required.", zh: "姓名和电话号码为必填资料。" }));
+      return;
     }
-    setUser(nextUser);
-    setMessage(t({ en: "Profile saved.", zh: "资料已保存。" }));
+    setProfileSaving(true);
+    try {
+      const { profile } = await fetchAuthenticatedCustomerJson<CustomerProfileResponse>("/api/customer/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: user.name, phone: user.phone })
+      });
+      const nextUser = { ...user, name: profile.fullName, phone: profile.phone, email: profile.email, emailVerified: profile.emailVerified };
+      setUser(nextUser);
+      writeSessionCache(nextUser);
+      setMessage(t({ en: "Profile saved.", zh: "资料已保存。" }));
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : t({ en: "Your profile could not be saved.", zh: "无法保存个人资料。" }));
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   function saveAvatar(value: string) {
     const nextUser = { ...user, profileAvatar: value };
     setAvatarValue(value);
     saveProfileAvatar(user.id, value);
-    saveProfile(nextUser);
+    setUser(nextUser);
+    writeSessionCache(nextUser);
+    setMessage(t({ en: "Avatar updated on this device.", zh: "头像已在此装置更新。" }));
     setAvatarOpen(false);
   }
 
@@ -141,35 +190,16 @@ export default function AccountPage() {
     setMessage(t({ en: "Notification settings saved.", zh: "通知设置已保存。" }));
   }
 
-  function beginVerification(target: Exclude<VerifyTarget, null>) {
-    setVerifyTarget(target);
-    setOtpValue("");
-    setMessage(t({ en: "Verification is in demo mode. Use OTP 123456.", zh: "验证目前为测试模式，请输入 OTP 123456。" }));
-  }
-
-  function verifyOtp() {
-    if (!verifyTarget) return;
-    if (otpValue !== DEMO_OTP) {
-      setMessage(t({ en: "Wrong OTP. Please try again.", zh: "OTP 不正确，请重试。" }));
-      return;
-    }
-    const nextUser = { ...user, [`${verifyTarget}Verified`]: true } as SessionUser;
-    saveProfile(nextUser);
-    setVerifyTarget(null);
-    setOtpValue("");
-    setMessage(t({ en: "Verification completed.", zh: "验证已完成。" }));
-  }
-
-  function changePassword() {
+  async function changePassword() {
     setPasswordError("");
     setMessage("");
-    const registered = readRegisteredUser();
-    if (!registered || !registered.password) {
-      setPasswordError(t({ en: "No saved account password found. Please register or reset password again.", zh: "找不到已保存的账号密码，请重新注册或重设密码。" }));
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !user.email) {
+      setPasswordError(t({ en: "Your secure session is not available. Please login again.", zh: "安全登录状态无效，请重新登录。" }));
       return;
     }
-    if (passwordForm.current !== registered.password) {
-      setPasswordError(t({ en: "Current password is incorrect.", zh: "当前密码不正确。" }));
+    if (!passwordForm.current) {
+      setPasswordError(t({ en: "Please enter your current password.", zh: "请输入当前密码。" }));
       return;
     }
     if (passwordForm.next.length < 6) {
@@ -180,7 +210,16 @@ export default function AccountPage() {
       setPasswordError(t({ en: "New password and confirmation do not match.", zh: "新密码和确认密码不一致。" }));
       return;
     }
-    saveRegisteredUser({ ...registered, password: passwordForm.next });
+    const { error: reauthError } = await supabase.auth.signInWithPassword({ email: user.email, password: passwordForm.current });
+    if (reauthError) {
+      setPasswordError(t({ en: "Current password is incorrect.", zh: "当前密码不正确。" }));
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: passwordForm.next });
+    if (error) {
+      setPasswordError(t({ en: "Password could not be changed. Please try again.", zh: "无法更改密码，请重试。" }));
+      return;
+    }
     setPasswordForm({ current: "", next: "", confirm: "" });
     setMessage(t({ en: "Password changed successfully.", zh: "密码已成功更改。" }));
   }
@@ -190,34 +229,116 @@ export default function AccountPage() {
     window.location.href = "/";
   }
 
+  function toggleQuickMenu(menu: "pets" | "contact") {
+    setQuickMenu((current) => (current === menu ? null : menu));
+  }
+
+  function editPet(petId: string) {
+    window.location.href = `/pets?petId=${encodeURIComponent(petId)}`;
+  }
+
   const avatarSrc = avatarToImageSrc(avatarValue);
 
   return (
     <ProtectedPage>
       <OwnerSidebar>
-        <section className="p-4 lg:p-8">
+        <section className="account-page">
           <h1 className="page-title">{t({ en: "My Account", zh: "我的账号" })}</h1>
           {message ? <div className="mt-4 rounded-[16px] bg-[#eef5eb] p-3 text-sm font-black text-villa-accent-green">{message}</div> : null}
+          {profileError ? <div className="mt-4 rounded-[16px] bg-red-50 p-3 text-sm font-black text-red-600">{profileError}</div> : null}
 
           <div className="mt-5 grid gap-3">
-            <section className="villa-card">
-              <div className="flex items-center gap-4">
-                <button type="button" onClick={() => setAvatarOpen(true)} className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-[24px] bg-villa-primary-bg shadow-sm" aria-label="Change Avatar">
-                  <img src={avatarSrc} alt={t({ en: "Profile avatar", zh: "头像" })} className="h-full w-full object-cover" />
-                  <span className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-villa-primary text-white shadow-md">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                      <path d="M8 7h8l1.5 2H20v9H4V9h2.5L8 7Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                      <circle cx="12" cy="13.5" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
-                    </svg>
-                  </span>
-                </button>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-title text-2xl font-black text-villa-text-primary">{user.name || t({ en: "Pet Owner", zh: "宠主" })}</h2>
-                  <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{user.email || "you@example.com"}</p>
-                  <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{user.phone || "+60"}</p>
-                  <button type="button" onClick={() => setAvatarOpen(true)} className="mt-2 text-xs font-black text-villa-primary">{t({ en: "Change Avatar", zh: "更换头像" })}</button>
+            <section className="villa-card account-profile-card">
+              <div className="account-profile-main">
+                <div className="flex min-w-0 items-center gap-4">
+                  <button type="button" onClick={() => setAvatarOpen(true)} className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-[24px] bg-villa-primary-bg shadow-sm" aria-label="Change Avatar">
+                    <img src={avatarSrc} alt={t({ en: "Profile avatar", zh: "头像" })} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-villa-primary text-white shadow-md">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <path d="M8 7h8l1.5 2H20v9H4V9h2.5L8 7Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                        <circle cx="12" cy="13.5" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+                      </svg>
+                    </span>
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-title text-2xl font-black text-villa-text-primary">{user.name || t({ en: "Pet Owner", zh: "宠主" })}</h2>
+                    <p className="m-0 mt-1 truncate text-xs font-bold text-villa-text-secondary">{user.email || "you@example.com"}</p>
+                    <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{user.phone || "+60"}</p>
+                    <button type="button" onClick={() => setAvatarOpen(true)} className="mt-2 text-xs font-black text-villa-primary">{t({ en: "Change Avatar", zh: "更换头像" })}</button>
+                  </div>
+                </div>
+                <div className="account-profile-actions" aria-label={t({ en: "Account shortcuts", zh: "账号快捷功能" })}>
+                  <button type="button" className="account-quick-button" data-tone="pets" onClick={() => toggleQuickMenu("pets")} aria-expanded={quickMenu === "pets"}>
+                    <span><img src="/avatars/dog-poodle.png" alt="" /></span>
+                    <strong>{t({ en: "My Pets", zh: "我的宠物" })}</strong>
+                  </button>
+                  <a className="account-quick-button" data-tone="orders" href="/orders">
+                    <span className="account-quick-icon" data-icon="orders">
+                      <svg viewBox="0 0 48 48" aria-hidden="true">
+                        <rect x="12" y="8" width="24" height="32" rx="8" fill="#fff8f5" stroke="#e8927c" strokeWidth="2.6" />
+                        <path d="M18 19h12M18 27h10" stroke="#8d65da" strokeWidth="2.8" strokeLinecap="round" />
+                        <circle cx="34" cy="34" r="8" fill="#ffc45b" />
+                        <path d="m30 34 3 3 6-7" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <strong>{t({ en: "My Order", zh: "我的订单" })}</strong>
+                  </a>
+                  <button type="button" className="account-quick-button" data-tone="contact" onClick={() => toggleQuickMenu("contact")} aria-expanded={quickMenu === "contact"}>
+                    <span className="account-quick-icon" data-icon="contact">
+                      <svg viewBox="0 0 48 48" aria-hidden="true">
+                        <rect x="9" y="11" width="30" height="24" rx="10" fill="#fff8f5" stroke="#e8927c" strokeWidth="2.6" />
+                        <path d="M18 21h12M18 27h7" stroke="#8d65da" strokeWidth="2.8" strokeLinecap="round" />
+                        <path d="M18 35 13 41v-9" fill="#fff8f5" stroke="#e8927c" strokeWidth="2.6" strokeLinejoin="round" />
+                        <circle cx="36" cy="14" r="7" fill="#65d081" />
+                        <path d="M32.5 14.5 35 17l5-6" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <strong>{t({ en: "Contact Us", zh: "联系我们" })}</strong>
+                  </button>
                 </div>
               </div>
+              {quickMenu === "pets" ? (
+                <div className="account-quick-panel">
+                  <div className="flex items-center justify-between gap-3">
+                    <strong className="text-sm font-black text-villa-text-primary">{t({ en: "Saved pets", zh: "已添加宠物" })}</strong>
+                    <a href="/pets?mode=add" className="account-pet-edit">{t({ en: "Add Pet", zh: "新增宠物" })}</a>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {pets.length ? pets.map((pet) => (
+                      <div key={pet.id} className="account-pet-row">
+                        <img src={dogAvatarSrc(pet.photoDataUrl)} alt="" />
+                        <span className="min-w-0 flex-1">
+                          <strong>{pet.name || t({ en: "Unnamed pet", zh: "未命名宠物" })}</strong>
+                          <small>{pet.breed || t({ en: "Breed not set", zh: "未填写品种" })}</small>
+                        </span>
+                        <button type="button" className="account-pet-edit" onClick={() => editPet(pet.id)}>{t({ en: "Edit", zh: "编辑" })}</button>
+                      </div>
+                    )) : (
+                      <div className="account-pet-row">
+                        <span className="account-social-logo" data-brand="pets">PV</span>
+                        <span className="min-w-0 flex-1">
+                          <strong>{t({ en: "No pets yet", zh: "还没有宠物资料" })}</strong>
+                          <small>{t({ en: "Add your first pet before booking.", zh: "预约前请先添加宠物。" })}</small>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              {quickMenu === "contact" ? (
+                <div className="account-quick-panel">
+                  <strong className="text-sm font-black text-villa-text-primary">{t({ en: "Choose a contact channel", zh: "选择联系方式" })}</strong>
+                  <div className="mt-3 grid gap-2">
+                    {contactLinks.map((item) => (
+                      <a key={item.brand} href={item.href} target="_blank" rel="noreferrer" className="account-social-row">
+                        <span className="account-social-logo" data-brand={item.brand}>{item.brand === "whatsapp" ? "WA" : item.brand === "instagram" ? "IG" : "RED"}</span>
+                        <strong>{item.label}</strong>
+                        <span>›</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="villa-card">
@@ -240,9 +361,10 @@ export default function AccountPage() {
                   </label>
                   <label className="grid gap-2">
                     <span className="villa-label">{t({ en: "Email", zh: "邮箱" })}</span>
-                    <input className="villa-input" value={user.email || ""} onChange={(event) => update("email", event.target.value)} placeholder="you@example.com" />
+                    <input className="villa-input opacity-75" value={user.email || ""} readOnly disabled placeholder="you@example.com" />
+                    <span className="text-[11px] font-bold text-villa-text-muted">{t({ en: "Your email is your login identity. Contact Pet Villa if it needs to be changed.", zh: "邮箱是登录身份，如需更改请联系 Pet Villa。" })}</span>
                   </label>
-                  <button type="button" className="villa-button w-full" onClick={() => saveProfile()}>{t({ en: "Save Profile", zh: "保存资料" })}</button>
+                  <button type="button" disabled={profileSaving} className="villa-button w-full disabled:opacity-60" onClick={() => void saveProfile()}>{profileSaving ? t({ en: "Saving...", zh: "保存中..." }) : t({ en: "Save Profile", zh: "保存资料" })}</button>
                 </div>
               ) : null}
             </section>
@@ -261,7 +383,7 @@ export default function AccountPage() {
                   <input className="villa-input" type="password" value={passwordForm.next} onChange={(event) => setPasswordForm((current) => ({ ...current, next: event.target.value }))} placeholder={t({ en: "New password", zh: "新密码" })} />
                   <input className="villa-input" type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm((current) => ({ ...current, confirm: event.target.value }))} placeholder={t({ en: "Confirm new password", zh: "确认新密码" })} />
                   {passwordError ? <p className="m-0 rounded-[14px] bg-red-50 p-3 text-xs font-black text-red-600">{passwordError}</p> : null}
-                  <button type="button" className="villa-button-outline w-full" onClick={changePassword}>{t({ en: "Change Password", zh: "更改密码" })}</button>
+                  <button type="button" className="villa-button-outline w-full" onClick={() => void changePassword()}>{t({ en: "Change Password", zh: "更改密码" })}</button>
                 </div>
               ) : null}
             </section>
@@ -270,34 +392,18 @@ export default function AccountPage() {
               <h2 className="card-title">{t({ en: "Verification", zh: "验证状态" })}</h2>
               <div className="mt-3 grid gap-2 text-sm font-black">
                 {[
-                  { key: "phone" as const, label: t({ en: "Phone", zh: "电话" }), value: user.phone || "+60", verified: Boolean(user.phoneVerified) },
-                  { key: "email" as const, label: t({ en: "Email", zh: "邮箱" }), value: user.email || "you@example.com", verified: Boolean(user.emailVerified) }
+                  { key: "phone", label: t({ en: "Contact Number", zh: "联系电话" }), value: user.phone || "+60", status: t({ en: "Contact only", zh: "仅用于联系" }), verified: false },
+                  { key: "email", label: t({ en: "Email", zh: "邮箱" }), value: user.email || "you@example.com", status: user.emailVerified ? t({ en: "Verified", zh: "已验证" }) : t({ en: "Not verified", zh: "未验证" }), verified: Boolean(user.emailVerified) }
                 ].map((item) => (
                   <div key={item.key} className="flex items-center justify-between gap-3 rounded-[16px] bg-villa-primary-bg p-3 text-left">
                     <span className="min-w-0">
                       <span className="block text-sm font-black text-villa-text-primary">{item.label}</span>
                       <span className="mt-1 block truncate text-xs font-bold text-villa-text-secondary">{item.value}</span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <span className={`rounded-full px-3 py-1 text-xs ${item.verified ? "bg-[#eef5eb] text-villa-accent-green" : "bg-red-50 text-villa-primary"}`}>
-                        {item.verified ? t({ en: "Verified", zh: "已验证" }) : t({ en: "Not Verified", zh: "未验证" })}
-                      </span>
-                      {!item.verified ? <button type="button" onClick={() => beginVerification(item.key)} className="villa-button-outline min-h-[30px] px-3 py-1 text-[11px]">{t({ en: "Verify", zh: "验证" })}</button> : null}
-                    </span>
+                    <span className={`shrink-0 rounded-full px-3 py-1 text-xs ${item.verified ? "bg-[#eef5eb] text-villa-accent-green" : "bg-white text-villa-text-secondary"}`}>{item.status}</span>
                   </div>
                 ))}
               </div>
-              {verifyTarget ? (
-                <div className="mt-4 grid gap-3 rounded-[16px] border border-villa-primary-light bg-white p-3">
-                  <p className="m-0 text-xs font-bold text-villa-text-secondary">
-                    {verifyTarget === "phone"
-                      ? t({ en: "Phone verification demo. Enter 123456.", zh: "电话验证测试模式，请输入 123456。" })
-                      : t({ en: "Email verification demo. Enter 123456.", zh: "邮箱验证测试模式，请输入 123456。" })}
-                  </p>
-                  <input className="villa-input text-center text-xl tracking-[0.35em]" inputMode="numeric" maxLength={6} value={otpValue} onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="_ _ _ _ _ _" />
-                  <button type="button" className="villa-button w-full" onClick={verifyOtp}>{t({ en: "Verify OTP", zh: "验证 OTP" })}</button>
-                </div>
-              ) : null}
             </section>
 
             <section className="villa-card">
@@ -336,8 +442,8 @@ export default function AccountPage() {
             <section className="villa-card">
               <h2 className="card-title">{t({ en: "Help & Support", zh: "帮助与支持" })}</h2>
               <div className="mt-4 grid gap-2">
-                <a className="villa-button w-full" href="https://wa.me/60123456789" target="_blank" rel="noreferrer">{t({ en: "WhatsApp Pet Villa", zh: "WhatsApp Pet Villa" })}</a>
-                <a className="villa-button-outline w-full" href="tel:+60123456789">{t({ en: "Call Pet Villa", zh: "致电 Pet Villa" })}</a>
+                <a className="villa-button w-full" href="https://wa.me/601163830339" target="_blank" rel="noreferrer">{t({ en: "WhatsApp Pet Villa", zh: "WhatsApp Pet Villa" })}</a>
+                <a className="villa-button-outline w-full" href="tel:+601163830339">{t({ en: "Call Pet Villa", zh: "致电 Pet Villa" })}</a>
               </div>
             </section>
 
@@ -357,11 +463,12 @@ export default function AccountPage() {
                 <span className="text-villa-primary">›</span>
                 <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} />
               </label>
-              <h3 className="mt-5 text-sm font-black text-villa-text-primary">{t({ en: "Choose Pet Villa Avatar", zh: "选择 Pet Villa 头像" })}</h3>
-              <div className="mt-3 grid grid-cols-4 gap-3">
+              <h3 className="mt-5 text-sm font-black text-villa-text-primary">{t({ en: "Choose Your Avatar", zh: "选择您的头像" })}</h3>
+              <p className="m-0 mt-1 text-xs font-bold text-villa-text-secondary">{t({ en: "Pick a Pet Villa character that feels like you.", zh: "选择一个符合您风格的 Pet Villa 人物头像。" })}</p>
+              <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
                 {avatarOptions.map((option) => (
-                  <button key={option.id} type="button" onClick={() => saveAvatar(`system:${option.id}`)} className="grid justify-items-center gap-2 rounded-[18px] border border-villa-primary-light bg-villa-primary-bg p-2 text-center text-[10px] font-black text-villa-text-secondary">
-                    <img src={avatarToImageSrc(`system:${option.id}`)} alt={t({ en: option.en, zh: option.zh })} className="h-14 w-14 rounded-[16px] object-cover" />
+                  <button key={option.id} type="button" onClick={() => saveAvatar(`system:${option.id}`)} className="profile-avatar-choice" data-active={avatarValue === `system:${option.id}`}>
+                    <img src={avatarToImageSrc(`system:${option.id}`)} alt={t({ en: option.en, zh: option.zh })} />
                     <span>{t({ en: option.en, zh: option.zh })}</span>
                   </button>
                 ))}

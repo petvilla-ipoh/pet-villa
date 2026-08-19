@@ -30,18 +30,20 @@ type GalleryPhotoRow = {
 };
 
 const seedGuestPhotos: GuestPhoto[] = [
-  { id: "guest-poodle", imageUrl: "/hero-dogs.png", petName: "Mochi", breed: "Poodle", caption: "Cozy nap after playtime.", uploadedAt: "2026-05-28T09:00:00.000Z", visibleOnHome: true, color: "#f0b46e" },
-  { id: "guest-frenchie", imageUrl: "/hero-dogs.png", petName: "Bobo", breed: "French Bulldog", caption: "Happy in the living room.", uploadedAt: "2026-05-27T09:00:00.000Z", visibleOnHome: true, color: "#fff3e6" },
-  { id: "guest-maltese", imageUrl: "/hero-dogs.png", petName: "Luna", breed: "Maltese", caption: "Fresh and calm under AC.", uploadedAt: "2026-05-26T09:00:00.000Z", visibleOnHome: true, color: "#fffaf2" },
-  { id: "guest-corgi", imageUrl: "/hero-dogs.png", petName: "Cookie", breed: "Corgi", caption: "Gentle supervised play.", uploadedAt: "2026-05-25T09:00:00.000Z", visibleOnHome: true, color: "#e8a45d" },
-  { id: "guest-shih", imageUrl: "/hero-dogs.png", petName: "Nana", breed: "Shih Tzu", caption: "Dinner finished happily.", uploadedAt: "2026-05-24T09:00:00.000Z", visibleOnHome: true, color: "#d8b28a" },
-  { id: "guest-pom", imageUrl: "/hero-dogs.png", petName: "Teddy", breed: "Pomeranian", caption: "Tiny guest, big smile.", uploadedAt: "2026-05-23T09:00:00.000Z", visibleOnHome: true, color: "#efc27e" }
+  { id: "guest-poodle", imageUrl: "/hero-dogs.webp", petName: "Mochi", breed: "Poodle", caption: "Cozy nap after playtime.", uploadedAt: "2026-05-28T09:00:00.000Z", visibleOnHome: true, color: "#f0b46e" },
+  { id: "guest-frenchie", imageUrl: "/hero-dogs.webp", petName: "Bobo", breed: "French Bulldog", caption: "Happy in the living room.", uploadedAt: "2026-05-27T09:00:00.000Z", visibleOnHome: true, color: "#fff3e6" },
+  { id: "guest-maltese", imageUrl: "/hero-dogs.webp", petName: "Luna", breed: "Maltese", caption: "Fresh and calm under AC.", uploadedAt: "2026-05-26T09:00:00.000Z", visibleOnHome: true, color: "#fffaf2" },
+  { id: "guest-corgi", imageUrl: "/hero-dogs.webp", petName: "Cookie", breed: "Corgi", caption: "Gentle supervised play.", uploadedAt: "2026-05-25T09:00:00.000Z", visibleOnHome: true, color: "#e8a45d" },
+  { id: "guest-shih", imageUrl: "/hero-dogs.webp", petName: "Nana", breed: "Shih Tzu", caption: "Dinner finished happily.", uploadedAt: "2026-05-24T09:00:00.000Z", visibleOnHome: true, color: "#d8b28a" },
+  { id: "guest-pom", imageUrl: "/hero-dogs.webp", petName: "Teddy", breed: "Pomeranian", caption: "Tiny guest, big smile.", uploadedAt: "2026-05-23T09:00:00.000Z", visibleOnHome: true, color: "#efc27e" }
 ];
 
 const galleryKey = "pet-villa-happy-guests";
 const galleryMigrationKey = "pet-villa-gallery-supabase-migrated";
 const GALLERY_BUCKET = "gallery-photos";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const allowGalleryDevelopmentFallback = process.env.NODE_ENV !== "production"
+  && process.env.NEXT_PUBLIC_ENABLE_HOST_LOCAL_FALLBACK === "true";
 
 function sortPhotos(photos: GuestPhoto[]) {
   return photos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
@@ -88,7 +90,7 @@ async function getSupabaseContext() {
 function galleryPhotoFromRow(row: GalleryPhotoRow): GuestPhoto {
   return {
     id: row.id,
-    imageUrl: row.image_url || "/hero-dogs.png",
+    imageUrl: row.image_url || "/hero-dogs.webp",
     storagePath: row.storage_path || undefined,
     petName: row.pet_name || "Happy guest",
     breed: row.breed || "Small dog",
@@ -106,7 +108,7 @@ function galleryPayload(photo: Omit<GuestPhoto, "id" | "uploadedAt">, createdBy?
     pet_name: photo.petName.trim(),
     breed: photo.breed.trim() || "Small dog",
     caption: photo.caption.trim() || "Happy guest at Pet Villa.",
-    image_url: uploaded?.url || photo.imageUrl || "/hero-dogs.png",
+    image_url: uploaded?.url || photo.imageUrl || "/hero-dogs.webp",
     storage_path: uploaded?.path || photo.storagePath || null,
     visible_on_home: photo.visibleOnHome,
     featured: Boolean(photo.featured),
@@ -232,7 +234,10 @@ export async function loadHomeGuestPhotos(limit = 6) {
 
 export async function saveGuestPhoto(photo: Omit<GuestPhoto, "id" | "uploadedAt">) {
   const context = await getSupabaseContext();
-  if (!context) return saveGuestPhotoFallback(photo);
+  if (!context) {
+    if (allowGalleryDevelopmentFallback) return saveGuestPhotoFallback(photo);
+    throw new Error("A verified Host session is required to publish Gallery photos.");
+  }
 
   try {
     await insertSupabaseGuestPhoto(context.supabase, context.userId, photo);
@@ -240,8 +245,12 @@ export async function saveGuestPhoto(photo: Omit<GuestPhoto, "id" | "uploadedAt"
     window.dispatchEvent(new Event("pet-villa-gallery"));
     return photos;
   } catch (error) {
-    console.warn("Supabase gallery save failed; using localStorage fallback.", error);
-    return saveGuestPhotoFallback(photo);
+    if (allowGalleryDevelopmentFallback) {
+      console.warn("Supabase gallery save failed; using the explicit development fallback.", error);
+      return saveGuestPhotoFallback(photo);
+    }
+    console.error("Supabase gallery save failed.", error);
+    throw new Error("Gallery photo could not be published to Supabase.");
   }
 }
 
@@ -250,10 +259,15 @@ export async function updateGuestPhoto(photoId: string, updates: Partial<Omit<Gu
   if (typeof window === "undefined") return [];
   const current = readLocalUploadedPhotos();
   const next = current.map((photo) => (photo.id === photoId ? { ...photo, ...updates } : photo));
-  writeLocalUploadedPhotos(next);
 
   const context = await getSupabaseContext();
-  if (!context || photoId.startsWith("guest-") || !UUID_PATTERN.test(photoId)) return readGuestPhotos();
+  if (!context || photoId.startsWith("guest-") || !UUID_PATTERN.test(photoId)) {
+    if (allowGalleryDevelopmentFallback) {
+      writeLocalUploadedPhotos(next);
+      return readGuestPhotos();
+    }
+    throw new Error("This Gallery photo is not a verified Supabase record.");
+  }
 
   try {
     const { error } = await context.supabase
@@ -273,8 +287,13 @@ export async function updateGuestPhoto(photoId: string, updates: Partial<Omit<Gu
     window.dispatchEvent(new Event("pet-villa-gallery"));
     return photos;
   } catch (error) {
-    console.warn("Supabase gallery update failed; using localStorage fallback.", error);
-    return readGuestPhotos();
+    if (allowGalleryDevelopmentFallback) {
+      writeLocalUploadedPhotos(next);
+      console.warn("Supabase gallery update failed; using the explicit development fallback.", error);
+      return readGuestPhotos();
+    }
+    console.error("Supabase gallery update failed.", error);
+    throw new Error("Gallery changes could not be saved to Supabase.");
   }
 }
 
@@ -283,10 +302,15 @@ export async function deleteGuestPhoto(photoId: string) {
   const current = readLocalUploadedPhotos();
   const target = current.find((photo) => photo.id === photoId);
   const next = current.filter((photo) => !photo.id.startsWith("guest-") && photo.id !== photoId);
-  writeLocalUploadedPhotos(next);
 
   const context = await getSupabaseContext();
-  if (!context || photoId.startsWith("guest-") || !UUID_PATTERN.test(photoId)) return readGuestPhotos();
+  if (!context || photoId.startsWith("guest-") || !UUID_PATTERN.test(photoId)) {
+    if (allowGalleryDevelopmentFallback) {
+      writeLocalUploadedPhotos(next);
+      return readGuestPhotos();
+    }
+    throw new Error("This Gallery photo is not a verified Supabase record.");
+  }
 
   try {
     if (target?.storagePath) {
@@ -298,7 +322,12 @@ export async function deleteGuestPhoto(photoId: string) {
     window.dispatchEvent(new Event("pet-villa-gallery"));
     return photos;
   } catch (error) {
-    console.warn("Supabase gallery delete failed; using localStorage fallback.", error);
-    return readGuestPhotos();
+    if (allowGalleryDevelopmentFallback) {
+      writeLocalUploadedPhotos(next);
+      console.warn("Supabase gallery delete failed; using the explicit development fallback.", error);
+      return readGuestPhotos();
+    }
+    console.error("Supabase gallery delete failed.", error);
+    throw new Error("Gallery photo could not be deleted from Supabase.");
   }
 }

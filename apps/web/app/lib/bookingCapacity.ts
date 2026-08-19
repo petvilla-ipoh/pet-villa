@@ -1,15 +1,22 @@
 "use client";
 
 import { readOrders, type VillaOrder } from "./orderFlow";
+import { isBusinessOrder } from "./safeVoid";
 
 export const MAX_DOGS_PER_DAY = 3;
 
 const OCCUPYING_STATUSES = new Set<VillaOrder["status"]>(["confirmed", "active", "staying", "awaiting_checkout", "ready_pickup"]);
 
 export function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value || String(date.getFullYear());
+  const month = parts.find((part) => part.type === "month")?.value || String(date.getMonth() + 1).padStart(2, "0");
+  const day = parts.find((part) => part.type === "day")?.value || String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -71,7 +78,7 @@ export function getOrderDateRange(order: VillaOrder) {
 }
 
 export function orderOccupiesCapacity(order: VillaOrder) {
-  return OCCUPYING_STATUSES.has(order.status);
+  return isBusinessOrder(order) && OCCUPYING_STATUSES.has(order.status);
 }
 
 export function buildCapacityMap(orders = readOrders()) {

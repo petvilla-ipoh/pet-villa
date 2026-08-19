@@ -9,10 +9,9 @@ export function BrandMark({ dark = false, host = false }: Props) {
   return (
     <a href="/" className="flex min-w-0 items-center gap-3">
       <img
-        src="/logo.png"
+        src="/petvilla-app-badge.webp"
         alt="The Pet Villa"
-        style={{ height: "48px" }}
-        className="w-auto rounded-[14px] object-contain"
+        className="h-14 w-14 rounded-[18px] border border-white/90 object-cover shadow-[inset_0_-6px_12px_rgba(183,142,255,0.10),0_10px_18px_rgba(61,31,13,0.10)]"
         onError={(event: React.SyntheticEvent<HTMLImageElement>) => {
           event.currentTarget.style.display = "none";
         }}

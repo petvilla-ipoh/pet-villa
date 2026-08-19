@@ -10,6 +10,7 @@ These issues were discovered from the current repository state and should be rev
    - Booking drafts and orders now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - Vouchers, referral codes, and pending referrals now use Supabase when configured, but keep localStorage fallback mirrors during migration.
    - Chat messages and host off days now use Supabase when configured, but keep localStorage fallback mirrors during migration.
+   - Private Diary uses `pet-villa-diary-updates` only as a same-device fallback. Cross-device customer access requires migration `202608060001_create_supabase_pet_diary.sql` and a valid Host Supabase session.
    - A browser reset can lose these records.
 
 2. Real backend database integration is incomplete for the customer-facing web flows.
@@ -25,6 +26,7 @@ These issues were discovered from the current repository state and should be rev
 4. Upload storage is not production-grade.
    - Pet images now upload to Supabase Storage when Supabase is configured.
    - Gallery images now upload to Supabase Storage when Supabase is configured, with local data URL fallback retained.
+   - Private Diary media is designed for the private `pet-diary-media` bucket, but is not live until its migration and RLS policies are applied and verified in Supabase.
    - Use Supabase Storage or AWS S3 for real customer/host uploads.
 
 5. Real chat is not fully cloud/realtime.

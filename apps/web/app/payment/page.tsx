@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { OwnerSidebar } from "../components/OwnerSidebar";
 import { PaymentLogo, paymentMethods, type PaymentMethodId } from "../components/PaymentLogo";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { ensureOrderFromDraft, loadBookingDraft, type BookingDraft } from "../lib/orderFlow";
-import { startStripeCheckout } from "../lib/stripeCheckout";
+import { ensureOrderFromDraft, loadBookingDraft, loadOrders, recordOperationalWhatsAppConsent, submitCustomerPayment, type BookingDraft, type VillaOrder } from "../lib/orderFlow";
+import { dogAvatarSrc } from "../lib/petProfiles";
+import { DEFAULT_BUSINESS_SETTINGS, loadBusinessSettings, type BusinessSettings } from "../lib/businessSettings";
 
 type AmountMode = "deposit" | "full";
 
@@ -19,18 +20,6 @@ function CalendarIcon() {
   );
 }
 
-function DogIcon() {
-  return (
-    <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
-      <circle cx="24" cy="25" r="14" fill="#f5c4b3" />
-      <path d="M12 22c-5 2-6 9-3 13 3 4 9 3 11-1M36 22c5 2 6 9 3 13-3 4-9 3-11-1" fill="#c7824f" />
-      <circle cx="19" cy="25" r="2" fill="#3d1f0d" />
-      <circle cx="29" cy="25" r="2" fill="#3d1f0d" />
-      <ellipse cx="24" cy="31" rx="4" ry="3" fill="#3d1f0d" />
-    </svg>
-  );
-}
-
 function MoonIcon() {
   return (
     <svg viewBox="0 0 40 40" className="h-5 w-5" aria-hidden="true">
@@ -39,58 +28,154 @@ function MoonIcon() {
   );
 }
 
+function ShieldIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <path d="M24 6 39 12v11c0 9.5-5.7 15.8-15 19-9.3-3.2-15-9.5-15-19V12l15-6Z" fill="#e9f9e7" stroke="#7fbc8b" strokeWidth="2.8" />
+      <path d="m17 25 5 5 10-12" fill="none" stroke="#8d65da" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function WalletIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="h-7 w-7" aria-hidden="true">
+      <rect x="7" y="13" width="34" height="25" rx="9" fill="#fff4df" stroke="#d9ad46" strokeWidth="2.6" />
+      <path d="M13 13c2.8-4 8.8-5.5 16-4l8 2.2" fill="none" stroke="#e8927c" strokeWidth="2.8" strokeLinecap="round" />
+      <rect x="28" y="21" width="13" height="10" rx="4" fill="#ffffff" stroke="#d9ad46" strokeWidth="2.4" />
+      <circle cx="33" cy="26" r="1.8" fill="#8d65da" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+      <circle cx="24" cy="24" r="18" fill="#dff6e5" stroke="#65b879" strokeWidth="2.5" />
+      <path d="M17 32l1.2-4.1A9 9 0 1 1 21 30.7L17 32Z" fill="#fff" stroke="#36a852" strokeWidth="2.5" strokeLinejoin="round" />
+      <path d="M20.5 20.8c.5 3.4 3.2 6.1 6.7 6.8l1.8-2.1" fill="none" stroke="#36a852" strokeWidth="2.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function formatOrderId(orderId: string) {
+  return orderId.replace(/^order-/, "PV-");
+}
+
 export default function PaymentPage() {
   const { t } = useLanguage();
   const [draft, setDraft] = useState<BookingDraft | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [amountMode, setAmountMode] = useState<AmountMode>("deposit");
-  const [method, setMethod] = useState<PaymentMethodId>("duitnow");
-  const [methodsOpen, setMethodsOpen] = useState(false);
+  const [method, setMethod] = useState<PaymentMethodId>("qr");
+  const [submittedOrder, setSubmittedOrder] = useState<VillaOrder | null>(null);
   const [message, setMessage] = useState("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings>(DEFAULT_BUSINESS_SETTINGS);
+  const [paymentContext, setPaymentContext] = useState<"booking" | "balance">("booking");
+  const paymentRequestRef = useRef<{ scope: string; key: string } | null>(null);
+
+  useEffect(() => {
+    document.body.dataset.petVillaSurface = "payment";
+    return () => {
+      delete document.body.dataset.petVillaSurface;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
     async function loadDraft() {
-      const nextDraft = await loadBookingDraft();
-      if (!active) return;
-      setDraft(nextDraft);
-      setLoaded(true);
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const balanceOrderId = params.get("mode") === "balance" ? params.get("order") : "";
+        const nextDraft = balanceOrderId
+          ? (await loadOrders()).find((order) => order.orderId === balanceOrderId && order.balance > 0 && !["cancelled", "completed"].includes(order.status)) || null
+          : await loadBookingDraft();
+        if (!active) return;
+        setDraft(nextDraft);
+        setPaymentContext(balanceOrderId ? "balance" : "booking");
+        setAmountMode(balanceOrderId ? "full" : nextDraft?.deposit ? "deposit" : "full");
+        setLoadError(nextDraft ? "" : balanceOrderId ? t({ en: "This balance is no longer available for payment.", zh: "这笔尾款目前无法付款。" }) : "");
+      } catch (error) {
+        if (!active) return;
+        setLoadError(error instanceof Error ? error.message : t({ en: "Payment details could not be loaded.", zh: "无法读取付款资料。" }));
+      } finally {
+        if (active) setLoaded(true);
+      }
     }
     void loadDraft();
+    void loadBusinessSettings().then((settings) => {
+      if (active) setBusinessSettings(settings);
+    }).catch((error) => {
+      if (active) setLoadError(error instanceof Error ? error.message : t({ en: "Payment settings could not be loaded.", zh: "无法读取付款设定。" }));
+    });
     return () => {
       active = false;
     };
   }, []);
 
+  useEffect(() => {
+    if (!submittedOrder) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [submittedOrder]);
+
   const booking = draft;
   const total = booking?.total || 0;
   const subtotal = booking?.subtotal ?? total;
   const voucherDiscount = booking?.voucherDiscount || 0;
-  const amount = booking ? (amountMode === "deposit" ? booking.deposit : total) : 0;
-  const balance = Math.max(0, total - amount);
+  const hasDeposit = Boolean(booking && booking.deposit > 0);
+  const amount = booking ? (paymentContext === "balance" ? booking.balance : amountMode === "deposit" && hasDeposit ? booking.deposit : total) : 0;
+  const balance = paymentContext === "balance" ? 0 : Math.max(0, total - amount);
   const petNames = booking?.pets.map((pet) => pet.name).join(", ") || "";
+  const selectedMethod = paymentMethods.find((item) => item.id === method) || paymentMethods[0];
   const stayLabel = !booking ? "" : booking.service === "overnight"
     ? t({ en: `${booking.nights} Nights Stay`, zh: `${booking.nights} 晚寄宿` })
     : t({ en: `${booking.hours} Hours Daycare`, zh: `${booking.hours} 小时日托` });
 
   const buttonText = useMemo(() => {
-    if (method === "duitnow") return t({ en: "I Have Paid", zh: "我已付款" });
-    return amountMode === "deposit"
-      ? t({ en: `Pay RM${amount} Deposit`, zh: `支付 RM${amount} 订金` })
-      : t({ en: `Pay RM${amount} in Full`, zh: `支付 RM${amount} 全款` });
-  }, [amount, amountMode, method, t]);
+    return t({ en: "I Have Paid", zh: "我已付款" });
+  }, [t]);
 
   async function confirmPayment() {
     if (!draft) {
       setMessage(t({ en: "Please create a booking first before payment.", zh: "请先创建预约再付款。" }));
       return;
     }
+
+    if (paymentSubmitting) return;
+    if (amount <= 0) {
+      setMessage(t({ en: "The payment amount must be greater than RM0.", zh: "付款金额必须高于 RM0。" }));
+      return;
+    }
+    if (paymentContext === "booking" && !draft.operationalWhatsappConsentLanguage) {
+      setMessage(t({ en: "Please agree to the required operational WhatsApp service updates before payment.", zh: "请先同意必要的 WhatsApp 服务通知，才可以付款。" }));
+      return;
+    }
+
+    setPaymentSubmitting(true);
     try {
-      const order = await ensureOrderFromDraft(draft);
-      setMessage(t({ en: "Redirecting to Stripe Checkout...", zh: "正在前往 Stripe 付款页面..." }));
-      await startStripeCheckout(order, amountMode === "deposit" ? "deposit" : "full");
+      const order = paymentContext === "balance"
+        ? draft as VillaOrder
+        : await ensureOrderFromDraft(draft);
+      if (paymentContext === "booking") {
+        await recordOperationalWhatsAppConsent(order, draft.operationalWhatsappConsentLanguage!);
+      }
+      const scope = `${order.orderRowId || order.orderId}:${amount}:${method}`;
+      if (!paymentRequestRef.current || paymentRequestRef.current.scope !== scope) {
+        paymentRequestRef.current = { scope, key: crypto.randomUUID() };
+      }
+      const nextOrders = await submitCustomerPayment(order, amount, method, paymentRequestRef.current.key);
+      setSubmittedOrder(nextOrders.find((item) => item.orderId === order.orderId) || {
+        ...order,
+        status: "pending_verification",
+        paymentSubmission: { amount, method, submittedAt: new Date().toISOString() }
+      });
+      setMessage("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t({ en: "Could not start Stripe payment.", zh: "无法开始 Stripe 付款。" }));
+      setMessage(error instanceof Error ? error.message : t({ en: "Could not start payment.", zh: "无法开始付款。" }));
+    } finally {
+      setPaymentSubmitting(false);
     }
   }
 
@@ -98,8 +183,8 @@ export default function PaymentPage() {
     return (
       <ProtectedPage>
         <OwnerSidebar>
-          <section className="p-4 lg:p-8">
-            <div className="villa-card text-center">
+          <section className="payment-page">
+            <div className="payment-empty-card text-center">
               <h1 className="section-title">{t({ en: "Loading payment...", zh: "正在载入付款资料..." })}</h1>
             </div>
           </section>
@@ -112,11 +197,14 @@ export default function PaymentPage() {
     return (
       <ProtectedPage>
         <OwnerSidebar>
-          <section className="p-4 lg:p-8">
-            <div className="villa-card text-center">
-              <h1 className="section-title">{t({ en: "No booking ready for payment", zh: "还没有可付款的预约" })}</h1>
-              <p className="body-copy mt-2">{t({ en: "Please create a booking first, then continue to payment.", zh: "请先创建预约，再继续付款。" })}</p>
-              <a href="/booking" className="villa-button mt-4 w-full">{t({ en: "Book a Stay", zh: "立即预约" })}</a>
+          <section className="payment-page">
+            <div className="payment-empty-card text-center">
+              <span className="payment-empty-icon"><WalletIcon /></span>
+              <h1 className="section-title">{loadError || t({ en: "No booking ready for payment", zh: "还没有可付款的预约" })}</h1>
+              <p className="body-copy mt-2">{loadError
+                ? t({ en: "Your booking was not replaced with an empty payment. Return to Booking and try again.", zh: "预约资料没有被空白付款页取代，请返回预约页重试。" })
+                : t({ en: "Please create a booking first, then continue to payment.", zh: "请先创建预约，再继续付款。" })}</p>
+              <a href="/booking" className="payment-primary mt-5 w-full">{t({ en: "Book a Stay", zh: "立即预约" })}</a>
             </div>
           </section>
         </OwnerSidebar>
@@ -127,169 +215,198 @@ export default function PaymentPage() {
   return (
     <ProtectedPage>
       <OwnerSidebar>
-        <section className="p-4 lg:p-8">
-          <div className="rounded-[20px] border border-villa-primary-light bg-villa-primary-bg/80 p-4 shadow-[0_4px_16px_rgba(61,31,13,0.08)]">
-            <p className="m-0 text-xs font-black uppercase tracking-[0.08em] text-villa-primary">{t({ en: "Booking Summary", zh: "预约摘要" })}</p>
-            <div className="mt-3 grid gap-2 text-sm font-black text-villa-text-primary">
-              <div className="flex items-center gap-2"><DogIcon /> {petNames}</div>
-              <div className="flex items-center gap-2"><MoonIcon /> {draft.serviceLabel}</div>
-              <div className="flex items-center gap-2"><CalendarIcon /> {draft.dateLabel}</div>
-              <div className="rounded-full bg-white px-3 py-2 text-xs font-black text-villa-text-secondary">{stayLabel}</div>
+        <section className="payment-page payment-page-compact">
+          <header className="payment-checkout-hero payment-thankyou-hero">
+            <img src="/petvilla-payment-thankyou-banner.webp" alt="" aria-hidden="true" className="payment-thankyou-art" />
+            <span className="payment-hero-spark payment-hero-spark-one" aria-hidden="true" />
+            <div className="payment-hero-glass">
+              <span className="payment-kicker"><ShieldIcon /> {t({ en: "Pet Villa secure checkout", zh: "Pet Villa 安全付款" })}</span>
+              <h1>{t({ en: "Thank you", zh: "谢谢信任" })}</h1>
+              <p>{t({ en: "We will take good care of your little baby.", zh: "我们会好好照顾你的小宝贝。" })}</p>
             </div>
-          </div>
+            <div className="payment-total-orb">
+              <span>{t({ en: "Pay Today", zh: "今天付款" })}</span>
+              <strong>RM{amount}</strong>
+              <small>{paymentContext === "balance" ? t({ en: "Balance payment", zh: "尾款" }) : amountMode === "deposit" && hasDeposit ? t({ en: "Deposit", zh: "订金" }) : t({ en: "Full payment", zh: "全款" })}</small>
+            </div>
+          </header>
 
-          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <main className="grid gap-5">
-              <section className="villa-card">
-                <h1 className="section-title">{t({ en: "Payment Amount", zh: "付款金额" })}</h1>
-                <div className="mt-4 grid gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAmountMode("deposit")}
-                    className={`rounded-[18px] border p-4 text-left transition-all duration-200 ${
-                      amountMode === "deposit" ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white"
-                    }`}
-                  >
-                    <span className="rounded-pill bg-villa-primary px-3 py-1 text-xs font-bold text-white">{t({ en: "Recommended", zh: "推荐" })}</span>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="card-title">{t({ en: "Pay Deposit 50%", zh: "支付 50% 订金" })}</h2>
-                        <p className="muted-copy m-0">{t({ en: `Today: RM${draft.deposit} · Later: RM${draft.balance}`, zh: `今天：RM${draft.deposit} · 之后：RM${draft.balance}` })}</p>
-                      </div>
-                      <span className={`grid h-7 w-7 place-items-center rounded-full ${amountMode === "deposit" ? "bg-villa-primary text-white" : "border border-villa-primary-light text-transparent"}`}>✓</span>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAmountMode("full")}
-                    className={`rounded-[18px] border p-4 text-left transition-all duration-200 ${
-                      amountMode === "full" ? "border-villa-primary bg-villa-primary-bg shadow-md" : "border-villa-primary-light bg-white"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="card-title">{t({ en: "Pay Full 100%", zh: "支付 100% 全款" })}</h2>
-                        <p className="muted-copy m-0">{t({ en: `Today: RM${total} · No balance later`, zh: `今天：RM${total} · 无尾款` })}</p>
-                      </div>
-                      <span className={`grid h-7 w-7 place-items-center rounded-full ${amountMode === "full" ? "bg-villa-primary text-white" : "border border-villa-primary-light text-transparent"}`}>✓</span>
-                    </div>
-                  </button>
-                </div>
-              </section>
+          {submittedOrder ? (
+            <section className="payment-confirm-card payment-confirm-card-top">
+              <span className="payment-confirm-icon"><ShieldIcon /></span>
+              <div className="min-w-0 flex-1">
+                <p className="payment-mini-label">{t({ en: "Waiting verification", zh: "等待核对付款" })}</p>
+                <h2>{formatOrderId(submittedOrder.orderId)}</h2>
+                <p>{t({ en: "Your order is saved. Pet Villa will verify the QR payment before confirming the booking.", zh: "订单已保存。Pet Villa 会先核对 QR 付款，确认收到款项后才正式确认预约。" })}</p>
+              </div>
+              <div className="payment-confirm-actions">
+                <a href="/orders">{t({ en: "View Order", zh: "查看订单" })}</a>
+                <a href="https://wa.me/601163830339" target="_blank" rel="noreferrer"><WhatsAppIcon /> WhatsApp</a>
+              </div>
+            </section>
+          ) : null}
 
-              <section className="villa-card">
-                <h2 className="section-title">{t({ en: "Recommended Payment", zh: "推荐付款方式" })}</h2>
-                <div className="mt-4 grid gap-3">
-                  <PaymentLogo method={paymentMethods[0]} selected={method === "duitnow"} onClick={() => setMethod("duitnow")} />
-                  <div className="rounded-[18px] border border-villa-primary-light bg-white">
-                    <button
-                      type="button"
-                      onClick={() => setMethodsOpen((value) => !value)}
-                      className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-black text-villa-text-primary"
-                    >
-                      {t({ en: "Other Methods", zh: "其他付款方式" })}
-                      <span>{methodsOpen ? "⌃" : "⌄"}</span>
-                    </button>
-                    {methodsOpen ? (
-                      <div className="grid gap-3 border-t border-villa-primary-light p-3">
-                        {paymentMethods.slice(1).map((item) => (
-                          <PaymentLogo key={item.id} method={item} selected={method === item.id} onClick={() => setMethod(item.id)} />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
+          <section className="payment-checkout-card">
+            <div className="payment-receipt-strip">
+              <div>
+                <span className="payment-pet-avatar payment-pet-avatar-stack">
+                  {booking?.pets.map((pet) => (
+                    <img key={pet.id} src={dogAvatarSrc(pet.photoDataUrl)} alt={pet.name} />
+                  ))}
+                </span>
+                <p>{petNames || t({ en: "Selected pets", zh: "已选宠物" })}</p>
+                <strong>{stayLabel}</strong>
+              </div>
+              <div>
+                <span><MoonIcon /></span>
+                <p>{draft.serviceLabel}</p>
+                <strong>{draft.dateLabel}</strong>
+              </div>
+              <div>
+                <span><CalendarIcon /></span>
+                <p>{paymentContext === "balance" ? t({ en: "After Payment", zh: "付款后尾款" }) : t({ en: "Balance", zh: "尾款" })}</p>
+                <strong>RM{balance}</strong>
+              </div>
+            </div>
 
-                <div className="mt-4 rounded-[20px] border border-villa-primary-light bg-villa-primary-bg p-4">
-                  {method === "duitnow" ? (
-                    <div className="text-center">
-                      <div className="mb-4 rounded-[18px] border border-villa-primary-light bg-white p-4">
-                        <img src="/logo.png" alt="Pet Villa" className="mx-auto h-14 w-28 object-contain" />
-                        <p className="m-0 mt-2 text-xs font-black uppercase text-villa-text-primary">Pet Villa Sdn Bhd</p>
-                      </div>
-                      <h3 className="card-title">{t({ en: "Scan To Pay", zh: "扫码付款" })}</h3>
-                      <p className="mt-1 text-xs font-bold text-villa-text-secondary">DuitNow QR · Scan & Pay</p>
-                      <div className="mx-auto mt-4 flex h-56 w-52 max-w-full flex-col items-center justify-center rounded-[20px] bg-[#e91e63] p-4 shadow-md">
-                        <img src="/assets/payment/duitnow.svg" alt="DuitNow QR" className="mb-2 h-10 w-28 object-contain rounded-[10px] bg-white px-2" />
-                        <div className="grid h-full w-full place-items-center rounded-[12px] bg-white">
-                          <div className="h-32 w-32 bg-[repeating-linear-gradient(45deg,#e91e63_0_6px,#ffffff_6px_12px)]" />
-                        </div>
-                      </div>
-                      <p className="mt-4 text-xs font-black uppercase text-villa-primary">Pet Villa Sdn Bhd</p>
-                      <div className="mt-4 rounded-[16px] bg-white p-3">
-                        <p className="m-0 text-xs font-bold text-villa-text-secondary">{t({ en: "Amount To Pay", zh: "需付款金额" })}</p>
-                        <p className="m-0 text-[28px] font-black text-villa-primary">RM{amount}</p>
-                        <p className="m-0 text-xs font-bold text-villa-text-muted">{amountMode === "deposit" ? t({ en: "Deposit", zh: "订金" }) : t({ en: "Full payment", zh: "全款" })}</p>
-                      </div>
-                    </div>
-                  ) : null}
-                  {method === "fpx" ? (
-                    <label className="grid gap-2">
-                      <span className="villa-label">{t({ en: "Select Bank", zh: "选择银行" })}</span>
-                      <select className="villa-input">
-                        <option>Maybank2u</option>
-                        <option>CIMB Clicks</option>
-                        <option>RHB Now</option>
-                        <option>Public Bank</option>
-                      </select>
-                    </label>
-                  ) : null}
-                  {method === "tng" ? <p className="body-copy m-0">Touch 'n Go eWallet checkout will open securely.</p> : null}
-                  {method === "grabpay" ? <p className="body-copy m-0">GrabPay checkout will open securely.</p> : null}
-                  {method === "card" ? (
-                    <div className="grid gap-3">
-                      <input className="villa-input" placeholder={t({ en: "Card number", zh: "银行卡号" })} />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <input className="villa-input" placeholder="MM/YY" />
-                        <input className="villa-input" placeholder="CVC" />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-            </main>
+            <div className="payment-section-caption">
+              <div>
+                <p>{t({ en: "Step 1", zh: "步骤 1" })}</p>
+                <h2>{paymentContext === "balance" ? t({ en: "Pay Outstanding Balance", zh: "支付尾款" }) : t({ en: "Choose Amount", zh: "选择付款金额" })}</h2>
+              </div>
+              <span>{paymentContext === "balance" ? t({ en: "Exact balance", zh: "准确尾款" }) : t({ en: "Tap to select", zh: "点击选择" })}</span>
+            </div>
 
-            <aside className="villa-card h-fit lg:sticky lg:top-24">
-              <h2 className="section-title">{t({ en: "Payment Details", zh: "付款明细" })}</h2>
-              <div className="mt-4 rounded-[18px] border border-villa-primary-light bg-white p-4">
-                {voucherDiscount > 0 ? (
-                  <>
-                    <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
-                      <span>{t({ en: "Subtotal", zh: "小计" })}</span>
-                      <span className="text-base font-black text-villa-text-primary">RM{subtotal}</span>
-                    </div>
-                    <div className="mt-3 flex justify-between text-sm font-bold text-villa-accent-green">
-                      <span>{booking?.voucherCode || t({ en: "Voucher", zh: "优惠券" })}</span>
-                      <span>-RM{voucherDiscount}</span>
-                    </div>
-                    <div className="my-4 border-t border-dashed border-villa-primary-light" />
-                  </>
-                ) : null}
-                <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
-                  <span>{t({ en: "Booking Total", zh: "预约总额" })}</span>
-                  <span className="text-lg font-black text-villa-text-primary">RM{total}</span>
-                </div>
-                <div className="my-4 border-t border-dashed border-villa-primary-light" />
-                <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
-                  <span>{t({ en: "Pay Today", zh: "今天付款" })}</span>
-                  <span className="text-xl font-black text-villa-primary">RM{amount}</span>
-                </div>
-                <div className="my-4 border-t border-dashed border-villa-primary-light" />
-                <div className="flex justify-between text-sm font-bold text-villa-text-secondary">
-                  <span>{t({ en: "Balance Later", zh: "稍后尾款" })}</span>
-                  <span className="text-lg font-black text-villa-text-primary">RM{balance}</span>
+            <div className="payment-amount-switch">
+              {paymentContext !== "balance" && hasDeposit ? (
+                <button type="button" data-active={amountMode === "deposit"} onClick={() => setAmountMode("deposit")}>
+                  <span>{t({ en: "Recommended", zh: "推荐" })}</span>
+                  <strong>{t({ en: "RM50 Deposit", zh: "RM50 订金" })}</strong>
+                  <small>{t({ en: `Later RM${draft.balance}`, zh: `之后 RM${draft.balance}` })}</small>
+                  <b>{amountMode === "deposit" ? "✓" : "Tap"}</b>
+                </button>
+              ) : null}
+              <button type="button" data-active={amountMode === "full"} onClick={() => setAmountMode("full")}>
+                <span>{paymentContext === "balance" ? t({ en: "Outstanding", zh: "待付" }) : hasDeposit ? t({ en: "Optional", zh: "可选" }) : t({ en: "Required", zh: "需要" })}</span>
+                <strong>{paymentContext === "balance" ? t({ en: "Pay Balance", zh: "支付尾款" }) : t({ en: "Pay in Full", zh: "全额付款" })}</strong>
+                <small>RM{paymentContext === "balance" ? amount : total}</small>
+                <b>{amountMode === "full" ? "✓" : "Tap"}</b>
+              </button>
+            </div>
+
+            <div className="payment-section-caption payment-section-caption-method">
+              <div>
+                <p>{t({ en: "Step 2", zh: "步骤 2" })}</p>
+                <h2>{t({ en: "Payment Method", zh: "付款方式" })}</h2>
+              </div>
+              <span>{selectedMethod.shortName}</span>
+            </div>
+
+            <div className="payment-logo-rail" aria-label={t({ en: "Payment methods", zh: "付款方式" })}>
+              {paymentMethods.map((item) => (
+                <PaymentLogo key={item.id} method={item} selected={method === item.id} compact onClick={() => setMethod(item.id)} />
+              ))}
+            </div>
+
+            <div className="payment-method-preview">
+              <div className="payment-method-heading">
+                <PaymentLogo method={selectedMethod} compact />
+                <div>
+                  <p>{t({ en: "Selected Method", zh: "已选付款方式" })}</p>
+                  <h2>{selectedMethod.name}</h2>
                 </div>
               </div>
-              <p className="mt-4 rounded-[16px] bg-villa-primary-bg p-3 text-xs font-semibold text-villa-text-secondary">
-                {t({ en: "Remaining balance can be paid later from My Orders.", zh: "余款可之后在我的订单页面支付。" })}
-              </p>
-              <div className="mt-4 rounded-pill bg-white px-4 py-3 text-center text-xs font-bold shadow-sm">SSL Secure Payment</div>
-              {message ? <p className="mt-3 rounded-[14px] bg-villa-primary-bg p-3 text-xs font-bold text-villa-primary">{message}</p> : null}
-              <button type="button" onClick={() => void confirmPayment()} className="villa-button mt-4 w-full">
-                {buttonText}
+
+              {method === "qr" ? (
+                <div className="payment-duitnow-compact">
+                  <div className="payment-qr-mini payment-qr-real">
+                    <img src={businessSettings.paymentQrUrl} alt="Pet Villa Touch 'n Go DuitNow QR" />
+                  </div>
+                  <div className="payment-merchant-compact">
+                    <span>{t({ en: "Scan with", zh: "扫码方式" })}</span>
+                    <strong>{t({ en: "Touch 'n Go / DuitNow QR", zh: "Touch 'n Go / DuitNow QR" })}</strong>
+                    <p>{t({ en: "Scan the QR, pay the exact amount, then tap I Have Paid. Pet Villa will verify before confirmation.", zh: "扫描 QR、支付正确金额后点击我已付款。Pet Villa 核对收到款项后才会确认预约。" })}</p>
+                    <div>
+                      <small>{t({ en: "Pay Today", zh: "今天付款" })}</small>
+                      <b>RM{amount}</b>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="payment-bank-transfer-card">
+                  <div className="payment-bank-row">
+                    <span>{t({ en: "Account Name", zh: "户口名字" })}</span>
+                    <strong>{businessSettings.accountName}</strong>
+                  </div>
+                  <div className="payment-bank-row">
+                    <span>{t({ en: "Bank", zh: "银行" })}</span>
+                    <strong>{businessSettings.bankName}</strong>
+                  </div>
+                  <div className="payment-bank-row">
+                    <span>{t({ en: "Account Number", zh: "户口号码" })}</span>
+                    <strong>{businessSettings.accountNumber}</strong>
+                  </div>
+                  <div className="payment-bank-amount">
+                    <span>{t({ en: "Transfer Today", zh: "今天转账" })}</span>
+                    <b>RM{amount}</b>
+                  </div>
+                  <p>{t({ en: "Transfer the exact amount, then tap I Have Paid. Pet Villa will verify the received payment before confirming your order.", zh: "转账正确金额后点击我已付款。Pet Villa 会先核对收到款项，之后才确认订单。" })}</p>
+                </div>
+              )}
+            </div>
+
+            <details className="payment-details-toggle">
+              <summary>
+                <span className="payment-details-summary-copy">
+                  <strong>{t({ en: "Receipt Details", zh: "收据明细" })}</strong>
+                  <small>{t({ en: "Tap to view booking total, paid today and balance.", zh: "点击查看预约总额、今天付款和尾款。" })}</small>
+                </span>
+                <span className="payment-details-summary-total">RM{total}<b>⌄</b></span>
+              </summary>
+              <div>
+                {voucherDiscount > 0 ? (
+                  <>
+                    <p><span>{t({ en: "Subtotal", zh: "小计" })}</span><strong>RM{subtotal}</strong></p>
+                    {booking?.appliedVouchers?.length ? booking.appliedVouchers.map((voucher) => (
+                      <p key={voucher.id}><span>{voucher.code}</span><strong>-RM{voucher.discount}</strong></p>
+                    )) : (
+                      <p><span>{booking?.voucherCode || t({ en: "Voucher", zh: "优惠券" })}</span><strong>-RM{voucherDiscount}</strong></p>
+                    )}
+                  </>
+                ) : null}
+                <p><span>{t({ en: "Booking Total", zh: "预约总额" })}</span><strong>RM{total}</strong></p>
+                <p><span>{t({ en: "Pay Today", zh: "今天付款" })}</span><strong>RM{amount}</strong></p>
+                <p><span>{t({ en: "Balance Later", zh: "稍后尾款" })}</span><strong>RM{balance}</strong></p>
+              </div>
+            </details>
+
+            <div className="payment-trust-row">
+              <span><ShieldIcon /> SSL Secure</span>
+              <span><WhatsAppIcon /> WhatsApp Support</span>
+            </div>
+
+            {message ? <p className="payment-message">{message}</p> : null}
+            {submittedOrder ? (
+              <a href="/orders" className="payment-primary payment-primary-compact w-full">
+                {t({ en: "View Submitted Order", zh: "查看已提交订单" })}
+              </a>
+            ) : (
+              <button type="button" disabled={paymentSubmitting} onClick={() => void confirmPayment()} className="payment-primary payment-primary-compact w-full">
+                {paymentSubmitting ? t({ en: "Submitting securely...", zh: "正在安全提交..." }) : buttonText}
               </button>
+            )}
+          </section>
+
+          {submittedOrder ? (
+            <aside className="payment-success-sheet" role="status" aria-live="polite">
+              <span><ShieldIcon /></span>
+              <div>
+                <p>{t({ en: "Waiting verification", zh: "等待核对付款" })}</p>
+                <strong>{formatOrderId(submittedOrder.orderId)}</strong>
+              </div>
+              <a href="/orders">{t({ en: "View", zh: "查看" })}</a>
             </aside>
-          </div>
+          ) : null}
         </section>
       </OwnerSidebar>
     </ProtectedPage>

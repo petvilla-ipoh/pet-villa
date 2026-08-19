@@ -3,7 +3,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentUser, getCurrentUserId, type PetProfile } from "./petProfiles";
 import { getSupabaseBrowserClient } from "./supabase";
-import { completeReferralRewardForFirstOrder, markVoucherUsed } from "./vouchers";
+import { fetchAuthenticatedCustomerJson, getAuthenticatedSupabaseContext, retrySupabaseRead } from "./dataReliability";
+import { markVoucherUsed, restoreVoucherForOrder, type AppliedVoucher } from "./vouchers";
+import { isBusinessOrder, isVoidedOrder, type SafeVoidReasonCode } from "./safeVoid";
 
 export type BookingDraft = {
   id: string;
@@ -13,6 +15,8 @@ export type BookingDraft = {
   dateLabel: string;
   startDateISO?: string;
   endDateISO?: string;
+  startTime?: string;
+  endTime?: string;
   nights: number;
   hours: number;
   pets: Array<Pick<PetProfile, "id" | "name" | "breed" | "weight" | "photoDataUrl">>;
@@ -22,27 +26,67 @@ export type BookingDraft = {
   voucherCode?: string;
   voucherTitle?: string;
   voucherDiscount?: number;
+  manualDiscount?: number;
+  appliedVouchers?: AppliedVoucher[];
   deposit: number;
   balance: number;
   specialRequest: string;
+  operationalWhatsappConsentLanguage?: "en" | "zh";
   createdAt: string;
 };
 
 export type VillaOrder = BookingDraft & {
+  orderRowId?: string;
   orderId: string;
   customerId?: string;
+  customerSource?: "auth" | "host";
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
   paid: number;
-  status: "balance" | "active" | "confirmed" | "staying" | "awaiting_checkout" | "ready_pickup" | "completed" | "cancelled";
+  chargeTotal?: number;
+  charges?: OrderCharge[];
+  status: "pending_verification" | "balance" | "active" | "confirmed" | "staying" | "awaiting_checkout" | "ready_pickup" | "completed" | "cancelled";
   cancelledAt?: string;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReasonCode?: SafeVoidReasonCode | null;
+  voidReason?: string | null;
   photosAvailable: number;
+  paymentSubmission?: {
+    id?: string;
+    amount: number;
+    method: "qr" | "bank";
+    submittedAt: string;
+  };
+  completedAt?: string | null;
+  checkedInAt?: string | null;
+  checkedInBusinessDate?: string | null;
+  paymentVerifications?: Array<{
+    amount: number;
+    mode: "submission" | "balance";
+    verifiedAt: string;
+  }>;
+  legacyCollectionAttributions?: Array<{
+    amount: number;
+    businessMonth: string;
+    precision: "month_only";
+    attributedAt: string;
+  }>;
   review?: {
     stars: number;
     body: string;
     createdAt: string;
   };
+};
+
+export type OrderCharge = {
+  id: string;
+  amount: number;
+  reasonCode: "late_checkout";
+  note: string;
+  createdAt: string;
+  createdBy?: string | null;
 };
 
 type BookingRow = {
@@ -71,7 +115,9 @@ type BookingRow = {
 
 type OrderRow = {
   id: string;
-  owner_id: string;
+  order_row_id?: string | null;
+  owner_id: string | null;
+  host_customer_id?: string | null;
   booking_id: string | null;
   order_id: string;
   client_draft_id: string | null;
@@ -95,9 +141,28 @@ type OrderRow = {
   voucher_code: string | null;
   voucher_title: string | null;
   voucher_discount_rm: number | string | null;
+  manual_discount_rm: number | string | null;
+  charge_total_rm?: number | string | null;
+  order_charges?: Array<{
+    id: string;
+    amount_rm: number | string;
+    reason_code: "late_checkout";
+    note: string | null;
+    created_at: string;
+    created_by: string | null;
+  }> | null;
   special_request: string | null;
   status: VillaOrder["status"];
   cancelled_at: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason_code?: SafeVoidReasonCode | null;
+  void_reason?: string | null;
+  completed_at?: string | null;
+  checked_in_at?: string | null;
+  checked_in_business_date?: string | null;
+  payment_verifications?: VillaOrder["paymentVerifications"] | null;
+  legacy_collection_attributions?: VillaOrder["legacyCollectionAttributions"] | null;
   photos_available: number | null;
   review: VillaOrder["review"] | null;
   order_payload: VillaOrder | null;
@@ -105,13 +170,16 @@ type OrderRow = {
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const allowHostDevelopmentFallback = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_ENABLE_HOST_LOCAL_FALLBACK === "true";
+const allowCustomerDevelopmentFallback = process.env.NODE_ENV !== "production"
+  && process.env.NEXT_PUBLIC_ENABLE_CUSTOMER_LOCAL_FALLBACK === "true";
 
 function draftKey(userId = getCurrentUserId()) {
   return `pet-villa-booking-draft:${userId}`;
 }
 
 function orderKey(userId = getCurrentUserId()) {
-  return `pet-villa-orders:${userId}`;
+  return `pet-villa-owner-scoped-orders-v2:${userId}`;
 }
 
 function bookingMigrationKey(userId = getCurrentUserId()) {
@@ -137,11 +205,7 @@ function toSen(value: number | undefined) {
 }
 
 async function getSupabaseContext() {
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
-  return { supabase, userId: data.user.id };
+  return getAuthenticatedSupabaseContext();
 }
 
 function writeBookingDraft(draft: BookingDraft, userId = getCurrentUserId(), notify = true) {
@@ -207,6 +271,7 @@ function draftFromRow(row: BookingRow): BookingDraft {
     voucherCode: row.voucher_code || payload.voucherCode,
     voucherTitle: row.voucher_title || payload.voucherTitle,
     voucherDiscount: toNumber(row.voucher_discount_rm) || payload.voucherDiscount,
+    appliedVouchers: payload.appliedVouchers,
     deposit: toNumber(row.deposit_rm) || payload.deposit || 0,
     balance: toNumber(row.balance_rm) || payload.balance || 0,
     specialRequest: row.special_request || payload.specialRequest || "",
@@ -228,15 +293,32 @@ async function upsertSupabaseBookingDraft(draft: BookingDraft, webStatus: "draft
   return data?.id as string | undefined;
 }
 
-export function saveBookingDraft(draft: BookingDraft, userId = getCurrentUserId()) {
-  writeBookingDraft(draft, userId);
-  void upsertSupabaseBookingDraft(draft)
-    .then((bookingId) => {
-      if (!bookingId) return;
-      writeBookingDraft({ ...draft, bookingId }, userId, false);
-      window.localStorage.setItem(bookingMigrationKey(userId), "true");
-    })
-    .catch((error) => console.warn("Supabase booking draft save failed; using localStorage fallback.", error));
+export async function saveBookingDraft(draft: BookingDraft, userId = getCurrentUserId()) {
+  const context = await getSupabaseContext();
+  if (!context) {
+    if (allowCustomerDevelopmentFallback) {
+      writeBookingDraft(draft, userId);
+      return draft;
+    }
+    throw new Error("Please sign in again before continuing to payment.");
+  }
+  try {
+    const bookingId = await upsertSupabaseBookingDraft(draft, "draft", context.userId);
+    if (!bookingId) throw new Error("Booking draft was not saved.");
+    const synced = { ...draft, bookingId };
+    writeBookingDraft(synced, context.userId, false);
+    window.localStorage.setItem(bookingMigrationKey(context.userId), "true");
+    window.dispatchEvent(new Event("pet-villa-booking-draft"));
+    return synced;
+  } catch (error) {
+    if (allowCustomerDevelopmentFallback) {
+      console.warn("Supabase booking draft save failed; using the explicit development fallback.", error);
+      writeBookingDraft(draft, userId);
+      return draft;
+    }
+    console.error("Supabase booking draft save failed.", error);
+    throw new Error("Your booking could not be saved. Please check your connection and try again.");
+  }
 }
 
 export function readBookingDraft(userId = getCurrentUserId()): BookingDraft | null {
@@ -252,10 +334,13 @@ export async function loadBookingDraft() {
   const fallbackUserId = getCurrentUserId();
   const fallback = readBookingDraft(fallbackUserId);
   const context = await getSupabaseContext();
-  if (!context) return fallback;
+  if (!context) {
+    if (allowCustomerDevelopmentFallback) return fallback;
+    throw new Error("Please sign in again to continue your booking.");
+  }
 
   try {
-    if (fallback) {
+    if (allowCustomerDevelopmentFallback && fallback) {
       const bookingId = await upsertSupabaseBookingDraft(fallback, "draft", context.userId);
       const synced = bookingId ? { ...fallback, bookingId } : fallback;
       writeBookingDraft(synced, context.userId, false);
@@ -263,22 +348,22 @@ export async function loadBookingDraft() {
       return synced;
     }
 
-    const { data, error } = await context.supabase
-      .from("bookings")
-      .select("id, client_draft_id, service, service_label, date_label, start_date, end_date, nights, hours, pets, subtotal_rm, total_rm, deposit_rm, balance_rm, voucher_id, voucher_code, voucher_title, voucher_discount_rm, special_request, draft_payload, created_at")
-      .eq("web_status", "draft")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
+    const data = await retrySupabaseRead(async () => {
+      const response = await fetchAuthenticatedCustomerJson<{ booking: BookingRow | null }>("/api/customer/booking-draft");
+      return response.booking;
+    });
     if (!data) return null;
     const draft = draftFromRow(data as BookingRow);
     writeBookingDraft(draft, context.userId, false);
     window.localStorage.setItem(bookingMigrationKey(context.userId), "true");
     return draft;
   } catch (error) {
-    console.warn("Supabase booking draft load failed; using localStorage fallback.", error);
-    return fallback;
+    if (allowCustomerDevelopmentFallback) {
+      console.warn("Supabase booking draft load failed; using the explicit development fallback.", error);
+      return fallback;
+    }
+    console.error("Supabase booking draft load failed.", error);
+    throw new Error("Your booking could not be loaded. Please return to Booking and try again.");
   }
 }
 
@@ -323,6 +408,8 @@ function orderPayload(order: VillaOrder, ownerId: string, bookingId?: string) {
     voucher_code: order.voucherCode || null,
     voucher_title: order.voucherTitle || null,
     voucher_discount_rm: order.voucherDiscount || 0,
+    manual_discount_rm: order.manualDiscount || 0,
+    charge_total_rm: order.chargeTotal || 0,
     special_request: order.specialRequest || "",
     status: order.status,
     cancelled_at: order.cancelledAt || null,
@@ -338,8 +425,10 @@ function orderFromRow(row: OrderRow): VillaOrder {
     ...payload,
     id: payload.id || row.client_draft_id || row.order_id,
     bookingId: row.booking_id || payload.bookingId,
+    orderRowId: row.order_row_id || row.id,
     orderId: row.order_id,
-    customerId: row.owner_id,
+    customerId: row.owner_id || row.host_customer_id || payload.customerId,
+    customerSource: row.host_customer_id ? "host" : "auth",
     customerName: row.customer_name || payload.customerName || "",
     customerPhone: row.customer_phone || payload.customerPhone || "",
     customerEmail: row.customer_email || payload.customerEmail || "",
@@ -360,22 +449,61 @@ function orderFromRow(row: OrderRow): VillaOrder {
     voucherCode: row.voucher_code || payload.voucherCode,
     voucherTitle: row.voucher_title || payload.voucherTitle,
     voucherDiscount: toNumber(row.voucher_discount_rm) || payload.voucherDiscount,
+    manualDiscount: toNumber(row.manual_discount_rm) || payload.manualDiscount || 0,
+    chargeTotal: toNumber(row.charge_total_rm) || payload.chargeTotal || 0,
+    charges: (row.order_charges || []).map((charge) => ({
+      id: charge.id,
+      amount: toNumber(charge.amount_rm),
+      reasonCode: charge.reason_code,
+      note: charge.note || "",
+      createdAt: charge.created_at,
+      createdBy: charge.created_by
+    })),
+    appliedVouchers: payload.appliedVouchers,
     specialRequest: row.special_request || payload.specialRequest || "",
     status: row.status,
     cancelledAt: row.cancelled_at || payload.cancelledAt,
+    voidedAt: row.voided_at || payload.voidedAt || null,
+    voidedBy: row.voided_by || payload.voidedBy || null,
+    voidReasonCode: row.void_reason_code || payload.voidReasonCode || null,
+    voidReason: row.void_reason || payload.voidReason || null,
+    completedAt: row.completed_at || payload.completedAt || null,
+    checkedInAt: row.checked_in_at || payload.checkedInAt || null,
+    checkedInBusinessDate: row.checked_in_business_date || payload.checkedInBusinessDate || null,
+    paymentVerifications: row.payment_verifications || payload.paymentVerifications || [],
+    legacyCollectionAttributions: row.legacy_collection_attributions || payload.legacyCollectionAttributions || [],
     photosAvailable: row.photos_available ?? payload.photosAvailable ?? 0,
     review: row.review || payload.review,
     createdAt: payload.createdAt || row.created_at
   };
 }
 
-async function listSupabaseOrders(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("id, owner_id, booking_id, order_id, client_draft_id, customer_name, customer_phone, customer_email, service, service_label, date_label, start_date, end_date, nights, hours, pets, subtotal_rm, total_rm, deposit_rm, balance_rm, paid_rm, voucher_id, voucher_code, voucher_title, voucher_discount_rm, special_request, status, cancelled_at, photos_available, review, order_payload, created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return ((data || []) as OrderRow[]).map(orderFromRow);
+type CustomerOrdersResponse = {
+  orders: OrderRow[];
+  reviews: Array<{
+    order_id: string;
+    rating: number | string | null;
+    comment: string | null;
+    quote: { en?: string; zh?: string } | null;
+    created_at: string;
+  }>;
+};
+
+async function listCustomerOrders() {
+  const { orders: data, reviews } = await fetchAuthenticatedCustomerJson<CustomerOrdersResponse>("/api/customer/orders");
+  const reviewsByOrder = new Map<string, VillaOrder["review"]>();
+  for (const review of reviews || []) {
+    const quote = review.quote && typeof review.quote === "object" ? review.quote : {};
+    reviewsByOrder.set(review.order_id, {
+      stars: Number(review.rating || 0),
+      body: review.comment || quote.en || quote.zh || "",
+      createdAt: review.created_at
+    });
+  }
+  return ((data || []) as OrderRow[]).map((row) => {
+    const order = orderFromRow(row);
+    return reviewsByOrder.has(order.orderId) ? { ...order, review: reviewsByOrder.get(order.orderId) } : order;
+  });
 }
 
 export async function saveOrderSnapshotToSupabase(order: VillaOrder, ownerId?: string) {
@@ -388,24 +516,23 @@ export async function saveOrderSnapshotToSupabase(order: VillaOrder, ownerId?: s
     bookingId = await upsertSupabaseBookingDraft(order, "ordered", userId) || undefined;
   }
 
-  if (userId !== context.userId) {
-    const { data, error } = await context.supabase
-      .from("orders")
-      .update(orderPayload({ ...order, bookingId }, userId, bookingId))
-      .eq("owner_id", userId)
-      .eq("order_id", order.orderId)
-      .select("id")
-      .maybeSingle();
-    if (error) throw error;
-    return data?.id as string | undefined;
-  }
-
   const { data, error } = await context.supabase
     .from("orders")
-    .upsert(orderPayload({ ...order, bookingId }, userId, bookingId), { onConflict: "owner_id,order_id" })
+    .insert(orderPayload({ ...order, bookingId }, userId, bookingId))
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (error.code !== "23505") throw error;
+    const { data: existing, error: existingError } = await context.supabase
+      .from("orders")
+      .select("id")
+      .eq("owner_id", userId)
+      .eq("order_id", order.orderId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (!existing?.id) throw error;
+    return existing.id as string;
+  }
 
   if (bookingId) {
     await context.supabase.from("bookings").update({ web_status: "ordered" }).eq("id", bookingId);
@@ -423,22 +550,27 @@ export async function loadOrders() {
   const fallbackUserId = getCurrentUserId();
   const fallback = readOrders(fallbackUserId);
   const context = await getSupabaseContext();
-  if (!context) return fallback;
+  if (!context) {
+    if (allowCustomerDevelopmentFallback) return fallback;
+    throw new Error("Your orders could not be loaded. Please sign in again or try later.");
+  }
 
   try {
     const migrationKey = orderMigrationKey(context.userId);
     const migrationDone = window.localStorage.getItem(migrationKey) === "true";
-    let orders = await listSupabaseOrders(context.supabase);
+    let orders = await retrySupabaseRead(() => listCustomerOrders());
     if (!migrationDone && orders.length === 0 && fallback.length > 0) {
       await migrateLocalOrdersToSupabase(fallback, context.userId);
-      orders = await listSupabaseOrders(context.supabase);
+      orders = await retrySupabaseRead(() => listCustomerOrders());
     }
+    orders = orders.filter(isBusinessOrder);
     writeOrders(orders, context.userId, false);
     window.localStorage.setItem(migrationKey, "true");
     return orders;
   } catch (error) {
-    console.warn("Supabase orders load failed; using localStorage fallback.", error);
-    return fallback;
+    if (allowCustomerDevelopmentFallback) return fallback;
+    console.error("Supabase orders load failed.", error);
+    throw new Error("Your orders could not be loaded from Pet Villa. Please try again.");
   }
 }
 
@@ -446,7 +578,7 @@ function readAllLocalOrders(): VillaOrder[] {
   if (typeof window === "undefined") return [];
   const orders: VillaOrder[] = [];
   Object.keys(window.localStorage)
-    .filter((key) => key.startsWith("pet-villa-orders:"))
+    .filter((key) => key.startsWith("pet-villa-owner-scoped-orders-v2:") || key.startsWith("pet-villa-orders:"))
     .forEach((key) => {
       try {
         orders.push(...JSON.parse(window.localStorage.getItem(key) || "[]"));
@@ -459,10 +591,32 @@ function readAllLocalOrders(): VillaOrder[] {
 
 export async function loadAllOrdersForHost() {
   const context = await getSupabaseContext();
-  if (!context) return readAllLocalOrders();
+  if (!context) {
+    if (allowHostDevelopmentFallback) return readAllLocalOrders();
+    throw new Error("Host orders could not be loaded. Please sign in again.");
+  }
 
   try {
-    const orders = await listSupabaseOrders(context.supabase);
+    const orders = await retrySupabaseRead(async () => {
+      const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw Object.assign(new Error("Your Host session expired. Please sign in again."), { status: 401 });
+      }
+
+      const response = await fetch("/api/host/orders", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store"
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw Object.assign(
+          new Error(body.error || "Host orders could not be loaded."),
+          { status: response.status }
+        );
+      }
+      return ((body.orders || []) as OrderRow[]).map(orderFromRow);
+    });
     const grouped = new Map<string, VillaOrder[]>();
     for (const order of orders) {
       if (!order.customerId) continue;
@@ -471,14 +625,17 @@ export async function loadAllOrdersForHost() {
     grouped.forEach((items, ownerId) => writeOrders(items, ownerId, false));
     return orders;
   } catch (error) {
-    console.warn("Supabase host orders load failed; using localStorage fallback.", error);
-    return readAllLocalOrders();
+    if (allowHostDevelopmentFallback) return readAllLocalOrders();
+    console.error("Supabase host orders load failed.", error);
+    throw new Error("Host orders could not be loaded from Supabase. Please try again.");
   }
 }
 
 export async function createOrderFromDraft(draft: BookingDraft, paid: number, userId = getCurrentUserId()) {
   const orders = readOrders(userId);
-  const orderId = `order-${Date.now()}`;
+  // A draft keeps one stable order identity so a retried payment submission cannot
+  // create a second order after an ambiguous network response.
+  const orderId = `PV-${draft.id.replace(/^draft-/, "").replace(/[^a-z0-9]/gi, "").toUpperCase()}`;
   const currentUser = getCurrentUser();
   const order: VillaOrder = {
     ...draft,
@@ -492,41 +649,110 @@ export async function createOrderFromDraft(draft: BookingDraft, paid: number, us
     status: paid > 0 ? "confirmed" : "balance",
     photosAvailable: 0
   };
-  writeOrders([order, ...orders], userId);
-  if (draft.voucherId && (draft.voucherDiscount || 0) > 0 && paid > 0) {
-    markVoucherUsed(draft.voucherId, orderId, draft.voucherDiscount || 0, draft.dateLabel, userId);
-  }
+  const appliedVouchers = paid > 0
+    ? draft.appliedVouchers?.length
+      ? draft.appliedVouchers
+      : draft.voucherId && (draft.voucherDiscount || 0) > 0
+        ? [{ id: draft.voucherId, code: draft.voucherCode || "", title: draft.voucherTitle || "", discount: draft.voucherDiscount || 0 }]
+        : []
+    : [];
+  let reservedVoucherCount = 0;
   try {
+    for (const voucher of appliedVouchers) {
+      await markVoucherUsed(voucher.id, orderId, voucher.discount, draft.dateLabel, userId);
+      reservedVoucherCount += 1;
+    }
     const bookingId = await upsertSupabaseBookingDraft(draft, "ordered");
-    await saveOrderSnapshotToSupabase({ ...order, bookingId });
+    const persistedId = await saveOrderSnapshotToSupabase({ ...order, bookingId: bookingId ?? undefined });
+    if (!persistedId) throw new Error("Authenticated Supabase order persistence is unavailable.");
+    order.orderRowId = persistedId;
     window.localStorage.setItem(orderMigrationKey(userId), "true");
   } catch (error) {
-    console.warn("Supabase order create failed; using localStorage fallback.", error);
+    try {
+      const recovered = (await loadOrders()).find((item) => item.orderId === orderId || item.id === draft.id);
+      if (recovered) return recovered;
+    } catch (recoveryError) {
+      console.error("Order persistence recovery check failed.", recoveryError);
+    }
+    if (reservedVoucherCount > 0) {
+      try {
+        await restoreVoucherForOrder(orderId, userId);
+      } catch (restoreError) {
+        console.error("Order save failed and its reserved voucher could not be restored.", restoreError);
+      }
+    }
+    if (!allowCustomerDevelopmentFallback) throw new Error("Your booking could not be saved. Please try again.");
+    console.warn("Supabase order create failed; using the explicit development fallback.", error);
   }
+  writeOrders([order, ...orders], userId);
   return order;
 }
 
 export async function ensureOrderFromDraft(draft: BookingDraft, userId = getCurrentUserId()) {
-  const existing = readOrders(userId).find((order) => order.id === draft.id && order.status !== "cancelled");
+  const orders = await loadOrders();
+  const formalOrderId = `PV-${draft.id.replace(/^draft-/, "").replace(/[^a-z0-9]/gi, "").toUpperCase()}`;
+  const existing = orders.find((order) =>
+    order.id === draft.id
+    || order.orderId === formalOrderId
+    || order.orderId === `order-${draft.id}`
+  );
+  if (existing?.status === "cancelled") {
+    throw new Error("This booking was cancelled. Please create a new booking before paying.");
+  }
   if (existing) return existing;
   return createOrderFromDraft(draft, 0, userId);
 }
 
-export async function updateOrder(orderId: string, updater: (order: VillaOrder) => VillaOrder, userId = getCurrentUserId()) {
-  const current = readOrders(userId);
-  const previous = current.find((order) => order.orderId === orderId);
-  const next = current.map((order) => (order.orderId === orderId ? updater(order) : order));
-  writeOrders(next, userId);
-  const updated = next.find((order) => order.orderId === orderId);
-  if (updated) {
-    try {
-      await saveOrderSnapshotToSupabase(updated);
-    } catch (error) {
-      console.warn("Supabase order update failed; using localStorage fallback.", error);
-    }
+async function customerOrderOperation(order: VillaOrder, operation: string, body?: unknown) {
+  if (!order.orderRowId || !isUuid(order.orderRowId)) {
+    throw new Error("This order is missing its secure record identity. Please refresh and try again.");
   }
-  if (updated?.status === "completed" && previous?.status !== "completed") {
-    completeReferralRewardForFirstOrder(orderId, userId);
+  if (isVoidedOrder(order)) throw new Error("This order is no longer available for customer actions.");
+  const context = await getSupabaseContext();
+  if (!context) throw new Error("Please sign in again before updating this order.");
+  const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error("Your session expired. Please sign in again.");
+  const response = await fetch(`/api/customer/orders/${encodeURIComponent(order.orderRowId)}/${operation}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Your order update could not be saved.");
+  return loadOrders();
+}
+
+export async function submitCustomerPayment(order: VillaOrder, amount: number, method: "qr" | "bank", idempotencyKey: string) {
+  if (!isUuid(idempotencyKey)) throw new Error("This payment submission needs a secure retry key. Please try again.");
+  return customerOrderOperation(order, "payment-submission", { amount, method, idempotencyKey });
+}
+
+export async function recordOperationalWhatsAppConsent(order: VillaOrder, language: "en" | "zh") {
+  if (!order.orderRowId || !isUuid(order.orderRowId)) {
+    throw new Error("This booking is missing its secure record identity. Please refresh and try again.");
   }
-  return next;
+  const context = await getSupabaseContext();
+  if (!context) throw new Error("Please sign in again before recording operational WhatsApp consent.");
+  const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error("Your session expired. Please sign in again.");
+  const response = await fetch(`/api/customer/orders/${encodeURIComponent(order.orderRowId)}/operational-whatsapp-consent`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ language })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Operational WhatsApp consent could not be saved.");
+  return result;
+}
+
+export async function cancelCustomerOrder(order: VillaOrder) {
+  return customerOrderOperation(order, "cancel");
 }

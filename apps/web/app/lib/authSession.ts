@@ -3,9 +3,11 @@
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase";
 
+const OBSOLETE_PASSWORD_STORAGE_KEYS = ["pet-villa-registered-user", "pet-villa-registered-users"] as const;
+
 type LocalSessionUser = {
   id: string;
-  role: "owner" | "host" | "admin";
+  role: "customer" | "owner" | "host" | "admin";
   name: string;
   email: string;
   phone: string;
@@ -17,7 +19,7 @@ function localUserFromSupabase(user: User): LocalSessionUser {
   const metadata = user.user_metadata || {};
   return {
     id: user.id,
-    role: (metadata.role as LocalSessionUser["role"]) || "owner",
+    role: (metadata.role as LocalSessionUser["role"]) || "customer",
     name: String(metadata.full_name || metadata.name || user.email || "Pet Owner"),
     email: String(user.email || metadata.email || ""),
     phone: String(metadata.phone || user.phone || ""),
@@ -26,13 +28,9 @@ function localUserFromSupabase(user: User): LocalSessionUser {
   };
 }
 
-export function readLocalSessionUser(): LocalSessionUser | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return JSON.parse(window.localStorage.getItem("pet-villa-session") || "{}")?.user || null;
-  } catch {
-    return null;
-  }
+export function clearObsoleteCustomerPasswordStorage() {
+  if (typeof window === "undefined") return;
+  for (const key of OBSOLETE_PASSWORD_STORAGE_KEYS) window.localStorage.removeItem(key);
 }
 
 export function writeLocalSessionUser(user: LocalSessionUser) {
@@ -41,36 +39,40 @@ export function writeLocalSessionUser(user: LocalSessionUser) {
   window.dispatchEvent(new Event("pet-villa-auth"));
 }
 
-export async function upsertSupabaseProfile(user: User, extra?: Partial<LocalSessionUser>) {
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) return;
-  const localUser = { ...localUserFromSupabase(user), ...extra };
-  await supabase.from("profiles").upsert({
-    id: user.id,
-    full_name: localUser.name,
-    phone: localUser.phone,
-    email: localUser.email,
-    role: localUser.role,
-    phone_verified: localUser.phoneVerified,
-    email_verified: localUser.emailVerified,
-    updated_at: new Date().toISOString()
-  });
-}
-
 export async function syncSupabaseSessionToLocalStorage() {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return readLocalSessionUser();
-  const { data } = await supabase.auth.getSession();
-  const user = data.session?.user;
-  if (!user) return readLocalSessionUser();
-  const localUser = localUserFromSupabase(user);
-  writeLocalSessionUser(localUser);
-  void upsertSupabaseProfile(user, localUser);
-  return localUser;
+  if (!supabase) return null;
+  try {
+    let data: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"] | null = null;
+    let lastError: unknown;
+    for (const delay of [0, 250, 750]) {
+      if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+      try {
+        const result = await supabase.auth.getSession();
+        if (result.error) throw result.error;
+        data = result.data;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!data) throw lastError || new Error("Supabase session check failed.");
+    const user = data.session?.user;
+    if (!user) {
+      window.localStorage.removeItem("pet-villa-session");
+      return null;
+    }
+    const localUser = localUserFromSupabase(user);
+    clearObsoleteCustomerPasswordStorage();
+    writeLocalSessionUser(localUser);
+    return localUser;
+  } catch (error) {
+    console.error("Supabase session hydration failed.", error);
+    return null;
+  }
 }
 
 export async function hasAuthSession() {
-  if (readLocalSessionUser()) return true;
   if (!isSupabaseConfigured()) return false;
   const user = await syncSupabaseSessionToLocalStorage();
   return Boolean(user);

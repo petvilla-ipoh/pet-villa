@@ -7,12 +7,12 @@ export const pool = new Pool({
   ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined
 });
 
-export async function query<T>(text: string, values: unknown[] = []) {
+export async function query<T extends pg.QueryResultRow>(text: string, values: unknown[] = []) {
   const result = await pool.query<T>(text, values);
   return result;
 }
 
-export async function one<T>(text: string, values: unknown[] = []) {
+export async function one<T extends pg.QueryResultRow>(text: string, values: unknown[] = []) {
   const result = await query<T>(text, values);
   return result.rows[0] ?? null;
 }
