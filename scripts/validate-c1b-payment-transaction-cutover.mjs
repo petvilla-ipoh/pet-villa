@@ -28,7 +28,7 @@ const customerSubmissionRoute = read("apps/web/app/api/customer/orders/[orderId]
 const hostVerifyRoute = read("apps/web/app/api/host/orders/[orderId]/verify-payment/route.ts");
 const hostRejectRoute = read("apps/web/app/api/host/orders/[orderId]/reject-payment/route.ts");
 const hostPrepareRoute = read("apps/web/app/api/host/orders/[orderId]/payment-submission/route.ts");
-const consentRoute = read("apps/web/app/api/customer/orders/[orderId]/operational-whatsapp-consent/route.ts");
+const customerOrdersRoute = read("apps/web/app/api/customer/orders/route.ts");
 const hostOrderRoute = read("apps/web/app/api/host/orders/[orderId]/route.ts");
 const hostOrdersRoute = read("apps/web/app/api/host/orders/route.ts");
 const orderFlow = read("apps/web/app/lib/orderFlow.ts");
@@ -44,10 +44,13 @@ function functionBlock(signature) {
 }
 
 const submitRpc = functionBlock("create or replace function public.submit_customer_order_payment(\n  p_order_row_id uuid,\n  p_owner_user_id uuid,\n  p_amount numeric,\n  p_method text,\n  p_idempotency_key text");
+const legacySubmitRpc = functionBlock("create or replace function public.submit_customer_order_payment(\n  p_order_row_id uuid,\n  p_owner_user_id uuid,\n  p_amount numeric,\n  p_method text\n)");
 const verifyRpc = functionBlock("create or replace function public.verify_host_order_payment(\n  p_order_row_id uuid,\n  p_actor_user_id uuid,\n  p_mode text,\n  p_payment_submission_id uuid");
+const legacyVerifyRpc = functionBlock("create or replace function public.verify_host_order_payment(\n  p_order_row_id uuid,\n  p_actor_user_id uuid,\n  p_mode text\n)");
 const rejectRpc = functionBlock("create or replace function public.reject_host_order_payment(");
 const legacyRpc = functionBlock("create or replace function public.materialize_legacy_pending_payment_submission(");
 const consentRpc = functionBlock("create or replace function public.record_operational_whatsapp_consent(");
+const onlineBookingRpc = functionBlock("create or replace function public.create_customer_online_order_with_operational_whatsapp_consent(");
 
 expect("C1B is one atomic forward migration", migration.trimStart().startsWith("begin;") && migration.trimEnd().endsWith("commit;"));
 expect("C1A migration remains byte-for-byte accepted", crypto.createHash("sha256").update(c1a).digest("hex").toUpperCase() === "5AF8A6AC69FC4001D5FFBBF092D0A827F033E597BC455C2EB41849D6259E30A2");
@@ -60,6 +63,8 @@ expect("Customer submission uses a durable retry key", submitRpc.includes("p_ide
 expect("Customer submission has no direct-write fallback", !customerSubmissionRoute.includes("submitWithProtectedServerFallback") && !customerSubmissionRoute.includes('.from("orders").update'));
 expect("Customer submission never changes verified money", !/update public\.orders\s+set paid_rm|update public\.orders\s+set[\s\S]{0,80}balance_rm/i.test(submitRpc));
 expect("Customer submission emits FIRST and LATER event classes", submitRpc.includes("FIRST_PAYMENT_SUBMITTED_PENDING_VERIFICATION") && submitRpc.includes("LATER_BALANCE_PAYMENT_SUBMITTED_PENDING_VERIFICATION"));
+expect("Payment submission has no WhatsApp consent eligibility gate", !submitRpc.includes("operational_whatsapp_consents") && !legacySubmitRpc.includes("operational_whatsapp_consents"));
+expect("Old four-parameter Customer RPC remains a safe durable compatibility path", legacySubmitRpc.includes("legacy-runtime:") && legacySubmitRpc.includes("return public.submit_customer_order_payment(") && legacySubmitRpc.includes("p_method,"));
 expect("Legacy pending payloads are materialized only on touch", legacyRpc.includes("paymentSubmission") && legacyRpc.includes("submitted_at_value") && legacyRpc.includes("No FIRST/LATER event is fabricated here"));
 expect("Legacy materialization fails closed on missing facts", legacyRpc.includes("cannot be materialized safely") && legacyRpc.includes("previous_status") && legacyRpc.includes("submitted_at_value"));
 
@@ -69,6 +74,7 @@ expect("Host Verify changes money exactly through durable submission", verifyRpc
 expect("BOOKING_CONFIRMED is once-only on first verified money", verifyRpc.includes("target_order.paid_rm, 0)) = 0") && verifyRpc.includes("BOOKING_CONFIRMED:") && verifyRpc.includes("on conflict (occurrence_key) do nothing"));
 expect("Later ordinary balance verification emits no second confirmation", verifyRpc.includes("if p_mode = 'submission'\n    and greatest") && !verifyRpc.includes("LATER_BALANCE_PAYMENT_VERIFIED"));
 expect("Host balance mode is blocked by a pending Customer submission", verifyRpc.includes("Resolve the pending customer payment submission before recording a balance payment."));
+expect("Old three-parameter Host Verify RPC remains a safe compatibility path", legacyVerifyRpc.includes("materialize_legacy_pending_payment_submission") && legacyVerifyRpc.includes("return public.verify_host_order_payment("));
 
 expect("Host Reject requires payments.manage and a specific submission", hostRejectRoute.includes('authorizeHostRequest(request, "payments.manage")') && hostRejectRoute.includes("paymentSubmissionId") && rejectRpc.includes("p_payment_submission_id is null"));
 expect("Host Reject is a narrow pending-to-rejected transition", rejectRpc.includes("set status = 'rejected'") && rejectRpc.includes("target_submission.status = 'verified'") && rejectRpc.includes("target_submission.status = 'rejected'"));
@@ -81,17 +87,19 @@ expect("Host Check In UI follows the same paid gate", hostPage.includes("Math.ma
 expect("Checkout remains blocked while balance remains", hostOrderRoute.includes('next.status === "ready_pickup" && balance > 0') && hostOrderRoute.includes("before checking out this booking"));
 
 expect("Consent checkbox is required and unchecked by default", bookingPage.includes("useState(false)") && bookingPage.includes('id="booking-whatsapp-consent"') && bookingPage.includes("!operationalWhatsAppConsent"));
-expect("Online booking payment is server-blocked without consent", submitRpc.includes("Operational WhatsApp consent is required before the first online payment submission."));
+expect("New Online Booking is atomically protected by server-owned consent", customerOrdersRoute.includes("authorizeCustomerRequest(request)") && customerOrdersRoute.includes("create_customer_online_order_with_operational_whatsapp_consent") && onlineBookingRpc.includes("insert into public.orders") && onlineBookingRpc.includes("perform public.record_operational_whatsapp_consent") && onlineBookingRpc.includes("update public.bookings"));
+expect("New Booking consent language survives the saved draft boundary", orderFlow.includes("operationalWhatsappConsentLanguage: payload.operationalWhatsappConsentLanguage === \"en\" || payload.operationalWhatsappConsentLanguage === \"zh\"") && orderFlow.includes("createCustomerOnlineOrderWithConsent({ ...order, bookingId }, consentLanguage)"));
+expect("Consent is not collected from historical payment UI", !paymentPage.includes("recordOperationalWhatsAppConsent") && !paymentPage.includes("required operational WhatsApp service updates before payment"));
 expect("Consent wording is server-owned and exact", consentRpc.includes("pet-villa-operational-whatsapp-v1") && consentRpc.includes("I agree to receive essential booking, payment and pet-care service updates from The Pet Villa via WhatsApp. No marketing messages will be sent.") && consentRpc.includes("我同意通过 WhatsApp 接收 The Pet Villa 必要的预订、付款及宠物照护服务通知。我们不会发送营销信息。"));
-expect("Consent route is Customer-auth bound and phone is delivery only", consentRoute.includes("authorizeCustomerRequest") && consentRpc.includes("normalized_phone") && consentRpc.includes("host_customer_id is null") && !consentRpc.includes("auth.users"));
+expect("Consent uses only the new Online Booking boundary and phone is delivery only", onlineBookingRpc.includes("target_profile.phone") && consentRpc.includes("normalized_phone") && consentRpc.includes("host_customer_id is null") && !onlineBookingRpc.includes("auth.users"));
 expect("No historical consent backfill is present", !/insert into public\.operational_whatsapp_consents[\s\S]{0,200}select/i.test(migration));
 
 expect("Host listing overlays durable pending identity without exposing it in UI", hostOrdersRoute.includes('from("payment_submissions")') && hostOrdersRoute.includes("paymentSubmission: {") && hostPage.includes("paymentSubmissionId") && !/paymentSubmissionId[^\n]{0,80}<|payment_submission_id[^\n]{0,80}</.test(hostPage));
 expect("Ding-Dong acceptance guard remains present", dingDongValidator.includes("Uses a two-tone Ding-Dong") && hostPage.includes("frequency: 880") && hostPage.includes("frequency: 659.25"));
 
 class PaymentModel {
-  constructor({ paid = 0, balance = 200, status = "balance", consent = true, phone = "60123456789" } = {}) {
-    this.order = { id: "order-1", paid, balance, total: paid + balance, status, consent, phone };
+  constructor({ paid = 0, balance = 200, status = "balance", phone = "60123456789" } = {}) {
+    this.order = { id: "order-1", paid, balance, total: paid + balance, status, phone };
     this.submissions = [];
     this.events = [];
   }
@@ -101,7 +109,6 @@ class PaymentModel {
     if (same) return same;
     const pending = this.submissions.find((item) => item.status === "pending");
     if (pending) return pending;
-    if (this.order.paid === 0 && !this.order.consent) throw new Error("consent required");
     if (amount <= 0 || amount > this.order.balance) throw new Error("amount invalid");
     const submission = {
       id: `submission-${this.submissions.length + 1}`,
@@ -162,6 +169,23 @@ class PaymentModel {
 
   canCheckIn() {
     return ["confirmed", "balance"].includes(this.order.status) && this.order.paid > 0;
+  }
+}
+
+class OnlineBookingModel {
+  constructor() {
+    this.order = null;
+    this.consent = null;
+  }
+
+  create({ consent, failConsentWrite = false }) {
+    if (!consent) throw new Error("new online booking consent required");
+    const nextOrder = { id: "order-1", status: "balance", paid: 0, balance: 200 };
+    const nextConsent = { orderId: nextOrder.id, language: "en", phone: "60123456789" };
+    if (failConsentWrite) throw new Error("consent write failed");
+    this.order = nextOrder;
+    this.consent = nextConsent;
+    return nextOrder;
   }
 }
 
@@ -247,13 +271,24 @@ must("Check In blocks balance/confirmed paid RM0 and allows a verified deposit",
   assert.equal(new PaymentModel({ paid: 0, balance: 200, status: "confirmed" }).canCheckIn(), false);
   assert.equal(new PaymentModel({ paid: 50, balance: 150, status: "balance" }).canCheckIn(), true);
 });
-must("Consent is required for first online payment and same phone never merges customers", () => {
-  const withoutConsent = new PaymentModel({ consent: false, phone: "60123456789" });
-  assert.throws(() => withoutConsent.submit("request-1", 50));
+must("Historical paid RM0 Order without consent can submit and same phone never merges customers", () => {
+  const historical = new PaymentModel({ paid: 0, balance: 200, phone: "60123456789" });
+  assert.equal(historical.submit("request-1", 50).status, "pending");
   const firstCustomer = new PaymentModel({ phone: "60123456789" });
   const secondCustomer = new PaymentModel({ phone: "60123456789" });
   firstCustomer.submit("request-1", 50);
   assert.equal(secondCustomer.submissions.length, 0);
+});
+must("New Online Booking requires consent and records Order plus consent together", () => {
+  const withoutConsent = new OnlineBookingModel();
+  assert.throws(() => withoutConsent.create({ consent: false }));
+  const withConsent = new OnlineBookingModel();
+  assert.equal(withConsent.create({ consent: true }).status, "balance");
+  assert.equal(withConsent.consent?.orderId, "order-1");
+  const failedConsentWrite = new OnlineBookingModel();
+  assert.throws(() => failedConsentWrite.create({ consent: true, failConsentWrite: true }));
+  assert.equal(failedConsentWrite.order, null);
+  assert.equal(failedConsentWrite.consent, null);
 });
 
 if (failures.length) {

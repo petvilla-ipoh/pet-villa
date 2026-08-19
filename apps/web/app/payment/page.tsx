@@ -5,7 +5,7 @@ import { OwnerSidebar } from "../components/OwnerSidebar";
 import { PaymentLogo, paymentMethods, type PaymentMethodId } from "../components/PaymentLogo";
 import { ProtectedPage } from "../components/ProtectedPage";
 import { useLanguage } from "../components/LanguageProvider";
-import { ensureOrderFromDraft, loadBookingDraft, loadOrders, recordOperationalWhatsAppConsent, submitCustomerPayment, type BookingDraft, type VillaOrder } from "../lib/orderFlow";
+import { ensureOrderFromDraft, loadBookingDraft, loadOrders, submitCustomerPayment, type BookingDraft, type VillaOrder } from "../lib/orderFlow";
 import { dogAvatarSrc } from "../lib/petProfiles";
 import { DEFAULT_BUSINESS_SETTINGS, loadBusinessSettings, type BusinessSettings } from "../lib/businessSettings";
 
@@ -148,19 +148,11 @@ export default function PaymentPage() {
       setMessage(t({ en: "The payment amount must be greater than RM0.", zh: "付款金额必须高于 RM0。" }));
       return;
     }
-    if (paymentContext === "booking" && !draft.operationalWhatsappConsentLanguage) {
-      setMessage(t({ en: "Please agree to the required operational WhatsApp service updates before payment.", zh: "请先同意必要的 WhatsApp 服务通知，才可以付款。" }));
-      return;
-    }
-
     setPaymentSubmitting(true);
     try {
       const order = paymentContext === "balance"
         ? draft as VillaOrder
         : await ensureOrderFromDraft(draft);
-      if (paymentContext === "booking") {
-        await recordOperationalWhatsAppConsent(order, draft.operationalWhatsappConsentLanguage!);
-      }
       const scope = `${order.orderRowId || order.orderId}:${amount}:${method}`;
       if (!paymentRequestRef.current || paymentRequestRef.current.scope !== scope) {
         paymentRequestRef.current = { scope, key: crypto.randomUUID() };

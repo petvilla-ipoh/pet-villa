@@ -275,6 +275,9 @@ function draftFromRow(row: BookingRow): BookingDraft {
     deposit: toNumber(row.deposit_rm) || payload.deposit || 0,
     balance: toNumber(row.balance_rm) || payload.balance || 0,
     specialRequest: row.special_request || payload.specialRequest || "",
+    operationalWhatsappConsentLanguage: payload.operationalWhatsappConsentLanguage === "en" || payload.operationalWhatsappConsentLanguage === "zh"
+      ? payload.operationalWhatsappConsentLanguage
+      : undefined,
     createdAt: payload.createdAt || row.created_at
   };
 }
@@ -540,6 +543,55 @@ export async function saveOrderSnapshotToSupabase(order: VillaOrder, ownerId?: s
   return data?.id as string | undefined;
 }
 
+async function createCustomerOnlineOrderWithConsent(order: VillaOrder, consentLanguage: "en" | "zh") {
+  if (!order.bookingId || !isUuid(order.bookingId)) {
+    throw new Error("This online booking is missing its secure draft identity. Please return to Booking and try again.");
+  }
+  const context = await getSupabaseContext();
+  if (!context) throw new Error("Please sign in again before saving this online booking.");
+  const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error("Your session expired. Please sign in again.");
+
+  const response = await fetch("/api/customer/orders", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      consentLanguage,
+      order: {
+        id: order.id,
+        bookingId: order.bookingId,
+        orderId: order.orderId,
+        service: order.service,
+        serviceLabel: order.serviceLabel,
+        dateLabel: order.dateLabel,
+        startDateISO: order.startDateISO,
+        endDateISO: order.endDateISO,
+        nights: order.nights,
+        hours: order.hours,
+        pets: order.pets,
+        subtotal: order.subtotal ?? order.total,
+        total: order.total,
+        deposit: order.deposit,
+        voucherId: order.voucherId || null,
+        voucherCode: order.voucherCode || null,
+        voucherTitle: order.voucherTitle || null,
+        voucherDiscount: order.voucherDiscount || 0,
+        specialRequest: order.specialRequest || "",
+        photosAvailable: order.photosAvailable || 0
+      }
+    })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Your online booking could not be saved.");
+  const orderRowId = result?.result?.order_row_id;
+  if (!isUuid(orderRowId)) throw new Error("Your online booking was not returned safely. Please refresh and try again.");
+  return orderRowId as string;
+}
+
 async function migrateLocalOrdersToSupabase(orders: VillaOrder[], ownerId: string) {
   for (const order of orders) {
     await saveOrderSnapshotToSupabase({ ...order, customerId: ownerId }, ownerId);
@@ -658,12 +710,17 @@ export async function createOrderFromDraft(draft: BookingDraft, paid: number, us
     : [];
   let reservedVoucherCount = 0;
   try {
+    const consentLanguage = draft.operationalWhatsappConsentLanguage;
+    if (!consentLanguage) {
+      throw new Error("Please agree to the required operational WhatsApp service updates before creating this online booking.");
+    }
     for (const voucher of appliedVouchers) {
       await markVoucherUsed(voucher.id, orderId, voucher.discount, draft.dateLabel, userId);
       reservedVoucherCount += 1;
     }
-    const bookingId = await upsertSupabaseBookingDraft(draft, "ordered");
-    const persistedId = await saveOrderSnapshotToSupabase({ ...order, bookingId: bookingId ?? undefined });
+    const bookingId = await upsertSupabaseBookingDraft(draft, "draft");
+    if (!bookingId) throw new Error("Your online booking draft could not be saved.");
+    const persistedId = await createCustomerOnlineOrderWithConsent({ ...order, bookingId }, consentLanguage);
     if (!persistedId) throw new Error("Authenticated Supabase order persistence is unavailable.");
     order.orderRowId = persistedId;
     window.localStorage.setItem(orderMigrationKey(userId), "true");
@@ -729,28 +786,6 @@ async function customerOrderOperation(order: VillaOrder, operation: string, body
 export async function submitCustomerPayment(order: VillaOrder, amount: number, method: "qr" | "bank", idempotencyKey: string) {
   if (!isUuid(idempotencyKey)) throw new Error("This payment submission needs a secure retry key. Please try again.");
   return customerOrderOperation(order, "payment-submission", { amount, method, idempotencyKey });
-}
-
-export async function recordOperationalWhatsAppConsent(order: VillaOrder, language: "en" | "zh") {
-  if (!order.orderRowId || !isUuid(order.orderRowId)) {
-    throw new Error("This booking is missing its secure record identity. Please refresh and try again.");
-  }
-  const context = await getSupabaseContext();
-  if (!context) throw new Error("Please sign in again before recording operational WhatsApp consent.");
-  const { data: sessionData, error: sessionError } = await context.supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
-  if (sessionError || !accessToken) throw new Error("Your session expired. Please sign in again.");
-  const response = await fetch(`/api/customer/orders/${encodeURIComponent(order.orderRowId)}/operational-whatsapp-consent`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ language })
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || "Operational WhatsApp consent could not be saved.");
-  return result;
 }
 
 export async function cancelCustomerOrder(order: VillaOrder) {

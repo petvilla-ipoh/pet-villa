@@ -235,16 +235,6 @@ begin
   if coalesce(target_order.order_payload, '{}'::jsonb) ? 'paymentSubmission' then
     raise exception 'This payment marker cannot be resolved safely.';
   end if;
-  if greatest(0, coalesce(target_order.paid_rm, 0)) = 0
-    and not exists (
-      select 1
-      from public.operational_whatsapp_consents
-      where order_row_id = target_order.id
-        and owner_user_id = p_owner_user_id
-        and withdrawn_at is null
-    ) then
-    raise exception 'Operational WhatsApp consent is required before the first online payment submission.';
-  end if;
   if greatest(0, coalesce(target_order.balance_rm, 0)) <= 0 then
     raise exception 'This order has no outstanding balance.';
   end if;
@@ -918,6 +908,252 @@ begin
 end;
 $$;
 
+-- New Online Booking is the sole consent boundary.  A historical Order never
+-- needs to gain a consent row to remain payable or operationally usable.
+create or replace function public.create_customer_online_order_with_operational_whatsapp_consent(
+  p_owner_user_id uuid,
+  p_order jsonb,
+  p_language text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_profile public.profiles%rowtype;
+  existing_order public.orders%rowtype;
+  created_order public.orders%rowtype;
+  requested_booking_row_id uuid;
+  booking_row_id uuid;
+  order_value text;
+  client_draft_value text;
+  service_value text;
+  service_label_value text;
+  date_label_value text;
+  start_date_value date;
+  end_date_value date;
+  nights_value integer;
+  hours_value numeric(6,2);
+  pets_value jsonb;
+  subtotal_value numeric(10,2);
+  total_value numeric(10,2);
+  deposit_value numeric(10,2);
+  voucher_id_value text;
+  voucher_code_value text;
+  voucher_title_value text;
+  voucher_discount_value numeric(10,2);
+  special_request_value text;
+  photos_available_value integer;
+  order_snapshot jsonb;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Customer online booking creation requires the protected server operation.';
+  end if;
+  if p_language not in ('en', 'zh') then
+    raise exception 'Unsupported consent language.';
+  end if;
+  if p_order is null or jsonb_typeof(p_order) <> 'object' then
+    raise exception 'Invalid online booking.';
+  end if;
+
+  order_value := btrim(coalesce(p_order->>'orderId', ''));
+  client_draft_value := btrim(coalesce(p_order->>'id', ''));
+  service_value := btrim(coalesce(p_order->>'service', ''));
+  service_label_value := btrim(coalesce(p_order->>'serviceLabel', ''));
+  date_label_value := btrim(coalesce(p_order->>'dateLabel', ''));
+  requested_booking_row_id := nullif(p_order->>'bookingId', '')::uuid;
+  start_date_value := nullif(p_order->>'startDateISO', '')::date;
+  end_date_value := nullif(p_order->>'endDateISO', '')::date;
+  nights_value := coalesce(nullif(p_order->>'nights', '')::integer, 0);
+  hours_value := coalesce(nullif(p_order->>'hours', '')::numeric, 0);
+  pets_value := coalesce(p_order->'pets', '[]'::jsonb);
+  subtotal_value := coalesce(nullif(p_order->>'subtotal', '')::numeric, 0);
+  total_value := coalesce(nullif(p_order->>'total', '')::numeric, 0);
+  deposit_value := coalesce(nullif(p_order->>'deposit', '')::numeric, 0);
+  voucher_id_value := nullif(btrim(coalesce(p_order->>'voucherId', '')), '');
+  voucher_code_value := nullif(btrim(coalesce(p_order->>'voucherCode', '')), '');
+  voucher_title_value := nullif(btrim(coalesce(p_order->>'voucherTitle', '')), '');
+  voucher_discount_value := coalesce(nullif(p_order->>'voucherDiscount', '')::numeric, 0);
+  special_request_value := coalesce(p_order->>'specialRequest', '');
+  photos_available_value := coalesce(nullif(p_order->>'photosAvailable', '')::integer, 0);
+
+  if order_value = ''
+    or client_draft_value = ''
+    or requested_booking_row_id is null
+    or service_value not in ('overnight', 'daycare')
+    or service_label_value = ''
+    or date_label_value = ''
+    or jsonb_typeof(pets_value) <> 'array'
+    or jsonb_array_length(pets_value) = 0
+    or total_value < 0
+    or subtotal_value < 0
+    or deposit_value < 0
+    or deposit_value > total_value
+    or voucher_discount_value < 0
+    or nights_value < 0
+    or hours_value < 0
+    or photos_available_value < 0 then
+    raise exception 'Invalid online booking.';
+  end if;
+  if service_value = 'overnight' and (start_date_value is null or end_date_value is null or end_date_value < start_date_value) then
+    raise exception 'Invalid boarding dates.';
+  end if;
+  if service_value = 'daycare' and (start_date_value is null or end_date_value is null or start_date_value <> end_date_value) then
+    raise exception 'Invalid daycare date.';
+  end if;
+
+  select * into target_profile
+  from public.profiles
+  where id = p_owner_user_id
+  for share;
+  if not found then
+    raise exception 'Customer profile not found.';
+  end if;
+  if btrim(coalesce(target_profile.phone, '')) = '' then
+    raise exception 'A Customer contact phone is required for this Online Booking.';
+  end if;
+
+  select target_booking.id into booking_row_id
+  from public.bookings as target_booking
+  where target_booking.id = requested_booking_row_id
+    and owner_id = p_owner_user_id
+  for update;
+  if not found then
+    raise exception 'Online booking draft not found.';
+  end if;
+
+  select * into existing_order
+  from public.orders
+  where owner_id = p_owner_user_id
+    and order_id = order_value
+  for update;
+  if found then
+    -- A successful first call wrote both Order and consent atomically.  Do not
+    -- retroactively create consent for a historical Order that happens to use
+    -- the same stable identity.
+    return jsonb_build_object(
+      'already_created', true,
+      'order_row_id', existing_order.id,
+      'order_id', existing_order.order_id
+    );
+  end if;
+
+  order_snapshot := jsonb_build_object(
+    'id', client_draft_value,
+    'bookingId', booking_row_id,
+    'orderId', order_value,
+    'customerId', p_owner_user_id,
+    'customerSource', 'auth',
+    'customerName', target_profile.full_name,
+    'customerPhone', target_profile.phone,
+    'customerEmail', target_profile.email,
+    'service', service_value,
+    'serviceLabel', service_label_value,
+    'dateLabel', date_label_value,
+    'startDateISO', start_date_value,
+    'endDateISO', end_date_value,
+    'nights', nights_value,
+    'hours', hours_value,
+    'pets', pets_value,
+    'subtotal', subtotal_value,
+    'total', total_value,
+    'deposit', deposit_value,
+    'balance', total_value,
+    'paid', 0,
+    'voucherId', voucher_id_value,
+    'voucherCode', voucher_code_value,
+    'voucherTitle', voucher_title_value,
+    'voucherDiscount', voucher_discount_value,
+    'specialRequest', special_request_value,
+    'status', 'balance',
+    'photosAvailable', photos_available_value
+  );
+
+  insert into public.orders (
+    owner_id,
+    booking_id,
+    order_id,
+    client_draft_id,
+    customer_name,
+    customer_phone,
+    customer_email,
+    service,
+    service_label,
+    date_label,
+    start_date,
+    end_date,
+    nights,
+    hours,
+    pets,
+    subtotal_rm,
+    total_rm,
+    deposit_rm,
+    balance_rm,
+    paid_rm,
+    currency,
+    voucher_id,
+    voucher_code,
+    voucher_title,
+    voucher_discount_rm,
+    manual_discount_rm,
+    charge_total_rm,
+    special_request,
+    status,
+    photos_available,
+    review,
+    order_payload
+  ) values (
+    p_owner_user_id,
+    booking_row_id,
+    order_value,
+    client_draft_value,
+    target_profile.full_name,
+    target_profile.phone,
+    target_profile.email,
+    service_value,
+    service_label_value,
+    date_label_value,
+    start_date_value,
+    end_date_value,
+    nights_value,
+    hours_value,
+    pets_value,
+    subtotal_value,
+    total_value,
+    deposit_value,
+    total_value,
+    0,
+    'MYR',
+    voucher_id_value,
+    voucher_code_value,
+    voucher_title_value,
+    voucher_discount_value,
+    0,
+    0,
+    special_request_value,
+    'balance',
+    photos_available_value,
+    null,
+    order_snapshot
+  )
+  returning * into created_order;
+
+  perform public.record_operational_whatsapp_consent(created_order.id, p_owner_user_id, p_language);
+
+  update public.bookings
+  set web_status = 'ordered', updated_at = now()
+  where id = booking_row_id
+    and owner_id = p_owner_user_id;
+
+  return jsonb_build_object(
+    'already_created', false,
+    'order_row_id', created_order.id,
+    'order_id', created_order.order_id
+  );
+end;
+$$;
+
 revoke all on function public.materialize_legacy_pending_payment_submission(uuid) from public, anon, authenticated;
 revoke all on function public.submit_customer_order_payment(uuid, uuid, numeric, text, text) from public, anon, authenticated;
 revoke all on function public.submit_customer_order_payment(uuid, uuid, numeric, text) from public, anon, authenticated;
@@ -926,6 +1162,7 @@ revoke all on function public.verify_host_order_payment(uuid, uuid, text) from p
 revoke all on function public.reject_host_order_payment(uuid, uuid, uuid, text, text) from public, anon, authenticated;
 revoke all on function public.materialize_host_order_payment_submission(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.record_operational_whatsapp_consent(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.create_customer_online_order_with_operational_whatsapp_consent(uuid, jsonb, text) from public, anon, authenticated;
 
 grant execute on function public.materialize_legacy_pending_payment_submission(uuid) to service_role;
 grant execute on function public.submit_customer_order_payment(uuid, uuid, numeric, text, text) to service_role;
@@ -935,5 +1172,6 @@ grant execute on function public.verify_host_order_payment(uuid, uuid, text) to 
 grant execute on function public.reject_host_order_payment(uuid, uuid, uuid, text, text) to service_role;
 grant execute on function public.materialize_host_order_payment_submission(uuid, uuid) to service_role;
 grant execute on function public.record_operational_whatsapp_consent(uuid, uuid, text) to service_role;
+grant execute on function public.create_customer_online_order_with_operational_whatsapp_consent(uuid, jsonb, text) to service_role;
 
 commit;
